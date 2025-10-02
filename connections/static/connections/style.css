@@ -1,0 +1,1467 @@
+/* General Setup */
+:root {
+    --primary-color: #0078d4;
+    --border-color: #e1e1e1;
+    --background-color: #f4f4f4;
+    --header-height: 60px;
+    --nav-height: 48px;
+    --left-panel-width: 280px;
+}
+* { box-sizing: border-box; }
+body { font-family: 'Malgun Gothic', sans-serif; margin: 0; background-color: var(--background-color); color: #333; }
+
+/* App Layout */
+.app-container { display: flex; flex-direction: column; height: 100vh; }
+
+/* Header */
+.app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: var(--header-height);
+    background-color: white; border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.header-left h1 { font-size: 22px; margin: 0; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+#status { font-size: 12px; color: #666; margin: 0; }
+
+/* Main Navigation */
+.main-nav {
+    display: flex; height: var(--nav-height);
+    background-color: #ffffff;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 20px;
+    flex-shrink: 0;
+}
+.nav-button {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 16px; border: none; border-bottom: 3px solid transparent;
+    background-color: transparent; cursor: pointer;
+    font-size: 15px; color: #555;
+    transition: all 0.2s ease-in-out;
+}
+.nav-button:hover { background-color: #f0f0f0; }
+.nav-button.active {
+    font-weight: bold; color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* Main Content Layout */
+.main-content { display: flex; flex-grow: 1; overflow: hidden; }
+
+.left-panel {
+    width: var(--left-panel-width);
+    padding: 20px; border-right: 1px solid var(--border-color);
+    background-color: #fff;
+    display: flex; flex-direction: column; gap: 15px;
+    overflow-y: auto;
+    flex-shrink: 0; /* 중요: 좌측 패널 너비 고정 */
+}
+
+.right-panel {
+    flex-grow: 1;
+    overflow: hidden; /* 스크롤을 내부 요소로 위임 */
+    display: flex;
+    flex-direction: column; /* right-panel 내부를 상하로 분할 */
+    padding: 20px;
+    gap: 20px;
+}
+
+.tab-content {
+    display: none;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+
+/* ▼▼▼ [핵심 수정] 이 부분을 아래 코드로 완전히 교체해주세요. ▼▼▼ */
+/* Data Management Tab Layout */
+#data-management.active {
+    display: flex; /* '데이터 관리' 탭이 활성화될 때만 flex 레이아웃 적용 */
+    flex-direction: row;
+}
+
+.table-area {
+    flex-grow: 1; /* 상단 테이블 영역이 남은 공간을 모두 차지 */
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* flex 자식 요소의 높이 계산을 위함 */
+}
+
+.selection-info-area {
+    flex-shrink: 0; /* 하단 정보 영역은 높이가 변하지 않음 */
+    height: 250px; /* 원래 높이 고정 */
+    display: flex;
+    gap: 20px;
+}
+/* ▲▲▲ 여기까지 교체 ▲▲▲ */
+
+.selection-info-area .control-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+#selected-tags-list { flex-grow: 1; overflow-y: auto; }
+.field-selection-wrapper {
+    flex-grow: 1;
+    display: flex;
+    gap: 15px;
+    overflow: hidden;
+}
+.field-container-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+/* ▼▼▼ [수정] overflow-y: auto; 를 overflow: auto; 로 변경해주세요. ▼▼▼ */
+.field-container {
+    flex-grow: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+}
+.field-container label {
+    display: block;
+    padding: 4px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.field-container label:hover { background-color: #f0f0f0; }
+#render-table-btn { width: 100%; margin-top: 10px; }
+
+/* Common Components */
+.control-box {
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    border-radius: 5px;
+}
+.control-box h3, .control-box h4 { margin-top: 0; font-size: 16px; margin-bottom: 10px; }
+button { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background-color: #f9f9f9; }
+button:hover { background-color: #e9e9e9; }
+input[type="text"], select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+
+/* Left Panel Components */
+.left-panel button { width: 100%; margin-top: 8px; }
+.io-buttons { display: flex; gap: 8px; }
+.io-buttons button { flex: 1; }
+
+/* Right Panel Components */
+.view-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
+.view-tab-button {
+    padding: 10px 18px; border: 1px solid transparent; border-bottom: none;
+    background: none; font-size: 14px; cursor: pointer;
+    border-top-left-radius: 4px; border-top-right-radius: 4px;
+    margin-bottom: -1px;
+}
+.view-tab-button.active { background-color: #fff; border-color: var(--border-color); font-weight: bold; }
+.table-controls { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
+#grouping-controls-container { display: flex; align-items: center; gap: 10px; }
+#grouping-controls .group-level { display: flex; align-items: center; gap: 5px; }
+#tag-assignment-controls { display: flex; gap: 8px; }
+
+.table-container {
+    flex-grow: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+    min-height: 0;
+}
+.table-footer-controls { padding-top: 10px; }
+
+/* Table Styles */
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; font-size: 13px; }
+th { background-color: #f2f2f2; position: sticky; top: 0; z-index: 1; }
+th input { width: 95%; border: 1px solid #ccc; padding: 4px; }
+.selected-row { background-color: #d4edda !important; }
+.group-header { cursor: pointer; user-select: none; font-weight: bold; background-color: #e9ecef; }
+.toggle-icon { margin-right: 8px; display: inline-block; width: 10px; }
+
+#tag-list {
+    height: 400px;
+    overflow-y: auto;
+}
+#tag-list div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px;
+    border-bottom: 1px solid #f0f0f0;
+}
+#tag-list div:hover {
+    background-color: #f5f5f5;
+}
+#tag-list span {
+    flex-grow: 1;
+}
+.tag-actions {
+    flex-shrink: 0;
+    display: flex;
+    gap: 5px;
+}
+.tag-actions button {
+    padding: 2px 6px; /* 버튼 크기 축소 */
+    font-size: 12px; /* 버튼 폰트 크기 축소 */
+    background: none;
+    border: 1px solid #ccc;
+}
+#selected-tags-list div {
+    padding: 5px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* Toast Notifications */
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+.toast-message {
+    padding: 12px 20px; background-color: #333; color: white; border-radius: 5px;
+    margin-bottom: 10px; opacity: 0; transition: all 0.5s; transform: translateY(100%);
+}
+.toast-message.show { opacity: 1; transform: translateY(0); }
+.toast-message.success { background-color: #28a745; }
+.toast-message.error { background-color: #dc3545; }
+.toast-message.info { background-color: #17a2b8; }
+
+
+/* 모든 그룹 헤더의 기본 스타일 */
+.group-header td {
+    font-weight: bold;
+    cursor: pointer;
+    background-color: #f8f9fa; /* 기본 배경색 */
+    border-top: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* 1차 그룹핑 (가장 상위) */
+.group-header.group-level-0 td {
+    background-color: #e9ecef; /* 1차 그룹 배경색 */
+    color: #212529;
+}
+
+/* 2차 그룹핑 */
+.group-header.group-level-1 td {
+    background-color: #f1f3f5; /* 2차 그룹 배경색 */
+    color: #343a40;
+}
+
+/* 3차 그룹핑 (필요 시 추가) */
+.group-header.group-level-2 td {
+    background-color: #f8f9fa; /* 3차 그룹 배경색 */
+    color: #495057;
+}
+
+/* 그룹 헤더에 마우스를 올렸을 때 스타일 */
+.group-header:hover td {
+    background-color: #dee2e6;
+}
+
+/* 토글 아이콘 스타일 */
+.toggle-icon {
+    display: inline-block;
+    width: 20px; /* 아이콘이 차지할 공간 확보 */
+    text-align: center;
+    margin-right: 5px;
+}
+/* ▼▼▼ [추가] 룰셋 관리 탭 스타일 ▼▼▼ */
+
+.ruleset-container {
+    display: flex;
+    height: 100%;
+    background-color: #fff;
+}
+
+/* 룰셋 네비게이션 (왼쪽 패널) */
+.ruleset-nav-panel {
+    width: 280px;
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    background-color: #f8f9fa;
+    flex-shrink: 0;
+}
+
+.ruleset-nav-panel h3 {
+    margin-top: 0;
+    font-size: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ruleset-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ruleset-nav-button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background-color: transparent;
+    cursor: pointer;
+    text-align: left;
+    gap: 12px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.ruleset-nav-button:hover {
+    background-color: #e9ecef;
+}
+
+.ruleset-nav-button.active {
+    background-color: #fff;
+    border-color: var(--border-color);
+    font-weight: bold;
+}
+
+.ruleset-icon {
+    font-size: 24px;
+}
+
+.ruleset-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.ruleset-text small {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: normal;
+}
+
+
+/* 룰셋 메인 (오른쪽 패널) */
+.ruleset-main-panel {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.ruleset-content {
+    display: none;
+}
+
+.ruleset-content.active {
+    display: block;
+}
+
+.ruleset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.ruleset-header h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.ruleset-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.ruleset-table-container {
+    overflow-x: auto;
+}
+
+/* ▲▲▲ [추가] 여기까지 추가해주세요 ▲▲▲ */
+/* ▼▼▼ [추가] 룰셋 테이블 스타일 ▼▼▼ */
+.ruleset-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.ruleset-table th,
+.ruleset-table td {
+    border: 1px solid var(--border-color);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.ruleset-table th {
+    background-color: #f8f9fa;
+}
+
+.ruleset-table td button {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin-right: 5px;
+}
+/* ▲▲▲ [추가] 여기까지 추가해주세요. ▲▲▲ */
+
+/* ▼▼▼ [추가] 룰셋 편집 행 스타일 ▼▼▼ */
+.ruleset-table .rule-edit-row td {
+    padding: 5px;
+}
+
+.ruleset-table .rule-edit-row input,
+.ruleset-table .rule-edit-row select,
+.ruleset-table .rule-edit-row textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.ruleset-table .rule-edit-row textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.ruleset-table pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    font-size: 12px;
+}
+/* ▲▲▲ [추가] 여기까지 추가해주세요. ▲▲▲ */
+/* ▼▼▼ [추가] 수량산출부재 탭 스타일 ▼▼▼ */
+.qm-container {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.qm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.qm-header h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.qm-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.qm-table-container {
+    flex-grow: 1;
+    overflow: auto;
+}
+/* ▲▲▲ [추가] 여기까지 추가해주세요. ▲▲▲ */
+
+
+/* ▼▼▼ [추가] 공사코드 선택 모달 스타일 ▼▼▼ */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: #fff;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+#cost-code-search-input {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+}
+
+.modal-list {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.modal-list-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.modal-list-item:last-child {
+    border-bottom: none;
+}
+
+.modal-list-item:hover {
+    background-color: #f5f5f5;
+}
+
+.modal-list-item.selected {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: bold;
+}
+
+.modal-list-item .item-code {
+    flex-basis: 30%;
+}
+
+.modal-list-item .item-name {
+    flex-basis: 70%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.modal-button-primary {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+}
+.modal-button-primary:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+.modal-button-secondary {
+    background-color: #f0f0f0;
+}
+/* ▲▲▲ [추가] 여기까지 입니다. ▲▲▲ */
+
+/* [추가] 산출항목 탭 - 연관 부재 정보 표시 영역 스타일 */
+#ci-linked-member-info-header {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#ci-linked-member-info-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+
+#ci-linked-member-info-header small {
+    color: #6c757d;
+    font-size: 13px;
+}
+
+#ci-linked-properties-wrapper {
+    display: flex;
+    flex-grow: 1;
+    gap: 15px;
+    overflow-y: auto; /* 내용이 많을 경우 래퍼에서 스크롤 */
+}
+
+.properties-sub-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.properties-sub-container h5 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: #333;
+}
+
+/* 속성 테이블의 부모가 스크롤을 가지도록 수정 */
+.properties-sub-container .properties-table {
+    border-spacing: 0;
+}
+
+/* ▼▼▼ [추가] 좌/우 분할 레이아웃 스타일 ▼▼▼ */
+
+/* 탭 컨텐츠가 flex 컨테이너 역할을 하도록 설정 */
+.tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 좌/우 분할 레이아웃의 기본 컨테이너 */
+.main-split-layout {
+    display: flex;
+    flex-grow: 1; /* 부모(.qm-container)의 남은 공간을 모두 차지 */
+    gap: 20px;
+    overflow: hidden; /* 중요: 내부 스크롤이 넘치는 것을 방지 */
+    min-height: 0; /* flex 자식의 높이 계산을 위해 필수 */
+}
+
+/* 왼쪽 테이블 영역 */
+.main-split-layout > .table-area {
+    flex: 2; /* 오른쪽 패널보다 2배의 너비를 가짐 (비율 조정 가능) */
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* 너비가 줄어들 수 있도록 설정 */
+}
+
+/* 오른쪽 상세 정보 패널 */
+.main-split-layout > .details-panel {
+    flex: 1; /* 왼쪽 영역의 절반 너비를 가짐 */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 0;
+    overflow: hidden; /* 내부 컨텐츠가 넘치지 않도록 설정 */
+}
+
+/* 오른쪽 패널 내부의 각 컨트롤 박스 */
+.details-panel > .control-box {
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* flex 아이템의 높이 계산을 위해 필수 */
+}
+.details-panel > .control-box:first-child {
+    flex: 1.2; /* 첫 번째 박스(속성)가 다른 박스보다 약간 더 많은 공간을 차지하도록 설정 (비율 조정 가능) */
+}
+.details-panel > .control-box:not(:first-child) {
+    flex: 1;
+}
+
+/* 각 컨트롤 박스 내부에서 스크롤이 필요한 컨텐츠 영역 */
+#qm-properties-container,
+#qm-cost-codes-list,
+#qm-member-marks-list {
+    flex-grow: 1; /* 부모(.control-box)의 남은 공간을 모두 차지 */
+    overflow-y: auto; /* 내용이 많아지면 세로 스크롤 생성 */
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    margin-top: 10px;
+}
+
+/* 할당 컨트롤 영역 스타일 (select, button 등) */
+.assignment-controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+/* --- '산출항목관리' 탭의 오른쪽 패널 스타일 --- */
+/* 3개의 속성 컨테이너를 감싸는 래퍼 */
+#ci-linked-properties-wrapper {
+    flex-grow: 1; /* 부모의 남은 공간을 모두 차지 */
+    display: flex;
+    flex-direction: column; /* 세로로 배치 */
+    gap: 15px;
+    overflow: hidden; /* 내부 스크롤을 위해 중요 */
+    min-height: 0;
+}
+
+/* 각 속성 컨테이너 (부재, 일람부호, 원본) */
+#ci-linked-properties-wrapper > .properties-sub-container {
+    flex: 1; /* 모든 컨테이너가 동일한 높이를 가지도록 설정 */
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* 내용이 많으면 자체적으로 스크롤 생성 */
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    min-height: 0;
+}
+
+.properties-sub-container h5 {
+    flex-shrink: 0; /* 헤더는 줄어들지 않음 */
+}
+/* ▲▲▲ [추가] 여기까지 입니다. ▲▲▲ */
+
+/* --- '수량산출부재' 탭 오른쪽 패널 스타일 확장 --- */
+
+/* 일람부호 상세 정보 컨테이너 */
+#qm-member-mark-details-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+#qm-member-mark-details-container h5 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+}
+
+/* BIM 원본 데이터 속성 컨테이너 */
+#qm-linked-raw-element-properties-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    margin-top: 10px;
+}
+/* ▼▼▼ [추가] 수량산출부재 탭 - 오른쪽 패널 탭 스타일 ▼▼▼ */
+
+/* details-panel이 flex-direction: column 이어야 합니다 (기존 코드에 이미 있음) */
+.main-split-layout > .details-panel {
+    overflow: hidden; /* 탭 컨텐츠가 넘치지 않도록 설정 */
+}
+
+/* 탭 버튼들을 담는 컨테이너 */
+.details-panel-tabs {
+    display: flex;
+    flex-shrink: 0; /* 탭 버튼 영역은 높이가 줄어들지 않음 */
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* 개별 탭 버튼 스타일 */
+.detail-tab-button {
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: none;
+    font-size: 14px;
+    cursor: pointer;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    margin-bottom: -1px; /* 하단 경계선과 겹치도록 설정 */
+    color: #555;
+    transition: background-color 0.2s;
+}
+
+.detail-tab-button:hover {
+    background-color: #f0f0f0;
+}
+
+/* 활성화된 탭 버튼 스타일 */
+.detail-tab-button.active {
+    background-color: #fff;
+    border-color: var(--border-color);
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* 탭 컨텐츠 기본 스타일 (숨김) */
+.detail-tab-content {
+    display: none;
+    flex-grow: 1; /* 남은 공간을 모두 차지 */
+    min-height: 0; /* flex 자식의 높이 계산을 위해 필수 */
+}
+
+/* 활성화된 탭 컨텐츠 스타일 (보여주기 및 내부 레이아웃) */
+.detail-tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 각 탭 컨텐츠 내부의 control-box가 모든 공간을 차지하도록 설정 */
+.detail-tab-content > .control-box {
+    flex-grow: 1;
+    /* control-box는 이미 display:flex, flex-direction:column 이므로 내부 요소가 잘 배치됨 */
+}
+
+
+/* '수량산출분류 관리' 탭 전용 콘텐츠 래퍼 스타일 */
+.tag-management-content-wrapper {
+    max-width: 600px;
+    margin: 20px auto; /* 위아래 여백 및 가로 중앙 정렬 */
+}
+
+
+
+
+/* --- 포함된 산출항목 테이블 스타일 복원 --- */
+.boq-item-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.boq-item-list-table th, .boq-item-list-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.boq-item-list-table th {
+    background-color: #f2f2f2;
+    position: sticky;
+    top: 0;
+}
+.boq-item-list-table tbody tr {
+    cursor: pointer;
+}
+.boq-item-list-table tbody tr:hover td {
+    background-color: #f0f0f0;
+}
+.boq-item-list-table tbody tr.selected td {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* --- BOQ 메인 테이블 스타일 (기존과 거의 동일, 일부 정리) --- */
+.boq-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+.boq-table th, .boq-table td {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+}
+.boq-table th {
+    background-color: #f2f2f2;
+    position: sticky; top: 0; z-index: 2;
+}
+.boq-table .boq-group-header td { font-weight: bold; }
+.boq-table tr.group-level-0 td { background-color: #e9ecef !important; }
+.boq-table tr.group-level-1 td { background-color: #f1f3f5 !important; }
+.boq-table tr.group-level-2 td { background-color: #f8f9fa !important; }
+.boq-table .boq-group-header:hover td { background-color: #dee2e6 !important; }
+.boq-table tr.selected-boq-row td { background-color: #d4edda !important; }
+
+
+
+
+
+
+
+
+
+.boq-container {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+.boq-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    flex-shrink: 0;
+    width: 320px; /* 왼쪽 컨트롤 패널 너비 고정 */
+}
+
+.boq-center-content {
+    display: flex;
+    flex-direction: column; /* 중앙 컨텐츠는 상하 분할 */
+    flex-grow: 1;
+    min-width: 0;
+    gap: 20px;
+}
+.boq-details-panel {
+    flex-basis: 450px; /* 오른쪽 상세정보 패널 너비 고정 */
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 0;
+}
+#boq-grouping-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap; /* 그룹핑이 많아지면 줄바꿈 */
+}
+
+.boq-group-level {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+#boq-table-container {
+    flex-grow: 1;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+}
+
+/* 그룹 헤더의 기본 호버 효과 */
+.boq-table .boq-group-header:hover td {
+    background-color: #dee2e6;
+}
+
+.boq-table th, .boq-table td {
+    border: 1px solid var(--border-color);
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.boq-table th {
+    background-color: #f2f2f2;
+    position: sticky;
+    top: 0;
+}
+
+.boq-group-header td {
+    font-weight: bold;
+    background-color: #e9ecef;
+}
+
+
+/* 1차 그룹핑 (가장 상위 레벨) - 가장 진하게 */
+.boq-table tr.group-level-0 td {
+    background-color: #e9ecef !important;
+}
+
+/* 2차 그룹핑 - 중간 */
+.boq-table tr.group-level-1 td {
+    background-color: #f1f3f5 !important;
+}
+
+/* 3차 그룹핑 - 가장 연하게 */
+.boq-table tr.group-level-2 td {
+    background-color: #f8f9fa !important;
+}
+
+/* 4차 이상 그룹핑 (기본값) */
+.boq-table tr.group-level-3 td,
+.boq-table tr.group-level-4 td {
+    background-color: #ffffff !important;
+}
+
+
+/* 열 순서 변경(드래그)을 위한 스타일 */
+.boq-table th[draggable] {
+    cursor: move;
+}
+.boq-table th.dragging {
+    opacity: 0.5;
+    background-color: #cce5ff;
+}
+/* 드롭될 위치를 시각적으로 표시 */
+.boq-table th.drag-over-left {
+    border-left: 3px solid var(--primary-color);
+}
+.boq-table th.drag-over-right {
+    border-right: 3px solid var(--primary-color);
+}
+
+
+/* 열 이름 편집 버튼 스타일 */
+.boq-table th .col-edit-btn {
+    margin-left: 8px;
+    cursor: pointer;
+    font-style: normal;
+    display: none; /* 평소에는 숨김 */
+}
+.boq-table th:hover .col-edit-btn {
+    display: inline-block; /* 헤더에 마우스를 올리면 표시 */
+}
+
+.boq-summary-row td {
+    font-weight: bold;
+    background-color: #fffbe0;
+    border-top: 2px solid #ffc107;
+}
+#boq-display-fields-wrapper {
+    display: flex;
+    align-items: stretch; /* 자식 요소가 높이를 채우도록 변경 */
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e0e0e0;
+    margin-top: 10px;
+}
+
+#boq-display-fields-container {
+    flex-grow: 1;
+    max-height: 120px; 
+    overflow: auto; 
+    border: 1px solid var(--border-color); 
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 4px;
+}
+
+#boq-display-fields-container label {
+    display: block; 
+    padding: 4px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#boq-display-fields-container label:hover {
+    background-color: #f0f0f0;
+}
+
+
+.boq-table th:first-child,
+.boq-table td:first-child {
+    position: -webkit-sticky; /* Safari 브라우저 호환성 */
+    position: sticky;       /* 스크롤 시 위치 고정 */
+    left: 0;                /* 왼쪽에 붙임 */
+    z-index: 2;             /* 다른 셀들보다 위에 있도록 설정 (헤더는 z-index: 3) */
+}
+
+/* 첫 번째 열 헤더의 z-index를 더 높여 다른 헤더 위로 오게 함 */
+.boq-table th:first-child {
+    z-index: 3;
+}
+
+
+
+/* 일반 데이터 행의 첫 번째 셀에만 연한 배경색 적용 */
+.boq-table tbody tr:not(.boq-group-header) td:first-child {
+    background-color: #fdfdfd;
+}
+
+/* 총계 행의 첫 번째 셀 배경색을 다른 총계 셀과 통일 */
+.boq-table .boq-summary-row td:first-child {
+    background-color: #fffbe0;
+}
+
+
+
+
+
+/* 상세 정보 테이블 스타일 */
+.boq-details-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* style.css 파일 맨 아래에 이 코드가 있는지 확인해주세요. */
+
+.boq-main-content {
+    display: flex;
+    flex-direction: column; /* 화면을 상하로 분할 */
+    flex-grow: 1;
+    min-height: 0;
+    min-width: 0; /* flex 컨테이너가 줄어들 때 내용이 넘치는 것을 방지 */
+    gap: 20px; /* 테이블과 상세 정보 영역 사이의 간격 */
+}
+
+/* 메인 컨텐츠 중앙/하단 테이블 영역 */
+.boq-table-wrapper {
+    flex: 3; /* 메인 테이블이 3의 비율을 차지하도록 수정 */
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+}
+.boq-details-wrapper {
+    flex: 1; /* 포함된 산출항목이 1의 비율을 차지하도록 수정 */
+    min-height: 0;
+    display: flex;
+}
+
+.boq-details-table th,
+.boq-details-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.boq-details-table th {
+    background-color: #f2f2f2;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* BOQ 메인 테이블에서 선택된 행의 하이라이트 스타일 */
+.boq-table tr.selected-boq-row td {
+    background-color: #d4edda !important;
+}
+
+/* --- BOQ 탭 좌측 패널 3단 레이아웃 --- */
+.boq-section {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: #fff;
+}
+
+.boq-section h4 {
+    margin: 0;
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary-color);
+}
+
+.boq-actions-section {
+    flex-shrink: 0;
+    padding: 15px;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.boq-actions-section button {
+    flex: 1;
+}
+.boq-display-fields-section {
+    flex: 1;
+    min-height: 0;
+}
+
+#boq-display-fields-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+/* 중앙 컨텐츠 상단의 컨트롤 박스(그룹핑)는 높이가 내용에 맞게 자동 조절되도록 설정 */
+.boq-center-content > .control-box {
+    flex-shrink: 0;
+}
+
+/* 그룹핑 컨트롤들을 감싸는 래퍼 */
+#boq-grouping-controls-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+#boq-grouping-controls-wrapper h4 {
+    margin: 0;
+    flex-shrink: 0; /* '그룹핑 순서' 텍스트가 줄어들지 않도록 설정 */
+}
+
+#boq-grouping-controls {
+    display: flex;
+    flex-wrap: nowrap;      /* 항목이 많아져도 줄바꿈하지 않도록 변경 */
+    overflow-x: auto;       /* 내용이 넘칠 경우 가로 스크롤바 생성 */
+    gap: 10px;
+    align-items: center;
+    padding-bottom: 5px;    /* 스크롤바와 항목 사이의 여유 공간 확보 */
+    min-width: 0;           /* flex 컨테이너 내부에서 올바르게 축소되도록 설정 */
+}
+
+
+/* 항목 목록을 보여주는 뷰 */
+#boq-details-list-view {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+/* 목록 테이블의 행에 마우스를 올리면 클릭 가능함을 표시 */
+.boq-details-table tbody tr {
+    cursor: pointer;
+}
+.boq-details-table tbody tr:hover td {
+    background-color: #f0f0f0;
+}
+
+/* 개별 속성을 보여주는 뷰 (처음에는 숨김) */
+#boq-details-properties-view {
+    display: none; /* JS로 'flex'로 변경하여 표시 */
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0;
+    gap: 10px;
+    padding: 15px;
+}
+
+/* 속성 뷰의 헤더 (아이템 이름, 뒤로가기 버튼 등) */
+#boq-details-properties-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* 헤더 높이는 고정 */
+}
+#boq-details-properties-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+#boq-details-properties-header button {
+    padding: 4px 10px;
+}
+
+.boq-container {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+/* ===== 왼쪽 패널 전체 ===== */
+.boq-left-panel {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* ===== 메인 컨텐츠 전체 ===== */
+.boq-main-content {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* 메인 컨텐츠 상단 그룹핑 컨트롤 영역 */
+.boq-main-content > .control-box {
+    flex-shrink: 0;
+}
+#boq-grouping-controls-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    min-height: 38px; /* 버튼 높이와 맞춤 */
+}
+#boq-grouping-controls-wrapper h4 { display: none; } /* '그룹핑 순서' 텍스트 숨김 */
+#boq-grouping-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.boq-group-level {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+/* 메인 컨텐츠 중앙/하단 테이블 영역 */
+.boq-table-wrapper {
+    flex: 3;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+}
+.boq-details-wrapper {
+    flex: 2;
+    min-height: 0;
+    display: flex;
+}
+.boq-details-wrapper > .control-box {
+    width: 100%;
+}
+
+
+/* 왼쪽 패널 하단 상세정보 탭 */
+.boq-left-details-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.boq-left-details-panel .details-panel-tabs {
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.boq-left-details-panel .detail-tab-content {
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-top: 15px;
+}
+.boq-left-details-panel .detail-tab-content.active {
+    display: block;
+}
+.boq-left-details-panel .properties-sub-container {
+    border: none;
+    padding: 0;
+}
+
+
+/* BOQ 테이블 관련 스타일 (이전과 거의 동일) */
+.boq-table {
+    border-collapse: collapse; width: 100%;
+}
+.boq-table th, .boq-table td {
+    padding: 10px 12px; border: 1px solid var(--border-color);
+}
+.boq-table th {
+    background-color: #f2f2f2; position: sticky; top: 0; z-index: 2;
+}
+.boq-table th[draggable] { cursor: move; }
+.boq-table th:hover .col-edit-btn { display: inline-block; }
+.boq-table .col-edit-btn { margin-left: 8px; cursor: pointer; display: none; }
+.boq-table tr.boq-group-header { cursor: pointer; }
+.boq-table tr.boq-group-header:hover td { background-color: #dee2e6 !important; }
+.boq-table tr.group-level-0 td { background-color: #e9ecef !important; }
+.boq-table tr.group-level-1 td { background-color: #f1f3f5 !important; }
+.boq-table tr.group-level-2 td { background-color: #f8f9fa !important; }
+.boq-table tr.selected-boq-row td { background-color: #d4edda !important; }
+.boq-table .boq-summary-row td {
+    font-weight: bold; background-color: #fffbe0; border-top: 2px solid #ffc107;
+}
+
+/* 포함된 산출항목 테이블 스타일 */
+.boq-item-list-table { width: 100%; border-collapse: collapse; }
+.boq-item-list-table th, .boq-item-list-table td {
+    border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; white-space: nowrap;
+}
+.boq-item-list-table th { background-color: #f2f2f2; position: sticky; top: 0; }
+.boq-item-list-table tbody tr { cursor: pointer; }
+.boq-item-list-table tbody tr:hover td { background-color: #f0f0f0; }
+.boq-item-list-table tbody tr.selected td { background-color: var(--primary-color); color: white; }
+
+/* ======================================================= */
+/* '집계' 탭 추가/수정 스타일 (3차 - 버그 수정)             */
+/* ======================================================= */
+
+/* --- 문제 해결: 그룹핑 항목 가로 스크롤 (이전과 동일) --- */
+#boq-grouping-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 10px;
+    align-items: center;
+    padding-bottom: 8px;
+    min-width: 0;
+    flex-grow: 1;
+}
+
+/* --- 문제 해결: 메인/하단 높이 비율 및 자동 확장 --- */
+.boq-table-wrapper {
+    flex: 3 1 0%; /* grow:3, shrink:1, basis:0% */
+}
+.boq-details-wrapper {
+    flex: 1 1 0%; /* grow:1, shrink:1, basis:0% */
+}
+/* 하단 패널이 접혔을 때, 상단 패널이 남은 공간을 모두 차지하도록 설정 */
+.boq-main-content:has(.boq-details-wrapper.collapsed) .boq-table-wrapper {
+    flex-grow: 1;
+    height: 100%; /* 명시적으로 높이를 100%로 설정 */
+}
+
+
+
+
+/* --- 기능 수정: 접혔을 때의 상태 스타일 --- */
+.boq-container.left-panel-collapsed .boq-left-panel {
+    display: none;
+}
+/* 왼쪽 패널이 접혔을 때 버튼 모양 (회전) */
+.boq-container.left-panel-collapsed #boq-left-panel-toggle-btn {
+    transform: translateY(-50%) rotate(180deg); /* 180도 회전 */
+}
+
+
+/* ▼▼▼ [교체] 파일 맨 아래 '집계' 탭 관련 스타일 전체를 아래 코드로 교체해주세요. ▼▼▼ */
+
+/* '집계' 탭 토글 기능 최종 스타일 */
+
+/* 하단 패널 바로 위의 툴바 스타일 (토글 버튼 컨테이너) */
+#boq-details-toolbar {
+    display: flex;
+    justify-content: center; /* 버튼을 중앙에 배치 */
+    align-items: center;
+    padding: 4px 0; /* 상하 여백 */
+    background-color: #f8f9fa; /* 연한 배경색 */
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* 높이가 줄어들지 않도록 설정 */
+}
+
+/* 접기/펴기 버튼 기본 스타일 (position 속성 없음) */
+.panel-toggle-btn {
+    z-index: 10;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+    transition: all 0.2s;
+    cursor: pointer;
+    flex-shrink: 0; /* 버튼 크기가 줄어들지 않도록 설정 */
+}
+.panel-toggle-btn:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* 하단 패널이 접혔을 때의 스타일 (패널 전체를 숨김) */
+.boq-details-wrapper.collapsed {
+    display: none;
+}
+
+/* 하단 패널이 접혔을 때, 그 위의 툴바의 하단 경계선을 제거하여 깔끔하게 보이도록 함 */
+#boq-details-toolbar:has(+ .boq-details-wrapper.collapsed) {
+    border-bottom-color: transparent;
+}
+
+/* 하단 패널이 접혔을 때, 상단 테이블 영역이 남은 공간을 모두 차지하도록 설정 */
+.boq-main-content:has(.boq-details-wrapper.collapsed) .boq-table-wrapper {
+    flex-grow: 1;
+    height: 100%;
+}
+
+/* ▼▼▼ [추가] 파일 맨 아래에 이 코드 블록을 추가해주세요. ▼▼▼ */
+
+/* '집계' 탭 왼쪽 토글 버튼 중앙 정렬 스타일 */
+
+/* 버튼의 위치 기준을 .boq-container로 설정합니다. */
+.boq-container {
+    position: relative;
+}
+
+#boq-left-panel-toggle-btn {
+    position: absolute;
+    top: 50%;
+    left: 2px; /* 화면 왼쪽에서 2px 떨어진 위치 */
+    transform: translateY(-50%); /* Y축으로만 중앙 정렬 */
+    z-index: 10;
+    transition: transform 0.3s ease; /* 회전 효과에만 transition 적용 */
+}

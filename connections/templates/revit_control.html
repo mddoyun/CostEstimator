@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>COST ESTIMATOR(DD)</title>
+    {% load static %}
+    <link rel="stylesheet" type="text/css" href="{% static 'connections/style.css' %}">
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-left">
+                <h1>COST ESTIMATOR</h1>
+            </div>
+            <div class="header-right">
+                {% csrf_token %}
+                <label for="project-selector">Project:</label>
+                <select id="project-selector">
+                    <option value="">-- 프로젝트 선택 --</option>
+                    {% for project in projects %}
+                        <option value="{{ project.id }}">{{ project.name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" id="new-project-name" placeholder="새 프로젝트 이름...">
+                <button id="create-project-btn">새 프로젝트</button>
+                <p id="status">서버 연결 대기중...</p>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <button class="nav-button" data-tab="ruleset-management">📜 룰셋 관리</button>
+            <button class="nav-button" data-tab="cost-code-management">💰 공사코드 관리</button>
+            <button class="nav-button" data-tab="member-mark-management">📋 일람부호 관리</button>
+            <button class="nav-button" data-tab="tag-management">🏷️ 수량산출분류 관리</button>
+            <button class="nav-button active" data-tab="data-management">🗂️ BIM 원본데이터</button>
+            <button class="nav-button" data-tab="quantity-members">🧱 수량산출부재</button>
+            <button class="nav-button" data-tab="cost-item-management">📦 수량산출</button>
+            <button class="nav-button" data-tab="boq">🧾 집계</button>
+        </nav>
+
+        <div class="main-content">
+            <div id="data-management" class="tab-content active">
+                <aside class="left-panel">
+                    <div class="control-box">
+                        <h3>Revit 데이터 연동</h3>
+                        <button id="fetchDataBtn">데이터 가져오기</button>
+                        <button id="get-from-revit-btn">선택 객체 가져오기</button>
+                        <button id="select-in-revit-btn">Revit에서 선택 확인</button>
+                    </div>
+                    <div id="progress-container" class="control-box" style="display: none;">
+                        <h4 id="progress-title">데이터 수신 중...</h4>
+                        <progress id="data-fetch-progress" value="0" max="100" style="width: 100%;"></progress>
+                        <p id="progress-status-text" style="text-align: center; margin: 5px 0 0 0; font-size: 12px;"></p>
+                    </div>
+                </aside>
+                <main class="right-panel">
+                    <div class="table-area">
+                        <div class="view-tabs">
+                            <button class="view-tab-button active" data-view="raw-data-view">Raw 데이터 뷰</button>
+                            <button class="view-tab-button" data-view="classification-view">수량산출분류 뷰</button>
+                        </div>
+                        <div class="table-controls">
+                            <div id="grouping-controls-container">
+                                <button id="add-group-level-btn">그룹핑 추가</button>
+                                <div id="grouping-controls"></div>
+                            </div>
+                            <div id="tag-assignment-controls">
+                                <select id="tag-assign-select"><option value="">-- 분류 선택 --</option></select>
+                                <button id="assign-tag-btn">분류 적용</button>
+                                <button id="apply-rules-btn" title="룰셋을 기준으로 모든 객체에 분류를 일괄 적용합니다.">룰셋 일괄적용</button>
+                                <button id="clear-tags-btn">분류 제거</button>
+                            </div>
+                        </div>
+                        <div id="data-table-container" class="table-container">데이터가 여기에 표시됩니다...</div>
+                        <div class="table-footer-controls">
+                             <button id="clear-selection-filter-btn" style="display:none;">선택 필터 해제</button>
+                        </div>
+                    </div>
+                    <div class="selection-info-area">
+                        <div class="control-box">
+                            <h3>선택 항목의 분류</h3>
+                            <div id="selected-tags-list">항목을 선택하세요.</div>
+                        </div>
+                        <div class="control-box">
+                            <h3>테이블 필드 선택</h3>
+                            <div class="field-selection-wrapper">
+                                <div class="field-container-box">
+                                    <h4>시스템 필드</h4>
+                                    <div id="system-field-container" class="field-container"></div>
+                                </div>
+                                <div class="field-container-box">
+                                    <h4>Revit 데이터 필드</h4>
+                                    <div id="revit-field-container" class="field-container"></div>
+                                </div>
+                            </div>
+                            <button id="render-table-btn">테이블에 선택 적용</button>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <div id="tag-management" class="tab-content">
+                <div class="ruleset-container">
+                    <main class="ruleset-main-panel" style="width: 100%;">
+                        <div class="ruleset-header">
+                            <h2>수량산출분류 관리</h2>
+                        </div>
+                        <div class="tag-management-content-wrapper">
+                            <div class="control-box">
+                                <h3>수량산출분류 관리</h3>
+                                <div id="tag-list">프로젝트를 선택하세요.</div>
+                                <input type="text" id="new-tag-name" placeholder="새 분류 이름...">
+                                <button id="create-tag-btn">분류 추가</button>
+                                <div class="io-buttons">
+                                    <button id="import-tags-btn">가져오기</button>
+                                    <button id="export-tags-btn">내보내기</button>
+                                    <input type="file" id="tag-file-input" style="display: none;" accept=".qctags">
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </div>
+
+            <div id="ruleset-management" class="tab-content">
+                <div class="ruleset-container">
+                    <aside class="ruleset-nav-panel">
+                        <h3>룰셋 종류</h3>
+                        <nav class="ruleset-nav">
+                            <button class="ruleset-nav-button active" data-ruleset="classification-ruleset">
+                                <span class="ruleset-icon">🏷️</span>
+                                <span class="ruleset-text"><strong>분류 할당 룰셋</strong><small>RawElement → 수량산출분류</small></span>
+                            </button>
+                            <button class="ruleset-nav-button" data-ruleset="mapping-ruleset">
+                                <span class="ruleset-icon">📐</span>
+                                <span class="ruleset-text"><strong>속성 맵핑 룰셋</strong><small>QuantityMember 속성 계산</small></span>
+                            </button>
+                            <button class="ruleset-nav-button" data-ruleset="costcode-ruleset">
+                                <span class="ruleset-icon">💰</span>
+                                <span class="ruleset-text"><strong>공사코드 룰셋</strong><small>CostItem 수량 산출 기준</small></span>
+                            </button>
+                            <button class="ruleset-nav-button" data-ruleset="member-mark-assignment-ruleset">
+                                <span class="ruleset-icon">🏷️</span>
+                                <span class="ruleset-text"><strong>일람부호 할당 룰셋</strong><small>QuantityMember → MemberMark</small></span>
+                            </button>
+                            <button class="ruleset-nav-button" data-ruleset="cost-code-assignment-ruleset">
+                                <span class="ruleset-icon">📎</span>
+                                <span class="ruleset-text"><strong>공사코드 할당 룰셋</strong><small>QuantityMember → CostCode</small></span>
+                            </button>
+                        </nav>
+                    </aside>
+                    <main class="ruleset-main-panel">
+                        <div id="classification-ruleset" class="ruleset-content active">
+                            <div class="ruleset-header">
+                                <h2>분류 할당 룰셋 관리</h2>
+                                <div class="ruleset-actions">
+                                    <button id="add-classification-rule-btn">새 규칙 추가</button>
+                                </div>
+                            </div>
+                            <div class="ruleset-table-container">
+                                <p>프로젝트를 선택하고 규칙을 추가하세요.</p>
+                            </div>
+                        </div>
+                        <div id="mapping-ruleset" class="ruleset-content">
+                            <div class="ruleset-header">
+                                <h2>속성 맵핑 룰셋 관리</h2>
+                                <div class="ruleset-actions">
+                                    <button id="add-mapping-rule-btn">새 규칙 추가</button>
+                                </div>
+                            </div>
+                            <div class="ruleset-table-container" id="mapping-ruleset-table-container">
+                                <p>이곳에서 QuantityMember의 속성을 계산하는 규칙을 관리합니다.</p>
+                            </div>
+                        </div>
+                        <div id="costcode-ruleset" class="ruleset-content">
+                            <div class="ruleset-header">
+                                <h2>공사코드 룰셋 관리</h2>
+                                <div class="ruleset-actions">
+                                    <button id="add-costcode-rule-btn">새 규칙 추가</button>
+                                </div>
+                            </div>
+                            <div class="ruleset-table-container" id="costcode-ruleset-table-container">
+                                <p>이곳에서 공사코드별 수량 산출 기준을 관리합니다.</p>
+                            </div>
+                        </div>
+                        <div id="member-mark-assignment-ruleset" class="ruleset-content">
+                            <div class="ruleset-header">
+                                <h2>일람부호 할당 룰셋 관리</h2>
+                                <div class="ruleset-actions">
+                                    <button id="add-member-mark-assignment-rule-btn">새 규칙 추가</button>
+                                </div>
+                            </div>
+                            <div class="ruleset-table-container" id="member-mark-assignment-ruleset-table-container">
+                                <p>QuantityMember 속성 기반으로 일람부호를 자동 할당하는 규칙을 관리합니다.</p>
+                            </div>
+                        </div>
+                        <div id="cost-code-assignment-ruleset" class="ruleset-content">
+                            <div class="ruleset-header">
+                                <h2>공사코드 할당 룰셋 관리</h2>
+                                <div class="ruleset-actions">
+                                    <button id="add-cost-code-assignment-rule-btn">새 규칙 추가</button>
+                                </div>
+                            </div>
+                            <div class="ruleset-table-container" id="cost-code-assignment-ruleset-table-container">
+                                <p>QuantityMember 속성 기반으로 공사코드를 자동 할당/생성하는 규칙을 관리합니다.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </div>
+
+            <div id="quantity-members" class="tab-content">
+                <div class="qm-container">
+                    <div class="qm-header">
+                        <h2>수량산출부재 관리</h2>
+                        <div class="qm-actions">
+                            <button id="create-qm-manual-btn">수동 생성</button>
+                            <button id="create-qm-auto-btn">자동 생성 (분류 기준)</button>
+                            <button id="apply-assignment-rules-btn" title="일람부호 및 공사코드 할당 룰셋을 모든 부재에 일괄 적용합니다.">할당 룰셋 일괄적용</button>
+                        </div>
+                    </div>
+                    <div class="main-split-layout">
+                        <div class="table-area">
+                            <div class="view-tabs">
+                                <button class="view-tab-button active" data-view="quantity-member-view">수량산출부재 뷰</button>
+                                <button class="view-tab-button" data-view="cost-code-view">공사코드별 뷰</button>
+                            </div>
+                            <div class="table-controls">
+                                <div id="qm-grouping-controls-container">
+                                    <button id="add-qm-group-level-btn">그룹핑 추가</button>
+                                    <div id="qm-grouping-controls"></div>
+                                </div>
+                            </div>
+                            <div id="qm-table-container" class="qm-table-container">
+                                <p>프로젝트를 선택하세요.</p>
+                            </div>
+                        </div>
+                        <div class="details-panel">
+                            <div class="details-panel-tabs">
+                                <button class="detail-tab-button active" data-tab="properties">부재 속성</button>
+                                <button class="detail-tab-button" data-tab="cost-codes">공사 코드</button>
+                                <button class="detail-tab-button" data-tab="member-mark">일람 부호</button>
+                                <button class="detail-tab-button" data-tab="raw-data">BIM 원본</button>
+                            </div>
+                            <div class="detail-tab-content active" data-tab="properties">
+                                <div class="control-box">
+                                    <h4>선택된 부재의 속성</h4>
+                                    <div id="qm-properties-container">부재를 하나만 선택하세요.</div>
+                                    <div id="qm-properties-actions" class="assignment-controls"></div>
+                                </div>
+                            </div>
+                            <div class="detail-tab-content" data-tab="cost-codes">
+                                <div class="control-box">
+                                    <h4>선택된 부재의 공사코드</h4>
+                                    <div id="qm-cost-codes-list">공사코드를 보려면 부재를 선택하세요.</div>
+                                    <div class="assignment-controls">
+                                        <select id="qm-cost-code-assign-select" class="control-element"><option value="">-- 공사코드 선택 --</option></select>
+                                        <button id="qm-assign-cost-code-btn">할당</button>
+                                        <button id="qm-clear-cost-codes-btn">제거</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="detail-tab-content" data-tab="member-mark">
+                                <div class="control-box">
+                                    <h4>선택된 부재의 일람부호 상세정보</h4>
+                                    <div id="qm-member-mark-details-container">부재를 하나만 선택하세요.</div>
+                                    <div class="assignment-controls">
+                                        <select id="qm-member-mark-assign-select" class="control-element"><option value="">-- 일람부호 선택 --</option></select>
+                                        <button id="qm-assign-member-mark-btn">할당</button>
+                                        <button id="qm-clear-member-marks-btn">제거</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="detail-tab-content" data-tab="raw-data">
+                                <div class="control-box">
+                                    <h4>연관된 BIM 원본 데이터</h4>
+                                    <div id="qm-linked-raw-element-properties-container">부재를 하나만 선택하면 원본 데이터가 표시됩니다.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cost-item-management" class="tab-content">
+                <div class="qm-container"> 
+                    <div class="qm-header">
+                        <h2>산출항목 관리</h2>
+                        <div class="qm-actions">
+                            <button id="create-ci-manual-btn">수동 생성</button>
+                            <button id="create-ci-auto-btn">자동 생성 (공사코드 기준)</button>
+                        </div>
+                    </div>
+                    <div class="main-split-layout">
+                        <div class="table-area">
+                             <div class="table-controls">
+                                <div id="ci-grouping-controls-container">
+                                    <button id="add-ci-group-level-btn">그룹핑 추가</button>
+                                    <div id="ci-grouping-controls"></div>
+                                </div>
+                            </div>
+                            <div id="ci-table-container" class="qm-table-container">
+                                <p>프로젝트를 선택하세요.</p>
+                            </div>
+                        </div>
+                        <div class="details-panel">
+                            <div class="control-box">
+                                <h3>연관된 부재의 속성</h3>
+                                <div id="ci-linked-member-info-header">
+                                    <p>산출항목을 선택하면 정보가 표시됩니다.</p>
+                                </div>
+                                <div id="ci-linked-properties-wrapper">
+                                    <div id="ci-linked-member-properties-container" class="properties-sub-container"></div>
+                                    <div id="ci-linked-mark-properties-container" class="properties-sub-container"></div>
+                                    <div id="ci-linked-raw-element-properties-container" class="properties-sub-container"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="member-mark-management" class="tab-content">
+                <div class="ruleset-container">
+                    <main class="ruleset-main-panel" style="width: 100%;">
+                        <div class="ruleset-header">
+                            <h2>일람부호(Member Mark) 관리</h2>
+                            <div class="ruleset-actions">
+                                <button id="add-member-mark-btn">새 일람부호 추가</button>
+                            </div>
+                        </div>
+                        <div id="member-marks-table-container" class="ruleset-table-container">
+                            <p>프로젝트를 선택하세요.</p>
+                        </div>
+                    </main>
+                </div>
+            </div>
+            
+            <div id="cost-code-management" class="tab-content">
+                <div class="ruleset-container">
+                    <main class="ruleset-main-panel" style="width: 100%;">
+                        <div class="ruleset-header">
+                            <h2>공사코드(Cost Code) 관리</h2>
+                            <div class="ruleset-actions">
+                                <button id="add-cost-code-btn">새 공사코드 추가</button>
+                            </div>
+                        </div>
+                        <div id="cost-codes-table-container" class="ruleset-table-container">
+                            <p>프로젝트를 선택하세요.</p>
+                        </div>
+                    </main>
+                </div>
+            </div>
+
+            <div id="boq" class="tab-content">
+                <div class="boq-container">
+                    <button id="boq-left-panel-toggle-btn" class="panel-toggle-btn" title="왼쪽 패널 접기/펴기">◀</button>
+
+                    <aside class="boq-left-panel">
+                        <div class="control-box">
+                            <button id="generate-boq-btn" style="width: 100%;">📈 집계표 생성</button>
+                            <button id="boq-reset-columns-btn" style="width: 100%; margin-top: 10px;">🔄 열 순서/이름 초기화</button>
+
+                            <button id="export-boq-btn" style="width: 100%; margin-top: 10px;">📄 Excel 내보내기</button>
+                        </div>
+                        <div class="control-box">
+                            <h3>Revit 연동</h3>
+                            <div class="io-buttons">
+                                <button id="boq-get-from-revit-btn">선택 객체 가져오기</button>
+                                <button id="boq-select-in-revit-btn">Revit에서 선택 확인</button>
+                            </div>
+                            <button id="boq-clear-selection-filter-btn" style="display:none; margin-top: 10px;">선택 필터 해제</button>
+                        </div>
+                        <div class="control-box">
+                            <h4>표시할 필드</h4>
+                            <div id="boq-display-fields-container" style="max-height: 150px; overflow-y: auto; overflow-x: auto;">
+                                <small>그룹핑 필드 목록을 먼저 불러옵니다...</small>
+                            </div>
+                        </div>
+                        <div id="boq-item-details-panel" class="control-box boq-left-details-panel">
+                            <div class="details-panel-tabs">
+                                <button class="detail-tab-button active" data-tab="boq-member-prop">부재 속성</button>
+                                <button class="detail-tab-button" data-tab="boq-mark-prop">일람부호</button>
+                                <button class="detail-tab-button" data-tab="boq-raw-prop">BIM 원본</button>
+                            </div>
+                            <div class="detail-tab-content active" data-tab="boq-member-prop">
+                                <div id="boq-details-member-container" class="properties-sub-container"></div>
+                            </div>
+                            <div class="detail-tab-content" data-tab="boq-mark-prop">
+                                <div id="boq-details-mark-container" class="properties-sub-container"></div>
+                            </div>
+                            <div class="detail-tab-content" data-tab="boq-raw-prop">
+                                <div id="boq-details-raw-container" class="properties-sub-container"></div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main class="boq-main-content">
+                        
+                        <div class="control-box">
+                            <div id="boq-grouping-controls-wrapper">
+                                <button id="add-boq-group-level-btn">+ 그룹핑 추가</button>
+                                <div id="boq-grouping-controls"></div>
+                            </div>
+                        </div>
+                        <div id="boq-table-container" class="boq-table-wrapper">
+                            <p style="padding: 20px;">집계 기준을 설정하고 '집계표 생성' 버튼을 눌러주세요.</p>
+                        </div>
+                        <div id="boq-details-toolbar">
+                            <button id="boq-bottom-panel-toggle-btn" class="panel-toggle-btn" title="하단 패널 접기/펴기">▼</button>
+                        </div>
+                        <div id="boq-item-list-wrapper" class="boq-details-wrapper">
+                            <div class="control-box" style="height: 100%; display: flex; flex-direction: column;">
+                                <div class="boq-details-header">
+                                    <h4 style="margin: 0;">포함된 산출항목</h4>
+                                </div>
+                                <div id="boq-item-list-container" style="flex-grow: 1; overflow-y: auto;">
+                                    <p style="padding: 10px;">상단 집계표의 행을 선택하세요.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </div> </div> <div id="cost-code-selection-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>공사코드 선택</h2>
+                <button class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="cost-code-search-input" placeholder="공사코드 또는 품명으로 검색...">
+                <div id="cost-code-list-container" class="modal-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-cancel-btn" class="modal-button-secondary">취소</button>
+                <button id="modal-confirm-btn" class="modal-button-primary" disabled>선택 완료</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{% static 'connections/ui.js' %}"></script>
+    <script src="{% static 'connections/websocket.js' %}"></script>
+    <script src="{% static 'connections/main.js' %}"></script>
+</body>
+</html>
