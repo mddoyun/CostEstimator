@@ -1,4 +1,6 @@
 .mddoyun_win/
+.mddoyun_mac/
+.mddoyun/
 db.sqlite3
 db.sqlite3
 *.pyc
