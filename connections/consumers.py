@@ -106,11 +106,11 @@ class RevitConsumer(AsyncWebsocketConsumer):
             print(f"❌ [{self.__class__.__name__}] 클라이언트가 '{self.group_name}' 그룹에서 나갑니다.")
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
-    # ▼▼▼ [핵심 수정] Blender/Revit에서 오는 메시지를 처리하는 receive 메소드 복원 ▼▼▼
+    # ▼▼▼ [핵심 수정] Revit/Blender에서 오는 메시지를 처리하는 receive 메소드 복원 ▼▼▼
     async def receive(self, text_data):
         data = json.loads(text_data)
         msg_type = data.get('type')
-        print(f"✉️ [{self.__class__.__name__}] 클라이언트로부터 메시지 수신: type='{msg_type}'")
+        print(f"✉️  [{self.__class__.__name__}] 클라이언트로부터 메시지 수신: type='{msg_type}'")
 
         if msg_type == 'revit_selection_response':
             await self.channel_layer.group_send(
@@ -144,7 +144,6 @@ class RevitConsumer(AsyncWebsocketConsumer):
                 FrontendConsumer.frontend_group_name,
                 {"type": "broadcast_progress", "data": data}
             )
-    # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
 
     async def send_command(self, event):
         command_data = event['command_data']
@@ -216,7 +215,7 @@ class FrontendConsumer(AsyncWebsocketConsumer):
             if project_id:
                 tags = await self.db_get_tags(project_id)
                 await self.send_tags_update(tags)
-        # ... 이하 다른 msg_type 처리 로직은 기존과 동일 ...
+        
         elif msg_type in ['create_tag', 'update_tag', 'delete_tag']:
             project_id = payload.get('project_id')
             if not project_id: return
@@ -225,6 +224,7 @@ class FrontendConsumer(AsyncWebsocketConsumer):
             elif msg_type == 'delete_tag': await self.db_delete_tag(payload.get('tag_id'))
             tags = await self.db_get_tags(project_id)
             await self.channel_layer.group_send(self.frontend_group_name, {'type': 'broadcast_tags', 'tags': tags})
+            
         elif msg_type in ['assign_tags', 'clear_tags']:
             element_ids = payload.get('element_ids')
             if msg_type == 'assign_tags': await self.db_assign_tags(payload.get('tag_id'), element_ids)

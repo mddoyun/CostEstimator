@@ -973,47 +973,45 @@ async function loadClassificationRules() {
 /**
  * '룰셋 일괄적용' 버튼 클릭 시 실행되는 함수
  */
+/**
+ * '룰셋 일괄적용' 버튼 클릭 시 실행되는 함수
+ */
 async function applyClassificationRules() {
     if (!currentProjectId) {
-        showToast("먼저 프로젝트를 선택하세요.", "error");
+        showToast('먼저 프로젝트를 선택하세요.', 'error');
         return;
     }
 
-    if (
-        !confirm(
-            "정의된 모든 분류 할당 룰셋을 전체 객체에 적용하시겠습니까?\n기존에 할당된 분류는 유지되며, 규칙에 맞는 새로운 분류가 추가됩니다."
-        )
-    ) {
+    if (!confirm('정의된 모든 분류 할당 룰셋을 전체 객체에 적용하시겠습니까?\n기존에 할당된 분류는 유지되며, 규칙에 맞는 새로운 분류가 추가됩니다.')) {
         return;
     }
 
-    showToast("룰셋을 적용하고 있습니다... 잠시만 기다려주세요.", "info", 5000);
+    showToast('룰셋을 적용하고 있습니다... 잠시만 기다려주세요.', 'info', 5000);
 
     try {
-        const response = await fetch(
-            `/connections/api/rules/apply-classification/${currentProjectId}/`,
-            {
-                method: "POST",
-                headers: {
-                    "X-CSRFToken": csrftoken,
-                    "Content-Type": "application/json",
-                },
+        const response = await fetch(`/connections/api/rules/apply-classification/${currentProjectId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
             }
-        );
+        });
 
         const result = await response.json();
 
         if (!response.ok) {
-            throw new Error(result.message || "룰셋 적용에 실패했습니다.");
+            throw new Error(result.message || '룰셋 적용에 실패했습니다.');
         }
 
-        showToast(result.message, "success");
+        showToast(result.message, 'success');
 
-        // 변경사항을 화면에 즉시 반영하기 위해 Revit 데이터 전체를 다시 불러옵니다.
-        fetchDataFromRevit();
+        // ▼▼▼ [핵심 수정] 변경사항을 화면에 즉시 반영하기 위해,
+        // 이전에 사용하던 fetchDataFromRevit() 대신 새로운 fetchDataFromClient()를 호출합니다.
+        fetchDataFromClient();
+
     } catch (error) {
-        console.error("Error applying rules:", error);
-        showToast(error.message, "error");
+        console.error('Error applying rules:', error);
+        showToast(error.message, 'error');
     }
 }
 
