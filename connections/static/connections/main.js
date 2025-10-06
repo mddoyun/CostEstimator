@@ -304,12 +304,8 @@ document.addEventListener("DOMContentLoaded", () => {
         .getElementById("boq-reset-columns-btn")
         .addEventListener("click", resetBoqColumnsAndRegenerate);
 
-    document
-        .getElementById("boq-select-in-revit-btn")
-        .addEventListener("click", handleBoqSelectInRevit);
-    document
-        .getElementById("boq-get-from-revit-btn")
-        .addEventListener("click", handleBoqGetFromRevit);
+    document.getElementById('boq-select-in-client-btn').addEventListener('click', handleBoqSelectInClient);
+    document.getElementById('boq-get-from-client-btn').addEventListener('click', handleBoqGetFromClient);
     document
         .getElementById("boq-clear-selection-filter-btn")
         .addEventListener("click", handleBoqClearFilter);
@@ -426,51 +422,48 @@ function createNewProject() {
 function handleMainNavClick(e) {
     const clickedButton = e.currentTarget;
     if (clickedButton.classList.contains("active")) {
-        return;
+        return; 
     }
-    document.querySelector(".nav-button.active").classList.remove("active");
-    clickedButton.classList.add("active");
+    document.querySelector('.nav-button.active').classList.remove('active');
+    clickedButton.classList.add('active');
     activeTab = clickedButton.dataset.tab;
-    document
-        .querySelectorAll(".tab-content")
-        .forEach((c) => c.classList.remove("active"));
-    document.getElementById(activeTab).classList.add("active");
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById(activeTab).classList.add('active');
 
-    if (activeTab === "ruleset-management") {
+    if (activeTab === 'ruleset-management') {
         loadClassificationRules();
-        loadPropertyMappingRules(); // 속성 맵핑 룰셋 로드 함수 호출 추가
-        loadCostCodeRules(); // 공사코드 룰셋 로드 함수 호출
+        loadPropertyMappingRules();
+        loadCostCodeRules();
         loadMemberMarkAssignmentRules();
         loadCostCodeAssignmentRules();
     }
-
-    if (activeTab === "quantity-members") {
+        
+    if (activeTab === 'quantity-members') {
         loadQuantityMembers();
-        loadCostCodes(); // 공사코드 목록을 함께 로드합니다.
-        loadMemberMarks(); // 일람부호 목록을 함께 로드합니다.
+        loadCostCodes();
+        loadMemberMarks();
     }
-    if (activeTab === "cost-item-management") {
-        loadCostItems();
-        loadQuantityMembers(); // 연관 부재 속성을 표시하기 위해 부재 목록도 함께 로드합니다.
-        loadMemberMarks(); // 연관 부재의 일람부호 속성을 표시하기 위해 함께 로드합니다.
-    }
-    if (activeTab === "cost-code-management") {
-        loadQuantityMembers();
-        loadCostCodes(); // [추가] 공사코드 목록을 함께 로드합니다.
-        loadMemberMarks(); // [추가] 일람부호 목록을 함께 로드합니다.
-    }
-    if (activeTab === "member-mark-management") {
-        loadQuantityMembers();
-        loadCostCodes(); // [추가] 공사코드 목록을 함께 로드합니다.
-        loadMemberMarks(); // [추가] 일람부호 목록을 함께 로드합니다.
-    }
-    if (activeTab === "boq") {
-        // [수정] 상세 정보 표시에 필요한 모든 데이터를 불러옵니다.
+    if (activeTab === 'cost-item-management') {
         loadCostItems();
         loadQuantityMembers();
-        // allRevitData가 비어있을 경우에만 요청하여 불필요한 로딩을 방지합니다.
-        if (allRevitData.length === 0) {
-            fetchDataFromRevit();
+        loadMemberMarks();
+    }
+    if (activeTab === 'cost-code-management') {
+        loadQuantityMembers();
+        loadCostCodes();
+        loadMemberMarks();
+    }
+    if (activeTab === 'member-mark-management') {
+        loadQuantityMembers();
+        loadCostCodes();
+        loadMemberMarks();
+    }
+    if (activeTab === 'boq') {
+        loadCostItems();
+        loadQuantityMembers();
+        if(allRevitData.length === 0) {
+            // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
+            fetchDataFromClient();
         }
         loadBoqGroupingFields();
     }
@@ -970,12 +963,7 @@ async function loadClassificationRules() {
         showToast(error.message, "error");
     }
 }
-/**
- * '룰셋 일괄적용' 버튼 클릭 시 실행되는 함수
- */
-/**
- * '룰셋 일괄적용' 버튼 클릭 시 실행되는 함수
- */
+
 async function applyClassificationRules() {
     if (!currentProjectId) {
         showToast('먼저 프로젝트를 선택하세요.', 'error');
@@ -1004,9 +992,8 @@ async function applyClassificationRules() {
         }
 
         showToast(result.message, 'success');
-
-        // ▼▼▼ [핵심 수정] 변경사항을 화면에 즉시 반영하기 위해,
-        // 이전에 사용하던 fetchDataFromRevit() 대신 새로운 fetchDataFromClient()를 호출합니다.
+        
+        // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
         fetchDataFromClient();
 
     } catch (error) {
@@ -1014,6 +1001,8 @@ async function applyClassificationRules() {
         showToast(error.message, 'error');
     }
 }
+
+
 
 // ▼▼▼ [추가] 파일의 이 위치에 아래 함수들을 모두 추가해주세요. ▼▼▼
 
@@ -3692,34 +3681,27 @@ function initializeBoqUI() {
     }
 }
 
-// main.js 파일 맨 아래에 추가
-
 /**
- * '집계' 탭에서 'Revit에서 선택 확인' 버튼 클릭을 처리합니다.
- * 선택된 집계표 행에 연결된 모든 BIM 객체를 Revit에서 하이라이트합니다.
+ * '집계' 탭에서 '연동 프로그램에서 선택 확인' 버튼 클릭을 처리합니다.
  */
-function handleBoqSelectInRevit() {
-    const selectedRow = document.querySelector(
-        ".boq-table tr.selected-boq-row"
-    );
+function handleBoqSelectInClient() {
+    const selectedRow = document.querySelector('.boq-table tr.selected-boq-row');
     if (!selectedRow) {
-        showToast("먼저 집계표에서 확인할 행을 선택하세요.", "error");
+        showToast('먼저 집계표에서 확인할 행을 선택하세요.', 'error');
         return;
     }
 
-    const itemIds = JSON.parse(selectedRow.dataset.itemIds || "[]");
+    const itemIds = JSON.parse(selectedRow.dataset.itemIds || '[]');
     if (itemIds.length === 0) {
-        showToast("선택된 행에 연관된 산출항목이 없습니다.", "info");
+        showToast('선택된 행에 연관된 산출항목이 없습니다.', 'info');
         return;
     }
 
     const rawElementIds = new Set();
-    itemIds.forEach((itemId) => {
-        const costItem = loadedCostItems.find((ci) => ci.id === itemId);
+    itemIds.forEach(itemId => {
+        const costItem = loadedCostItems.find(ci => ci.id === itemId);
         if (costItem && costItem.quantity_member_id) {
-            const member = loadedQuantityMembers.find(
-                (qm) => qm.id === costItem.quantity_member_id
-            );
+            const member = loadedQuantityMembers.find(qm => qm.id === costItem.quantity_member_id);
             if (member && member.raw_element_id) {
                 rawElementIds.add(member.raw_element_id);
             }
@@ -3727,56 +3709,51 @@ function handleBoqSelectInRevit() {
     });
 
     if (rawElementIds.size === 0) {
-        showToast(
-            "선택된 항목들은 Revit 객체와 직접 연관되어 있지 않습니다.",
-            "info"
-        );
+        showToast('선택된 항목들은 BIM 객체와 직접 연관되어 있지 않습니다.', 'info');
         return;
     }
 
     const uniqueIdsToSend = [];
-    rawElementIds.forEach((rawId) => {
-        const rawElement = allRevitData.find((re) => re.id === rawId);
+    rawElementIds.forEach(rawId => {
+        const rawElement = allRevitData.find(re => re.id === rawId);
         if (rawElement) {
             uniqueIdsToSend.push(rawElement.element_unique_id);
         }
     });
 
-    /* 수정 코드 (handleBoqSelectInRevit 함수 내부) */
     if (uniqueIdsToSend.length > 0) {
-        // [수정] payload의 command와 내용을 올바르게 변경합니다.
-        frontendSocket.send(
-            JSON.stringify({
-                type: "command_to_revit",
-                payload: {
-                    command: "select_elements",
-                    unique_ids: uniqueIdsToSend,
-                },
-            })
-        );
-        // [삭제] 불필요한 status 메시지 업데이트 라인을 제거합니다.
-
-        showToast(
-            `${uniqueIdsToSend.length}개 객체의 선택 명령을 Revit으로 보냈습니다.`,
-            "success"
-        );
+        // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
+        const targetGroup = currentMode === 'revit' ? 'revit_broadcast_group' : 'blender_broadcast_group';
+        frontendSocket.send(JSON.stringify({
+            'type': 'command_to_client',
+            'payload': { 
+                'command': 'select_elements', 
+                'unique_ids': uniqueIdsToSend,
+                'target_group': targetGroup
+            }
+        }));
+        const clientName = currentMode === 'revit' ? 'Revit' : 'Blender';
+        showToast(`${uniqueIdsToSend.length}개 객체의 선택 명령을 ${clientName}(으)로 보냈습니다.`, 'success');
     } else {
-        showToast("Revit으로 보낼 유효한 객체를 찾지 못했습니다.", "error");
+        showToast('연동 프로그램으로 보낼 유효한 객체를 찾지 못했습니다.', 'error');
     }
 }
 
 /**
  * '집계' 탭에서 '선택 객체 가져오기' 버튼 클릭을 처리합니다.
- * Revit에서 현재 선택된 객체 정보를 가져오도록 요청합니다.
  */
-function handleBoqGetFromRevit() {
-    frontendSocket.send(
-        JSON.stringify({
-            type: "command_to_revit",
-            payload: { command: "get_selection" },
-        })
-    );
-    showToast("Revit에 선택 정보 가져오기를 요청했습니다.", "info");
+function handleBoqGetFromClient() {
+    // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
+    const targetGroup = currentMode === 'revit' ? 'revit_broadcast_group' : 'blender_broadcast_group';
+    frontendSocket.send(JSON.stringify({
+        'type': 'command_to_client',
+        'payload': {
+            'command': 'get_selection',
+            'target_group': targetGroup
+        }
+    }));
+    const clientName = currentMode === 'revit' ? 'Revit' : 'Blender';
+    showToast(`${clientName}에 선택 정보 가져오기를 요청했습니다.`, 'info');
 }
 
 /**
