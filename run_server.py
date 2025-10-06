@@ -76,3 +76,28 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+"""
+빌드방법(mac os)
+
+pyinstaller --name "CostEstimatorServer" \
+--onefile \
+--add-data "db.sqlite3:." \
+--add-data "aibim_quantity_takeoff_web:aibim_quantity_takeoff_web" \
+--add-data "connections:connections" \
+run_server.py
+
+"""
+
+"""
+빌드방법(윈도우)
+
+pyinstaller --name "CostEstimatorServer" ^
+--onefile ^
+--add-data "db.sqlite3;." ^
+--add-data "aibim_quantity_takeoff_web;aibim_quantity_takeoff_web" ^
+--add-data "connections;connections" ^
+run_server.py
+
+"""
