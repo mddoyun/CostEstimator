@@ -91,13 +91,7 @@ run_server.py
 """
 
 """
-빌드방법(윈도우)
+빌드방법(윈도우) - 터미널에서 실행(cmd
 
-pyinstaller --name "CostEstimatorServer" ^
---onefile ^
---add-data "db.sqlite3;." ^
---add-data "aibim_quantity_takeoff_web;aibim_quantity_takeoff_web" ^
---add-data "connections;connections" ^
-run_server.py
-
+pyinstaller --name "CostEstimatorServer" --onefile --add-data "db.sqlite3:." --add-data "aibim_quantity_takeoff_web:aibim_quantity_takeoff_web" --add-data "connections:connections" run_server.py
 """
