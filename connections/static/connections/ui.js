@@ -53,32 +53,35 @@ function handleRowSelection(event, clickedRow) {
     lastSelectedRowIndex = clickedRowIndex;
 }
 
-// ▼▼▼ [수정] 체크박스를 한번만 생성하도록 로직을 변경하여 안정성을 높였습니다. ▼▼▼
-// ▼▼▼ [최종 수정] ui.js 파일의 기존 populateFieldSelection 함수를 아래 코드로 완전히 교체해주세요. ▼▼▼
+// ui.js 파일의 기존 populateFieldSelection 함수를 아래 코드로 완전히 교체해주세요.
 
 function populateFieldSelection() {
+    // ▼▼▼ [추가] 데이터 확인을 위해 이 한 줄을 추가해주세요. ▼▼▼
+    console.log(
+        "디버깅: 첫 번째 객체의 원본 데이터 ->",
+        allRevitData[0]?.raw_data
+    );
+    // ▲▲▲ 여기까지 추가 ▲▲▲
     const systemContainer = document.getElementById("system-field-container");
     const revitContainer = document.getElementById("revit-field-container");
 
-    // 필드 목록을 비우기 전에 현재 체크된 상태를 기억합니다.
     const previouslyChecked = {};
     document.querySelectorAll(".field-checkbox:checked").forEach((cb) => {
         previouslyChecked[cb.value] = true;
     });
 
-    // 기존 필드 목록을 완전히 비웁니다.
     systemContainer.innerHTML = "";
     revitContainer.innerHTML = "";
 
     if (allRevitData.length === 0) return;
 
-    // --- 1. 모든 데이터에서 필드 키 목록을 다시 수집합니다 ---
+    // --- 1. 모든 데이터에서 필드 키 목록을 수집합니다. ---
     const systemKeys = ["id", "element_unique_id", "classification_tags"];
     const revitKeysSet = new Set();
+
     allRevitData.forEach((item) => {
         const raw = item.raw_data;
         if (raw) {
-            // Parameters와 TypeParameters 내부의 키들을 모두 수집합니다.
             if (raw.Parameters)
                 Object.keys(raw.Parameters).forEach((k) => revitKeysSet.add(k));
             if (raw.TypeParameters)
@@ -86,22 +89,21 @@ function populateFieldSelection() {
                     revitKeysSet.add(`TypeParameters.${k}`)
                 );
 
-            // 그 외 최상위 레벨의 키들도 수집합니다.
+            // ▼▼▼ [핵심 수정] 문제가 되었던 필터링 조건을 수정한 부분입니다. ▼▼▼
             Object.keys(raw).forEach((k) => {
-                if (
-                    k !== "Parameters" &&
-                    k !== "TypeParameters" &&
-                    typeof raw[k] !== "object"
-                ) {
+                // 기존의 `typeof raw[k] !== "object"` 조건을 제거하여
+                // 'IfcClass'를 포함한 모든 최상위 키가 정상적으로 추가되도록 합니다.
+                if (k !== "Parameters" && k !== "TypeParameters") {
                     revitKeysSet.add(k);
                 }
             });
+            // ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
         }
     });
     const sortedRevitKeys = Array.from(revitKeysSet).sort();
     const allKeysSorted = [...systemKeys, ...sortedRevitKeys].sort();
 
-    // --- 2. 수집된 최신 키 목록을 기반으로 체크박스를 새로 생성합니다. ---
+    // --- 2. 시스템 필드 체크박스를 생성합니다. ---
     systemContainer.innerHTML = systemKeys
         .map(
             (k) =>
@@ -111,16 +113,26 @@ function populateFieldSelection() {
         )
         .join("");
 
+    // --- 3. BIM 객체 데이터 필드 체크박스를 생성합니다. ---
+    // 현재 선택된 모드(revit/blender)에 따라 불필요한 필드를 숨깁니다.
     revitContainer.innerHTML = sortedRevitKeys
-        .map(
-            (k) =>
-                `<label><input type="checkbox" class="field-checkbox" value="${k}" ${
-                    previouslyChecked[k] ? "checked" : ""
-                }> ${k}</label>`
-        )
+        .map((k) => {
+            // "Blender 모드"일 때 'Category' 필드를 숨깁니다.
+            if (currentMode === "blender" && k === "Category") {
+                return "";
+            }
+            // "Revit 모드"일 때 'IfcClass' 필드를 숨깁니다.
+            if (currentMode === "revit" && k === "IfcClass") {
+                return "";
+            }
+            // 그 외 모든 경우는 정상적으로 체크박스를 생성합니다.
+            return `<label><input type="checkbox" class="field-checkbox" value="${k}" ${
+                previouslyChecked[k] ? "checked" : ""
+            }> ${k}</label>`;
+        })
         .join("");
 
-    // --- 3. 그룹핑 드롭다운 목록도 항상 최신 상태로 업데이트합니다. ---
+    // --- 4. 그룹핑 드롭다운 목록을 업데이트합니다. ---
     const groupBySelects = document.querySelectorAll(".group-by-select");
     let optionsHtml =
         '<option value="">-- 필드 선택 --</option>' +
@@ -128,12 +140,11 @@ function populateFieldSelection() {
             .map((key) => `<option value="${key}">${key}</option>`)
             .join("");
     groupBySelects.forEach((select) => {
-        const selectedValue = select.value; // 기존에 선택된 값을 유지합니다.
+        const selectedValue = select.value;
         select.innerHTML = optionsHtml;
         select.value = selectedValue;
     });
 }
-// ▲▲▲ [수정] 여기까지가 수정된 함수입니다. ▲▲▲
 
 function addGroupingLevel() {
     const container = document.getElementById("grouping-controls");
