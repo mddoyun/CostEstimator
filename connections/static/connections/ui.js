@@ -53,17 +53,22 @@ function handleRowSelection(event, clickedRow) {
     lastSelectedRowIndex = clickedRowIndex;
 }
 
-// ui.js 파일의 기존 populateFieldSelection 함수를 아래 코드로 완전히 교체해주세요.
+// ui.js
 
+// ▼▼▼ [교체] 기존 populateFieldSelection 함수를 아래 코드로 교체하세요. ▼▼▼
 function populateFieldSelection() {
-    // ▼▼▼ [추가] 데이터 확인을 위해 이 한 줄을 추가해주세요. ▼▼▼
+    const systemContainer = document.getElementById("system-field-container");
+    const revitContainer = document.getElementById("revit-field-container");
+
+    // [수정] 요소가 존재하지 않으면 오류를 방지하고 함수를 즉시 종료합니다.
+    if (!systemContainer || !revitContainer) {
+        return;
+    }
+
     console.log(
         "디버깅: 첫 번째 객체의 원본 데이터 ->",
         allRevitData[0]?.raw_data
     );
-    // ▲▲▲ 여기까지 추가 ▲▲▲
-    const systemContainer = document.getElementById("system-field-container");
-    const revitContainer = document.getElementById("revit-field-container");
 
     const previouslyChecked = {};
     document.querySelectorAll(".field-checkbox:checked").forEach((cb) => {
@@ -89,15 +94,11 @@ function populateFieldSelection() {
                     revitKeysSet.add(`TypeParameters.${k}`)
                 );
 
-            // ▼▼▼ [핵심 수정] 문제가 되었던 필터링 조건을 수정한 부분입니다. ▼▼▼
             Object.keys(raw).forEach((k) => {
-                // 기존의 `typeof raw[k] !== "object"` 조건을 제거하여
-                // 'IfcClass'를 포함한 모든 최상위 키가 정상적으로 추가되도록 합니다.
                 if (k !== "Parameters" && k !== "TypeParameters") {
                     revitKeysSet.add(k);
                 }
             });
-            // ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
         }
     });
     const sortedRevitKeys = Array.from(revitKeysSet).sort();
@@ -114,18 +115,14 @@ function populateFieldSelection() {
         .join("");
 
     // --- 3. BIM 객체 데이터 필드 체크박스를 생성합니다. ---
-    // 현재 선택된 모드(revit/blender)에 따라 불필요한 필드를 숨깁니다.
     revitContainer.innerHTML = sortedRevitKeys
         .map((k) => {
-            // "Blender 모드"일 때 'Category' 필드를 숨깁니다.
             if (currentMode === "blender" && k === "Category") {
                 return "";
             }
-            // "Revit 모드"일 때 'IfcClass' 필드를 숨깁니다.
             if (currentMode === "revit" && k === "IfcClass") {
                 return "";
             }
-            // 그 외 모든 경우는 정상적으로 체크박스를 생성합니다.
             return `<label><input type="checkbox" class="field-checkbox" value="${k}" ${
                 previouslyChecked[k] ? "checked" : ""
             }> ${k}</label>`;
@@ -145,6 +142,7 @@ function populateFieldSelection() {
         select.value = selectedValue;
     });
 }
+// ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
 
 function addGroupingLevel() {
     const container = document.getElementById("grouping-controls");
@@ -392,29 +390,6 @@ function renderClassificationTable(selectedFields) {
 
     tableHtml += "</tbody></table>";
     tableContainer.innerHTML = tableHtml;
-}
-function renderAssignedTagsTable() {
-    const listContainer = document.getElementById("selected-tags-list");
-    if (selectedElementIds.size === 0) {
-        listContainer.innerHTML = "항목을 선택하세요.";
-        return;
-    }
-    const selectedItems = allRevitData.filter((item) =>
-        selectedElementIds.has(item.id)
-    );
-    const assignedTags = new Set();
-    selectedItems.forEach((item) => {
-        if (item.classification_tags)
-            item.classification_tags.forEach((tag) => assignedTags.add(tag));
-    });
-    if (assignedTags.size === 0) {
-        listContainer.innerHTML = "할당된 분류가 없습니다.";
-        return;
-    }
-    listContainer.innerHTML = Array.from(assignedTags)
-        .sort()
-        .map((tag) => `<div>${tag}</div>`)
-        .join("");
 }
 
 function updateTagLists(tags) {
@@ -2016,3 +1991,188 @@ function renderBoqDisplayFieldControls(fields) {
         )
         .join("");
 }
+
+// connections/static/connections/ui.js
+
+// ... 기존 코드 맨 아래에 추가 ...
+
+/**
+ * 'BIM속성' 탭의 내용을 렌더링합니다.
+ * 테이블에서 선택된 단일 항목의 모든 Raw Data 속성을 테이블 형태로 표시합니다.
+ */
+function renderBimPropertiesTable() {
+    const container = document.getElementById(
+        "selected-bim-properties-container"
+    );
+
+    // 1. 선택된 항목이 하나가 아닐 경우 안내 메시지 표시
+    if (selectedElementIds.size !== 1) {
+        container.innerHTML =
+            "<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>";
+        return;
+    }
+
+    // 2. 선택된 항목의 ID를 가져와 전체 데이터에서 해당 객체 찾기
+    const selectedId = selectedElementIds.values().next().value;
+    const selectedItem = allRevitData.find((item) => item.id === selectedId);
+
+    if (!selectedItem || !selectedItem.raw_data) {
+        container.innerHTML =
+            "<p>선택된 항목의 BIM 원본 데이터를 찾을 수 없습니다.</p>";
+        return;
+    }
+
+    // 3. Raw Data를 테이블로 표시하기 좋게 가공 (key, value, source)
+    const properties = [];
+    const rawData = selectedItem.raw_data;
+
+    // 최상위 속성, Parameters, TypeParameters를 순회하며 속성 목록 생성
+    for (const key in rawData) {
+        if (key === "Parameters" && typeof rawData[key] === "object") {
+            for (const paramKey in rawData[key]) {
+                properties.push({
+                    key: paramKey,
+                    value: rawData[key][paramKey],
+                    source: "Parameters",
+                });
+            }
+        } else if (
+            key === "TypeParameters" &&
+            typeof rawData[key] === "object"
+        ) {
+            for (const paramKey in rawData[key]) {
+                properties.push({
+                    key: paramKey,
+                    value: rawData[key][paramKey],
+                    source: "TypeParameters",
+                });
+            }
+        } else if (typeof rawData[key] !== "object") {
+            properties.push({ key: key, value: rawData[key], source: "Root" });
+        }
+    }
+
+    // 키(key)를 기준으로 가나다순 정렬
+    properties.sort((a, b) => a.key.localeCompare(b.key));
+
+    // 4. HTML 테이블 생성
+    let tableHtml = `
+        <table class="properties-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;">속성 (Property)</th>
+                    <th>값 (Value)</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    if (properties.length === 0) {
+        tableHtml += '<tr><td colspan="2">표시할 속성이 없습니다.</td></tr>';
+    } else {
+        properties.forEach((prop) => {
+            tableHtml += `
+                <tr>
+                    <td>${prop.key}</td>
+                    <td>${prop.value}</td>
+                </tr>
+            `;
+        });
+    }
+
+    tableHtml += "</tbody></table>";
+
+    // 5. 생성된 테이블을 컨테이너에 삽입
+    container.innerHTML = tableHtml;
+}
+
+// ui.js
+
+// ... 기존 코드 맨 아래에 추가 ...
+
+// ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
+/**
+ * '선택항목 분류' 탭의 내용을 렌더링합니다.
+ * 테이블에서 선택된 항목들에 공통적으로 할당된 태그 목록을 표시합니다.
+ */
+function renderAssignedTagsTable() {
+    const listContainer = document.getElementById("selected-tags-list");
+
+    // 요소가 존재하지 않을 경우를 대비한 안전장치
+    if (!listContainer) {
+        return;
+    }
+
+    if (selectedElementIds.size === 0) {
+        listContainer.innerHTML = "항목을 선택하세요.";
+        return;
+    }
+    const selectedItems = allRevitData.filter((item) =>
+        selectedElementIds.has(item.id)
+    );
+
+    // 선택된 모든 항목의 태그를 수집
+    const assignedTags = new Set();
+    selectedItems.forEach((item) => {
+        if (item.classification_tags)
+            item.classification_tags.forEach((tag) => assignedTags.add(tag));
+    });
+
+    if (assignedTags.size === 0) {
+        listContainer.innerHTML = "할당된 분류가 없습니다.";
+        return;
+    }
+
+    // 화면에 태그 목록 표시
+    listContainer.innerHTML = Array.from(assignedTags)
+        .sort()
+        .map((tag) => `<div>${tag}</div>`)
+        .join("");
+}
+// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+// ui.js
+
+// ... 기존의 다른 함수들 맨 아래에 이어서 추가 ...
+
+// ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
+/**
+ * '선택항목 분류' 탭의 내용을 렌더링합니다.
+ * 테이블에서 선택된 항목들에 할당된 태그 목록을 표시합니다.
+ */
+function renderAssignedTagsTable() {
+    const listContainer = document.getElementById("selected-tags-list");
+
+    // 요소가 존재하지 않을 경우를 대비한 안전장치
+    if (!listContainer) {
+        return;
+    }
+
+    if (selectedElementIds.size === 0) {
+        listContainer.innerHTML = "항목을 선택하세요.";
+        return;
+    }
+
+    const selectedItems = allRevitData.filter((item) =>
+        selectedElementIds.has(item.id)
+    );
+
+    // 선택된 모든 항목의 태그를 중복 없이 수집
+    const assignedTags = new Set();
+    selectedItems.forEach((item) => {
+        if (item.classification_tags) {
+            item.classification_tags.forEach((tag) => assignedTags.add(tag));
+        }
+    });
+
+    if (assignedTags.size === 0) {
+        listContainer.innerHTML = "할당된 분류가 없습니다.";
+        return;
+    }
+
+    // 화면에 태그 목록을 가나다순으로 정렬하여 표시
+    listContainer.innerHTML = Array.from(assignedTags)
+        .sort()
+        .map((tag) => `<div>${tag}</div>`)
+        .join("");
+}
+// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
