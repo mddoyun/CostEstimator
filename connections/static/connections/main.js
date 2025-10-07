@@ -93,17 +93,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("export-tags-btn")
         .addEventListener("click", exportTags);
-    document
-        .getElementById("import-tags-btn")
-        .addEventListener("click", () =>
-            document.getElementById("tag-file-input").click()
-        );
-    document
-        .getElementById("tag-file-input")
-        .addEventListener("change", importTags);
-    document
-        .getElementById("export-tags-btn")
-        .addEventListener("click", exportTags);
 
     // --- 테이블 및 데이터 뷰 관련 버튼 ---
     document
@@ -345,6 +334,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("classification-ruleset")
         .addEventListener("click", handleClassificationRuleActions);
+    document
+        .querySelector(".left-panel-tabs")
+        .addEventListener("click", handleLeftPanelTabClick);
 
     // --- 초기 상태 설정 ---
     currentProjectId = projectSelector.value;
@@ -3871,4 +3863,27 @@ function exportTags() {
     }
     // 간단하게 URL을 변경하여 파일 다운로드를 트리거합니다.
     window.location.href = `/connections/export-tags/${currentProjectId}/`;
+}
+
+function handleLeftPanelTabClick(event) {
+    const clickedButton = event.target.closest(".left-panel-tab-button");
+    if (!clickedButton || clickedButton.classList.contains("active")) {
+        // 버튼이 아니거나 이미 활성화된 탭이면 아무것도 하지 않음
+        return;
+    }
+
+    const tabContainer = clickedButton.closest(".left-panel-tab-container");
+    const targetTabId = clickedButton.dataset.tab;
+
+    // 현재 활성화된 탭과 콘텐츠를 비활성화
+    tabContainer
+        .querySelector(".left-panel-tab-button.active")
+        .classList.remove("active");
+    tabContainer
+        .querySelector(".left-panel-tab-content.active")
+        .classList.remove("active");
+
+    // 클릭된 버튼과 그에 맞는 콘텐츠를 활성화
+    clickedButton.classList.add("active");
+    tabContainer.querySelector(`#${targetTabId}`).classList.add("active");
 }

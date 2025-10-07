@@ -34,6 +34,16 @@
                         placeholder="새 프로젝트 이름..."
                     />
                     <button id="create-project-btn">새 프로젝트</button>
+                    <div id="progress-container" style="display: none">
+                        <div class="progress-bar-wrapper">
+                            <progress
+                                id="data-fetch-progress"
+                                value="0"
+                                max="100"
+                            ></progress>
+                            <span id="progress-status-text"></span>
+                        </div>
+                    </div>
                     <p id="status">서버 연결 대기중...</p>
                 </div>
             </header>
@@ -102,28 +112,63 @@
                                 연동 프로그램에서 선택 확인
                             </button>
                         </div>
-                        <div
-                            id="progress-container"
-                            class="control-box"
-                            style="display: none"
-                        >
-                            <h4 id="progress-title">데이터 수신 중...</h4>
-                            <progress
-                                id="data-fetch-progress"
-                                value="0"
-                                max="100"
-                                style="width: 100%"
-                            ></progress>
-                            <p
-                                id="progress-status-text"
-                                style="
-                                    text-align: center;
-                                    margin: 5px 0 0 0;
-                                    font-size: 12px;
-                                "
-                            ></p>
+
+                        <div class="left-panel-tab-container">
+                            <div class="left-panel-tabs">
+                                <button
+                                    class="left-panel-tab-button active"
+                                    data-tab="fields"
+                                >
+                                    필드 선택
+                                </button>
+                                <button
+                                    class="left-panel-tab-button"
+                                    data-tab="classification"
+                                >
+                                    선택항목 분류
+                                </button>
+                            </div>
+
+                            <div
+                                id="fields"
+                                class="left-panel-tab-content active"
+                            >
+                                <div class="control-box">
+                                    <div class="field-selection-wrapper">
+                                        <div class="field-container-box">
+                                            <h4>시스템 필드</h4>
+                                            <div
+                                                id="system-field-container"
+                                                class="field-container"
+                                            ></div>
+                                        </div>
+                                        <div class="field-container-box">
+                                            <h4>BIM객체 데이터 필드</h4>
+                                            <div
+                                                id="revit-field-container"
+                                                class="field-container"
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    <button id="render-table-btn">
+                                        테이블에 선택 적용
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div
+                                id="classification"
+                                class="left-panel-tab-content"
+                            >
+                                <div class="control-box">
+                                    <div id="selected-tags-list">
+                                        항목을 선택하세요.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </aside>
+
                     <main class="right-panel">
                         <div class="table-area">
                             <div class="view-tabs">
@@ -182,36 +227,6 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="selection-info-area">
-                            <div class="control-box">
-                                <h3>선택 항목의 분류</h3>
-                                <div id="selected-tags-list">
-                                    항목을 선택하세요.
-                                </div>
-                            </div>
-                            <div class="control-box">
-                                <h3>테이블 필드 선택</h3>
-                                <div class="field-selection-wrapper">
-                                    <div class="field-container-box">
-                                        <h4>시스템 필드</h4>
-                                        <div
-                                            id="system-field-container"
-                                            class="field-container"
-                                        ></div>
-                                    </div>
-                                    <div class="field-container-box">
-                                        <h4>BIM객체 데이터 필드</h4>
-                                        <div
-                                            id="revit-field-container"
-                                            class="field-container"
-                                        ></div>
-                                    </div>
-                                </div>
-                                <button id="render-table-btn">
-                                    테이블에 선택 적용
-                                </button>
-                            </div>
-                        </div>
                     </main>
                 </div>
 
@@ -223,10 +238,13 @@
                             </div>
                             <div class="tag-management-content-wrapper">
                                 <div class="control-box">
-                                    <h3>수량산출분류 관리</h3>
+                                    <h3>수량산출분류 목록</h3>
                                     <div id="tag-list">
                                         프로젝트를 선택하세요.
                                     </div>
+                                </div>
+                                <div class="control-box">
+                                    <h3>새 분류 추가</h3>
                                     <input
                                         type="text"
                                         id="new-tag-name"
@@ -235,7 +253,9 @@
                                     <button id="create-tag-btn">
                                         분류 추가
                                     </button>
-
+                                </div>
+                                <div class="control-box">
+                                    <h3>가져오기 / 내보내기</h3>
                                     <div class="io-buttons">
                                         <button id="import-tags-btn">
                                             가져오기

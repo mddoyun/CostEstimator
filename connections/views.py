@@ -94,56 +94,6 @@ def import_tags(request, project_id):
 
 
 
-# --- Tag Import/Export Views ---
-
-def export_tags(request, project_id):
-    project = Project.objects.get(id=project_id)
-    tags = project.classification_tags.all().order_by('name')
-    response = HttpResponse(content_type='text/csv')
-    # 사용자가 요청한 .qctags 확장자로 파일을 내보냅니다.
-    response['Content-Disposition'] = f'attachment; filename="{project.name}_tags.qctags"'
-    
-    writer = csv.writer(response)
-    writer.writerow(['name', 'description'])  # CSV 헤더
-    for tag in tags:
-        writer.writerow([tag.name, tag.description])
-    return response
-
-def import_tags(request, project_id):
-    if request.method == 'POST' and request.FILES.get('tag_file'):
-        project = Project.objects.get(id=project_id)
-        tag_file = request.FILES['tag_file']
-        try:
-            # 기존 태그를 모두 삭제하고 새로 가져온 태그로 덮어씁니다.
-            project.classification_tags.all().delete()
-            
-            decoded_file = tag_file.read().decode('utf-8').splitlines()
-            reader = csv.reader(decoded_file)
-            next(reader, None)  # 헤더 행 건너뛰기
-            
-            for row in reader:
-                if row: # 비어있는 행은 무시
-                    name = row[0]
-                    description = row[1] if len(row) > 1 else ""
-                    QuantityClassificationTag.objects.create(project=project, name=name, description=description)
-            
-            # --- 실시간 업데이트를 위한 웹소켓 브로드캐스팅 ---
-            channel_layer = get_channel_layer()
-            tags = [{'id': str(tag.id), 'name': tag.name} for tag in project.classification_tags.all()]
-            async_to_sync(channel_layer.group_send)(
-                FrontendConsumer.frontend_group_name,
-                {'type': 'broadcast_tags', 'tags': tags}
-            )
-            return JsonResponse({'status': 'success'})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-            
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
-
-# --- Classification Ruleset API ---
-
-
-
 
 # --- Classification Ruleset API ---
 
