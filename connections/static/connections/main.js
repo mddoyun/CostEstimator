@@ -93,6 +93,17 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("export-tags-btn")
         .addEventListener("click", exportTags);
+    document
+        .getElementById("import-tags-btn")
+        .addEventListener("click", () =>
+            document.getElementById("tag-file-input").click()
+        );
+    document
+        .getElementById("tag-file-input")
+        .addEventListener("change", importTags);
+    document
+        .getElementById("export-tags-btn")
+        .addEventListener("click", exportTags);
 
     // --- 테이블 및 데이터 뷰 관련 버튼 ---
     document
@@ -304,8 +315,12 @@ document.addEventListener("DOMContentLoaded", () => {
         .getElementById("boq-reset-columns-btn")
         .addEventListener("click", resetBoqColumnsAndRegenerate);
 
-    document.getElementById('boq-select-in-client-btn').addEventListener('click', handleBoqSelectInClient);
-    document.getElementById('boq-get-from-client-btn').addEventListener('click', handleBoqGetFromClient);
+    document
+        .getElementById("boq-select-in-client-btn")
+        .addEventListener("click", handleBoqSelectInClient);
+    document
+        .getElementById("boq-get-from-client-btn")
+        .addEventListener("click", handleBoqGetFromClient);
     document
         .getElementById("boq-clear-selection-filter-btn")
         .addEventListener("click", handleBoqClearFilter);
@@ -422,46 +437,48 @@ function createNewProject() {
 function handleMainNavClick(e) {
     const clickedButton = e.currentTarget;
     if (clickedButton.classList.contains("active")) {
-        return; 
+        return;
     }
-    document.querySelector('.nav-button.active').classList.remove('active');
-    clickedButton.classList.add('active');
+    document.querySelector(".nav-button.active").classList.remove("active");
+    clickedButton.classList.add("active");
     activeTab = clickedButton.dataset.tab;
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.getElementById(activeTab).classList.add('active');
+    document
+        .querySelectorAll(".tab-content")
+        .forEach((c) => c.classList.remove("active"));
+    document.getElementById(activeTab).classList.add("active");
 
-    if (activeTab === 'ruleset-management') {
+    if (activeTab === "ruleset-management") {
         loadClassificationRules();
         loadPropertyMappingRules();
         loadCostCodeRules();
         loadMemberMarkAssignmentRules();
         loadCostCodeAssignmentRules();
     }
-        
-    if (activeTab === 'quantity-members') {
+
+    if (activeTab === "quantity-members") {
         loadQuantityMembers();
         loadCostCodes();
         loadMemberMarks();
     }
-    if (activeTab === 'cost-item-management') {
+    if (activeTab === "cost-item-management") {
         loadCostItems();
         loadQuantityMembers();
         loadMemberMarks();
     }
-    if (activeTab === 'cost-code-management') {
+    if (activeTab === "cost-code-management") {
         loadQuantityMembers();
         loadCostCodes();
         loadMemberMarks();
     }
-    if (activeTab === 'member-mark-management') {
+    if (activeTab === "member-mark-management") {
         loadQuantityMembers();
         loadCostCodes();
         loadMemberMarks();
     }
-    if (activeTab === 'boq') {
+    if (activeTab === "boq") {
         loadCostItems();
         loadQuantityMembers();
-        if(allRevitData.length === 0) {
+        if (allRevitData.length === 0) {
             // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
             fetchDataFromClient();
         }
@@ -966,43 +983,47 @@ async function loadClassificationRules() {
 
 async function applyClassificationRules() {
     if (!currentProjectId) {
-        showToast('먼저 프로젝트를 선택하세요.', 'error');
+        showToast("먼저 프로젝트를 선택하세요.", "error");
         return;
     }
 
-    if (!confirm('정의된 모든 분류 할당 룰셋을 전체 객체에 적용하시겠습니까?\n기존에 할당된 분류는 유지되며, 규칙에 맞는 새로운 분류가 추가됩니다.')) {
+    if (
+        !confirm(
+            "정의된 모든 분류 할당 룰셋을 전체 객체에 적용하시겠습니까?\n기존에 할당된 분류는 유지되며, 규칙에 맞는 새로운 분류가 추가됩니다."
+        )
+    ) {
         return;
     }
 
-    showToast('룰셋을 적용하고 있습니다... 잠시만 기다려주세요.', 'info', 5000);
+    showToast("룰셋을 적용하고 있습니다... 잠시만 기다려주세요.", "info", 5000);
 
     try {
-        const response = await fetch(`/connections/api/rules/apply-classification/${currentProjectId}/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrftoken,
-                'Content-Type': 'application/json'
+        const response = await fetch(
+            `/connections/api/rules/apply-classification/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": csrftoken,
+                    "Content-Type": "application/json",
+                },
             }
-        });
+        );
 
         const result = await response.json();
 
         if (!response.ok) {
-            throw new Error(result.message || '룰셋 적용에 실패했습니다.');
+            throw new Error(result.message || "룰셋 적용에 실패했습니다.");
         }
 
-        showToast(result.message, 'success');
-        
+        showToast(result.message, "success");
+
         // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
         fetchDataFromClient();
-
     } catch (error) {
-        console.error('Error applying rules:', error);
-        showToast(error.message, 'error');
+        console.error("Error applying rules:", error);
+        showToast(error.message, "error");
     }
 }
-
-
 
 // ▼▼▼ [추가] 파일의 이 위치에 아래 함수들을 모두 추가해주세요. ▼▼▼
 
@@ -3685,23 +3706,27 @@ function initializeBoqUI() {
  * '집계' 탭에서 '연동 프로그램에서 선택 확인' 버튼 클릭을 처리합니다.
  */
 function handleBoqSelectInClient() {
-    const selectedRow = document.querySelector('.boq-table tr.selected-boq-row');
+    const selectedRow = document.querySelector(
+        ".boq-table tr.selected-boq-row"
+    );
     if (!selectedRow) {
-        showToast('먼저 집계표에서 확인할 행을 선택하세요.', 'error');
+        showToast("먼저 집계표에서 확인할 행을 선택하세요.", "error");
         return;
     }
 
-    const itemIds = JSON.parse(selectedRow.dataset.itemIds || '[]');
+    const itemIds = JSON.parse(selectedRow.dataset.itemIds || "[]");
     if (itemIds.length === 0) {
-        showToast('선택된 행에 연관된 산출항목이 없습니다.', 'info');
+        showToast("선택된 행에 연관된 산출항목이 없습니다.", "info");
         return;
     }
 
     const rawElementIds = new Set();
-    itemIds.forEach(itemId => {
-        const costItem = loadedCostItems.find(ci => ci.id === itemId);
+    itemIds.forEach((itemId) => {
+        const costItem = loadedCostItems.find((ci) => ci.id === itemId);
         if (costItem && costItem.quantity_member_id) {
-            const member = loadedQuantityMembers.find(qm => qm.id === costItem.quantity_member_id);
+            const member = loadedQuantityMembers.find(
+                (qm) => qm.id === costItem.quantity_member_id
+            );
             if (member && member.raw_element_id) {
                 rawElementIds.add(member.raw_element_id);
             }
@@ -3709,13 +3734,16 @@ function handleBoqSelectInClient() {
     });
 
     if (rawElementIds.size === 0) {
-        showToast('선택된 항목들은 BIM 객체와 직접 연관되어 있지 않습니다.', 'info');
+        showToast(
+            "선택된 항목들은 BIM 객체와 직접 연관되어 있지 않습니다.",
+            "info"
+        );
         return;
     }
 
     const uniqueIdsToSend = [];
-    rawElementIds.forEach(rawId => {
-        const rawElement = allRevitData.find(re => re.id === rawId);
+    rawElementIds.forEach((rawId) => {
+        const rawElement = allRevitData.find((re) => re.id === rawId);
         if (rawElement) {
             uniqueIdsToSend.push(rawElement.element_unique_id);
         }
@@ -3723,19 +3751,30 @@ function handleBoqSelectInClient() {
 
     if (uniqueIdsToSend.length > 0) {
         // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
-        const targetGroup = currentMode === 'revit' ? 'revit_broadcast_group' : 'blender_broadcast_group';
-        frontendSocket.send(JSON.stringify({
-            'type': 'command_to_client',
-            'payload': { 
-                'command': 'select_elements', 
-                'unique_ids': uniqueIdsToSend,
-                'target_group': targetGroup
-            }
-        }));
-        const clientName = currentMode === 'revit' ? 'Revit' : 'Blender';
-        showToast(`${uniqueIdsToSend.length}개 객체의 선택 명령을 ${clientName}(으)로 보냈습니다.`, 'success');
+        const targetGroup =
+            currentMode === "revit"
+                ? "revit_broadcast_group"
+                : "blender_broadcast_group";
+        frontendSocket.send(
+            JSON.stringify({
+                type: "command_to_client",
+                payload: {
+                    command: "select_elements",
+                    unique_ids: uniqueIdsToSend,
+                    target_group: targetGroup,
+                },
+            })
+        );
+        const clientName = currentMode === "revit" ? "Revit" : "Blender";
+        showToast(
+            `${uniqueIdsToSend.length}개 객체의 선택 명령을 ${clientName}(으)로 보냈습니다.`,
+            "success"
+        );
     } else {
-        showToast('연동 프로그램으로 보낼 유효한 객체를 찾지 못했습니다.', 'error');
+        showToast(
+            "연동 프로그램으로 보낼 유효한 객체를 찾지 못했습니다.",
+            "error"
+        );
     }
 }
 
@@ -3744,16 +3783,21 @@ function handleBoqSelectInClient() {
  */
 function handleBoqGetFromClient() {
     // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
-    const targetGroup = currentMode === 'revit' ? 'revit_broadcast_group' : 'blender_broadcast_group';
-    frontendSocket.send(JSON.stringify({
-        'type': 'command_to_client',
-        'payload': {
-            'command': 'get_selection',
-            'target_group': targetGroup
-        }
-    }));
-    const clientName = currentMode === 'revit' ? 'Revit' : 'Blender';
-    showToast(`${clientName}에 선택 정보 가져오기를 요청했습니다.`, 'info');
+    const targetGroup =
+        currentMode === "revit"
+            ? "revit_broadcast_group"
+            : "blender_broadcast_group";
+    frontendSocket.send(
+        JSON.stringify({
+            type: "command_to_client",
+            payload: {
+                command: "get_selection",
+                target_group: targetGroup,
+            },
+        })
+    );
+    const clientName = currentMode === "revit" ? "Revit" : "Blender";
+    showToast(`${clientName}에 선택 정보 가져오기를 요청했습니다.`, "info");
 }
 
 /**
@@ -3785,4 +3829,46 @@ function resetBoqColumnsAndRegenerate() {
 
     // 집계표를 다시 생성하여 변경사항을 적용합니다.
     generateBoqReport();
+}
+
+// connections/static/connections/main.js
+
+// ... 기존 코드 맨 아래 ...
+
+function importTags(event) {
+    if (!currentProjectId) {
+        showToast("먼저 프로젝트를 선택하세요.", "error");
+        return;
+    }
+    const file = event.target.files[0];
+    if (file) {
+        const formData = new FormData();
+        formData.append("tag_file", file);
+
+        fetch(`/connections/import-tags/${currentProjectId}/`, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrftoken },
+            body: formData,
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                showToast(
+                    data.status === "success"
+                        ? "태그 파일을 성공적으로 가져왔습니다."
+                        : "파일 업로드에 실패했습니다.",
+                    data.status === "success" ? "success" : "error"
+                );
+                // 성공/실패 여부와 관계없이 파일 입력 초기화
+                event.target.value = "";
+            });
+    }
+}
+
+function exportTags() {
+    if (!currentProjectId) {
+        showToast("먼저 프로젝트를 선택하세요.", "error");
+        return;
+    }
+    // 간단하게 URL을 변경하여 파일 다운로드를 트리거합니다.
+    window.location.href = `/connections/export-tags/${currentProjectId}/`;
 }
