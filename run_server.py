@@ -36,6 +36,7 @@ def main():
             if source_db_path.exists():
                 shutil.copy2(source_db_path, db_path)
                 print("✅ 초기 데이터베이스를 데이터 폴더로 복사했습니다.")
+                
             else:
                 print("⚠️ 경고: 원본 데이터베이스 파일(db.sqlite3)을 찾을 수 없습니다.")
         except Exception as e:
