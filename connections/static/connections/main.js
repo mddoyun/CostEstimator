@@ -35,6 +35,7 @@ let loadedMemberMarkAssignmentRules = [];
 let loadedCostCodeAssignmentRules = [];
 let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
 let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
+let spaceMappingState = { active: false, spaceId: null, spaceName: "" }; // 공간 맵핑 모드 상태
 
 // main.js
 
@@ -297,6 +298,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 handleSpaceActions("rename", { id: spaceId, name: spaceName });
             } else if (target.classList.contains("delete-space-btn")) {
                 handleSpaceActions("delete", { id: spaceId, name: spaceName });
+                // ▼▼▼ [추가] 이 else if 블록을 추가해주세요. ▼▼▼
+            } else if (target.classList.contains("assign-elements-btn")) {
+                handleSpaceActions("assign_elements", {
+                    id: spaceId,
+                    name: spaceName,
+                });
+                // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
             }
         });
     }
@@ -3933,6 +3941,12 @@ async function handleSpaceActions(action, data = {}) {
 
             await deleteSpaceClassification(data.id);
             break;
+
+        // ▼▼▼ [추가] 이 case를 추가해주세요. ▼▼▼
+        case "assign_elements":
+            controlSpaceMappingMode(true, { id: data.id, name: data.name });
+            break;
+        // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
     }
 }
 
@@ -3984,6 +3998,110 @@ async function deleteSpaceClassification(spaceId) {
 
         showToast(result.message, "success");
         await loadSpaceClassifications(); //
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+/**
+ * 공간 객체 맵핑 모드 UI를 제어합니다.
+ * @param {boolean} activate - 모드를 활성화할지 여부
+ * @param {object} spaceInfo - {id, name} 정보를 담은 객체
+ */
+function controlSpaceMappingMode(activate, spaceInfo = {}) {
+    const mainContent = document.querySelector(".main-content");
+
+    if (activate) {
+        spaceMappingState = {
+            active: true,
+            spaceId: spaceInfo.id,
+            spaceName: spaceInfo.name,
+        };
+        // 다른 탭으로 이동 방지
+        document.querySelectorAll(".nav-button").forEach((b) => {
+            if (!b.matches('[data-tab="space-management"]')) b.disabled = true;
+        });
+
+        // 맵핑 모드 UI 생성
+        const mappingBar = document.createElement("div");
+        mappingBar.id = "space-mapping-bar";
+        mappingBar.innerHTML = `
+            <span>'${spaceInfo.name}' 공간에 BIM 객체를 할당하고 있습니다... (BIM 원본데이터 탭에서 객체 선택)</span>
+            <div>
+                <button id="confirm-space-mapping-btn">✅ 선택 완료</button>
+                <button id="cancel-space-mapping-btn">❌ 취소</button>
+            </div>
+        `;
+        mainContent.prepend(mappingBar);
+
+        // 이벤트 리스너 연결
+        document.getElementById("confirm-space-mapping-btn").onclick =
+            applySpaceElementMapping;
+        document.getElementById("cancel-space-mapping-btn").onclick = () =>
+            controlSpaceMappingMode(false);
+
+        // 'BIM 원본데이터' 탭으로 강제 이동
+        document
+            .querySelector('.nav-button[data-tab="data-management"]')
+            .click();
+        showToast(
+            `'${spaceInfo.name}'에 할당할 객체를 BIM 원본데이터 탭에서 선택 후 '선택 완료'를 누르세요.`,
+            "info",
+            5000
+        );
+    } else {
+        spaceMappingState = { active: false, spaceId: null, spaceName: "" };
+        document
+            .querySelectorAll(".nav-button")
+            .forEach((b) => (b.disabled = false));
+        const mappingBar = document.getElementById("space-mapping-bar");
+        if (mappingBar) mappingBar.remove();
+        // 원래 탭으로 복귀
+        document
+            .querySelector('.nav-button[data-tab="space-management"]')
+            .click();
+    }
+}
+
+/**
+ * 선택된 BIM 객체를 현재 맵핑 모드인 공간에 할당하는 API를 호출합니다.
+ */
+async function applySpaceElementMapping() {
+    if (!spaceMappingState.active || !spaceMappingState.spaceId) return;
+
+    if (selectedElementIds.size === 0) {
+        if (
+            !confirm(
+                "선택된 객체가 없습니다. 이 공간의 모든 객체 맵핑을 해제하시겠습니까?"
+            )
+        ) {
+            return;
+        }
+    }
+
+    try {
+        const response = await fetch(
+            `/connections/api/space-classifications/manage-elements/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify({
+                    space_id: spaceMappingState.spaceId,
+                    element_ids: Array.from(selectedElementIds),
+                    action: "assign",
+                }),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+
+        showToast(result.message, "success");
+        await loadSpaceClassifications(); // 성공 후 트리 새로고침
+        controlSpaceMappingMode(false); // 맵핑 모드 종료
+        selectedElementIds.clear(); // 선택 초기화
+        renderDataTable(); // BIM 데이터 테이블 선택 해제 표시
     } catch (error) {
         showToast(error.message, "error");
     }

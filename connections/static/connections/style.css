@@ -1857,3 +1857,44 @@ th input {
     background: none;
     border: 1px solid #ccc;
 }
+/* 공간분류 맵핑 관련 스타일 */
+.element-count-badge {
+    display: inline-block;
+    background-color: #6c757d;
+    color: white;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    margin-left: 8px;
+    font-weight: normal;
+}
+
+#space-mapping-bar {
+    position: fixed;
+    top: var(--header-height); /* 헤더 바로 아래 */
+    left: 0;
+    width: 100%;
+    background-color: #ffc107; /* 경고/알림을 위한 노란색 배경 */
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 20px;
+    z-index: 1001; /* 다른 UI 요소들 위에 표시 */
+    font-weight: bold;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#space-mapping-bar span {
+    flex-grow: 1;
+    text-align: center;
+}
+
+#space-mapping-bar div {
+    display: flex;
+    gap: 10px;
+}
+
+#space-mapping-bar button {
+    padding: 6px 12px;
+}

@@ -1501,18 +1501,23 @@ def generate_boq_report_api(request, project_id):
 
 
 
-# ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
+# 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def space_classifications_api(request, project_id, sc_id=None):
     # --- GET: 공간분류 목록 조회 ---
     if request.method == 'GET':
-        spaces = SpaceClassification.objects.filter(project_id=project_id)
+        # ▼▼▼ [수정] .annotate()를 사용하여 연결된 객체 수를 계산합니다. ▼▼▼
+        spaces = SpaceClassification.objects.filter(project_id=project_id).annotate(
+            mapped_elements_count=Count('mapped_elements')
+        )
         data = [{
             'id': str(space.id),
             'name': space.name,
             'description': space.description,
             'parent_id': str(space.parent_id) if space.parent_id else None,
+            'mapped_elements_count': space.mapped_elements_count, # 계산된 값을 추가
         } for space in spaces]
+        # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
         return JsonResponse(data, safe=False)
 
     # --- POST: 새 공간분류 생성 ---
@@ -1531,7 +1536,7 @@ def space_classifications_api(request, project_id, sc_id=None):
                 description=data.get('description', ''),
                 parent=parent
             )
-            return JsonResponse({'status': 'success', 'message': '새 공간분류가 생성되었습니다.', 'new_space': {'id': str(new_space.id), 'name': new_space.name, 'parent_id': str(new_space.parent_id) if new_space.parent_id else None}})
+            return JsonResponse({'status': 'success', 'message': '새 공간분류가 생성되었습니다.', 'new_space': {'id': str(new_space.id), 'name': new_space.name, 'parent_id': str(new_space.parent_id) if new_space.parent_id else None, 'mapped_elements_count': 0}})
         except Project.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
         except SpaceClassification.DoesNotExist:
@@ -1541,6 +1546,7 @@ def space_classifications_api(request, project_id, sc_id=None):
 
     # --- PUT: 공간분류 수정 ---
     elif request.method == 'PUT':
+        # (이 부분은 수정사항 없습니다)
         if not sc_id:
             return JsonResponse({'status': 'error', 'message': '공간분류 ID가 필요합니다.'}, status=400)
         try:
@@ -1557,6 +1563,7 @@ def space_classifications_api(request, project_id, sc_id=None):
 
     # --- DELETE: 공간분류 삭제 ---
     elif request.method == 'DELETE':
+        # (이 부분은 수정사항 없습니다)
         if not sc_id:
             return JsonResponse({'status': 'error', 'message': '공간분류 ID가 필요합니다.'}, status=400)
         try:
@@ -1567,3 +1574,36 @@ def space_classifications_api(request, project_id, sc_id=None):
             return JsonResponse({'status': 'error', 'message': '공간분류를 찾을 수 없습니다.'}, status=404)
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': f'삭제 중 오류 발생: {str(e)}'}, status=500)
+        
+
+
+@require_http_methods(["POST"])
+def manage_space_element_mapping_api(request, project_id):
+    """특정 공간분류에 BIM 원본 객체(RawElement)들을 맵핑/해제하는 API"""
+    try:
+        data = json.loads(request.body)
+        space_id = data.get('space_id')
+        element_ids = data.get('element_ids', [])
+        action = data.get('action')  # 'assign' (할당), 'clear' (해제)
+
+        if not all([space_id, action]):
+            return JsonResponse({'status': 'error', 'message': '필수 파라미터가 누락되었습니다.'}, status=400)
+
+        space = SpaceClassification.objects.get(id=space_id, project_id=project_id)
+        elements = RawElement.objects.filter(project_id=project_id, id__in=element_ids)
+
+        if action == 'assign':
+            space.mapped_elements.set(elements) # set()은 기존 연결을 모두 지우고 새로 설정합니다.
+            message = f"'{space.name}' 공간에 {elements.count()}개의 BIM 객체를 맵핑했습니다."
+        elif action == 'clear':
+            space.mapped_elements.clear()
+            message = f"'{space.name}' 공간에 맵핑된 모든 BIM 객체를 해제했습니다."
+        else:
+            return JsonResponse({'status': 'error', 'message': '잘못된 action입니다.'}, status=400)
+
+        return JsonResponse({'status': 'success', 'message': message})
+
+    except SpaceClassification.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': '존재하지 않는 공간분류입니다.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)

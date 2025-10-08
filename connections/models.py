@@ -76,6 +76,7 @@ class SpaceClassification(models.Model):
     description = models.TextField(blank=True, null=True)
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
+    mapped_elements = models.ManyToManyField('RawElement', related_name='space_classifications', blank=True)
 
     class Meta:
         ordering = ['name']
