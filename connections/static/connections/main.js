@@ -12,16 +12,17 @@ let activeView = "raw-data-view";
 let collapsedGroups = {};
 let currentGroupByFields = [];
 let lastSelectedRowIndex = -1;
-let loadedQuantityMembers = []; // ▼▼▼ [추가] 이 줄을 추가합니다. ▼▼▼
-let loadedPropertyMappingRules = []; // ▼▼▼ [추가] 이 줄을 추가합니다. ▼▼▼
+let loadedQuantityMembers = []; //
+let loadedPropertyMappingRules = []; //
 let qmColumnFilters = {};
 let selectedQmIds = new Set();
 let qmCollapsedGroups = {};
 let currentQmGroupByFields = [];
 let lastSelectedQmRowIndex = -1;
-let loadedCostCodes = []; // ▼▼▼ [추가] 이 줄을 추가합니다. ▼▼▼
+let loadedSpaceClassifications = []; //
+let loadedCostCodes = []; //
 let loadedMemberMarks = [];
-let activeQmView = "quantity-member-view"; // ▼▼▼ [추가] 이 줄을 추가합니다. ▼▼▼
+let activeQmView = "quantity-member-view"; //
 
 let loadedCostItems = [];
 let ciColumnFilters = {};
@@ -270,6 +271,35 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
+    const addRootSpaceBtn = document.getElementById("add-root-space-btn");
+    if (addRootSpaceBtn) {
+        addRootSpaceBtn.addEventListener("click", () =>
+            handleSpaceActions("add_root")
+        );
+    }
+
+    const spaceTreeContainer = document.getElementById("space-tree-container");
+    if (spaceTreeContainer) {
+        spaceTreeContainer.addEventListener("click", (e) => {
+            const target = e.target;
+            const li = target.closest("li");
+            if (!li) return;
+
+            const spaceId = li.dataset.id;
+            const spaceName = li.dataset.name;
+
+            if (target.classList.contains("add-child-space-btn")) {
+                handleSpaceActions("add_child", {
+                    parentId: spaceId,
+                    parentName: spaceName,
+                });
+            } else if (target.classList.contains("rename-space-btn")) {
+                handleSpaceActions("rename", { id: spaceId, name: spaceName });
+            } else if (target.classList.contains("delete-space-btn")) {
+                handleSpaceActions("delete", { id: spaceId, name: spaceName });
+            }
+        });
+    }
     const costCodeAssignmentRuleset = document.getElementById(
         "cost-code-assignment-ruleset-table-container"
     );
@@ -280,13 +310,10 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    // --- 초기 상태 설정 ---
     currentProjectId = projectSelector ? projectSelector.value : null;
     initializeBoqUI();
 });
-// main.js
 
-// ▼▼▼ [교체] 기존 handleProjectChange 함수를 아래 코드로 교체하세요. ▼▼▼
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
     allRevitData = [];
@@ -420,11 +447,13 @@ function handleMainNavClick(e) {
         loadCostCodes();
         loadMemberMarks();
     }
+    if (activeTab === "space-management") {
+        loadSpaceClassifications();
+    }
     if (activeTab === "boq") {
         loadCostItems();
         loadQuantityMembers();
         if (allRevitData.length === 0) {
-            // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
             fetchDataFromClient();
         }
         loadBoqGroupingFields();
@@ -3752,8 +3781,6 @@ function handleBoqClearFilter() {
     showToast("Revit 선택 필터를 해제하고 전체 집계표를 표시합니다.", "info");
 }
 
-/* ▼▼▼ [추가] 이 함수 블록을 파일 맨 아래에 추가해주세요. ▼▼▼ */
-
 /**
  * '집계' 탭의 열 순서와 이름을 초기화하고 집계표를 다시 생성합니다.
  */
@@ -3771,10 +3798,6 @@ function resetBoqColumnsAndRegenerate() {
     // 집계표를 다시 생성하여 변경사항을 적용합니다.
     generateBoqReport();
 }
-
-// connections/static/connections/main.js
-
-// ... 기존 코드 맨 아래 ...
 
 function importTags(event) {
     if (!currentProjectId) {
@@ -3835,4 +3858,133 @@ function handleLeftPanelTabClick(event) {
     // 클릭된 버튼과 그에 맞는 콘텐츠를 활성화
     clickedButton.classList.add("active");
     tabContainer.querySelector(`#${targetTabId}`).classList.add("active");
+}
+
+// =====================================================================
+// 공간분류(SpaceClassification) 관리 관련 함수들
+// =====================================================================
+
+/**
+ * 프로젝트의 모든 공간분류를 서버에서 불러와 화면을 갱신합니다.
+ */
+async function loadSpaceClassifications() {
+    if (!currentProjectId) {
+        renderSpaceClassificationTree([]);
+        return;
+    }
+    try {
+        const response = await fetch(
+            `/connections/api/space-classifications/${currentProjectId}/`
+        );
+        if (!response.ok)
+            throw new Error("공간분류 목록을 불러오는데 실패했습니다.");
+        loadedSpaceClassifications = await response.json();
+        renderSpaceClassificationTree(loadedSpaceClassifications);
+    } catch (error) {
+        console.error("Error loading space classifications:", error);
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * 공간분류 관련 CUD(생성, 수정, 삭제) 작업을 처리합니다.
+ * @param {string} action - 수행할 작업 ('add_root', 'add_child', 'rename', 'delete')
+ * @param {object} data - 작업에 필요한 데이터 (ID, 이름 등)
+ */
+async function handleSpaceActions(action, data = {}) {
+    if (!currentProjectId) {
+        showToast("먼저 프로젝트를 선택하세요.", "error");
+        return;
+    }
+
+    let name, confirmed;
+
+    switch (action) {
+        case "add_root":
+        case "add_child":
+            const parentName =
+                action === "add_child" ? data.parentName : "최상위";
+            name = prompt(
+                `'${parentName}'의 하위에 추가할 공간의 이름을 입력하세요:`
+            );
+            if (!name || !name.trim()) return;
+
+            await saveSpaceClassification({
+                name: name.trim(),
+                parent_id: data.parentId || null,
+            });
+            break;
+
+        case "rename":
+            name = prompt("새 이름을 입력하세요:", data.name);
+            if (!name || !name.trim() || name.trim() === data.name) return;
+
+            await saveSpaceClassification(
+                { id: data.id, name: name.trim() },
+                true
+            );
+            break;
+
+        case "delete":
+            confirmed = confirm(
+                `'${data.name}'을(를) 삭제하시겠습니까?\n이 공간에 속한 모든 하위 공간들도 함께 삭제됩니다.`
+            );
+            if (!confirmed) return;
+
+            await deleteSpaceClassification(data.id);
+            break;
+    }
+}
+
+/**
+ * 공간분류를 서버에 저장(생성/수정)합니다.
+ * @param {object} spaceData - 저장할 데이터
+ * @param {boolean} isUpdate - 수정 작업인지 여부
+ */
+async function saveSpaceClassification(spaceData, isUpdate = false) {
+    const url = isUpdate
+        ? `/connections/api/space-classifications/${currentProjectId}/${spaceData.id}/`
+        : `/connections/api/space-classifications/${currentProjectId}/`;
+    const method = isUpdate ? "PUT" : "POST";
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrftoken,
+            },
+            body: JSON.stringify(spaceData),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+
+        showToast(result.message, "success");
+        await loadSpaceClassifications(); // 성공 후 목록 새로고침
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * 공간분류를 서버에서 삭제합니다.
+ * @param {string} spaceId - 삭제할 공간분류 ID
+ */
+async function deleteSpaceClassification(spaceId) {
+    try {
+        const response = await fetch(
+            `/connections/api/space-classifications/${currentProjectId}/${spaceId}/`,
+            {
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrftoken },
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+
+        showToast(result.message, "success");
+        await loadSpaceClassifications(); //
+    } catch (error) {
+        showToast(error.message, "error");
+    }
 }

@@ -2176,3 +2176,66 @@ function renderAssignedTagsTable() {
         .join("");
 }
 // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
+// ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
+/**
+ * 서버에서 받은 공간분류 데이터를 위계적인 HTML 트리로 렌더링합니다.
+ * @param {Array} spaces - 프로젝트의 모든 공간분류 데이터 배열
+ */
+function renderSpaceClassificationTree(spaces) {
+    const container = document.getElementById("space-tree-container");
+    if (!currentProjectId) {
+        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        return;
+    }
+    if (spaces.length === 0) {
+        container.innerHTML =
+            "<p>정의된 공간분류가 없습니다. '최상위 공간 추가' 버튼으로 시작하세요.</p>";
+        return;
+    }
+
+    // 1. 데이터를 트리 구조로 변환합니다.
+    const spaceMap = {};
+    const roots = [];
+    spaces.forEach((space) => {
+        spaceMap[space.id] = { ...space, children: [] };
+    });
+
+    Object.values(spaceMap).forEach((space) => {
+        if (space.parent_id) {
+            if (spaceMap[space.parent_id]) {
+                spaceMap[space.parent_id].children.push(space);
+            }
+        } else {
+            roots.push(space);
+        }
+    });
+
+    // 2. 재귀 함수를 사용하여 HTML을 생성합니다.
+    function buildTreeHtml(nodes) {
+        if (nodes.length === 0) return "";
+        let html = "<ul>";
+        nodes.forEach((node) => {
+            html += `
+                <li data-id="${node.id}" data-name="${node.name}">
+                    <div class="space-tree-item">
+                        <span class="item-name"><strong>${
+                            node.name
+                        }</strong></span>
+                        <div class="item-actions">
+                            <button class="add-child-space-btn" title="하위 공간 추가">+</button>
+                            <button class="rename-space-btn" title="이름 수정">수정</button>
+                            <button class="delete-space-btn" title="삭제">삭제</button>
+                        </div>
+                    </div>
+                    ${buildTreeHtml(node.children)}
+                </li>
+            `;
+        });
+        html += "</ul>";
+        return html;
+    }
+
+    container.innerHTML = buildTreeHtml(roots);
+}
+// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲

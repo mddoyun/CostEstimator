@@ -26,6 +26,7 @@ from .models import (
     CostCodeRule, 
     MemberMarkAssignmentRule, 
     CostCodeAssignmentRule,
+    SpaceClassification,
 )
 # --- Project & Revit Data Views ---
 
@@ -1497,3 +1498,72 @@ def generate_boq_report_api(request, project_id):
     }
 
     return JsonResponse({'report': report_data, 'summary': total_summary}, safe=False)
+
+
+
+# ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+def space_classifications_api(request, project_id, sc_id=None):
+    # --- GET: 공간분류 목록 조회 ---
+    if request.method == 'GET':
+        spaces = SpaceClassification.objects.filter(project_id=project_id)
+        data = [{
+            'id': str(space.id),
+            'name': space.name,
+            'description': space.description,
+            'parent_id': str(space.parent_id) if space.parent_id else None,
+        } for space in spaces]
+        return JsonResponse(data, safe=False)
+
+    # --- POST: 새 공간분류 생성 ---
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            project = Project.objects.get(id=project_id)
+            parent = SpaceClassification.objects.get(id=data.get('parent_id')) if data.get('parent_id') else None
+            
+            if not data.get('name'):
+                return JsonResponse({'status': 'error', 'message': '이름은 필수 항목입니다.'}, status=400)
+
+            new_space = SpaceClassification.objects.create(
+                project=project,
+                name=data.get('name'),
+                description=data.get('description', ''),
+                parent=parent
+            )
+            return JsonResponse({'status': 'success', 'message': '새 공간분류가 생성되었습니다.', 'new_space': {'id': str(new_space.id), 'name': new_space.name, 'parent_id': str(new_space.parent_id) if new_space.parent_id else None}})
+        except Project.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+        except SpaceClassification.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': '부모 공간분류를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'저장 중 오류 발생: {str(e)}'}, status=400)
+
+    # --- PUT: 공간분류 수정 ---
+    elif request.method == 'PUT':
+        if not sc_id:
+            return JsonResponse({'status': 'error', 'message': '공간분류 ID가 필요합니다.'}, status=400)
+        try:
+            data = json.loads(request.body)
+            space = SpaceClassification.objects.get(id=sc_id, project_id=project_id)
+            space.name = data.get('name', space.name)
+            space.description = data.get('description', space.description)
+            space.save()
+            return JsonResponse({'status': 'success', 'message': '공간분류가 수정되었습니다.'})
+        except SpaceClassification.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': '해당 공간분류를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    # --- DELETE: 공간분류 삭제 ---
+    elif request.method == 'DELETE':
+        if not sc_id:
+            return JsonResponse({'status': 'error', 'message': '공간분류 ID가 필요합니다.'}, status=400)
+        try:
+            space = SpaceClassification.objects.get(id=sc_id, project_id=project_id)
+            space.delete() # on_delete=CASCADE 설정으로 자식들도 함께 삭제됨
+            return JsonResponse({'status': 'success', 'message': '공간분류가 삭제되었습니다.'})
+        except SpaceClassification.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': '공간분류를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'삭제 중 오류 발생: {str(e)}'}, status=500)

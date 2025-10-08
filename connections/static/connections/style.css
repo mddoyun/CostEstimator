@@ -1813,3 +1813,47 @@ th input {
     top: 0;
 }
 /* ▲▲▲ [추가] 여기까지 입니다. ▲▲▲ */
+
+/* ▼▼▼ [추가] 공간분류 트리 스타일 ▼▼▼ */
+.space-tree-container ul {
+    list-style-type: none;
+    padding-left: 20px;
+    margin: 0;
+}
+
+.space-tree-container li {
+    padding: 5px 0;
+}
+
+.space-tree-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.space-tree-item:hover {
+    background-color: #f0f0f0;
+}
+
+.space-tree-item .item-name {
+    flex-grow: 1;
+    cursor: default;
+}
+
+.space-tree-item .item-actions {
+    display: none; /* 평소에는 숨김 */
+    gap: 5px;
+}
+
+.space-tree-item:hover .item-actions {
+    display: flex; /* 마우스를 올리면 표시 */
+}
+
+.space-tree-item .item-actions button {
+    padding: 2px 6px;
+    font-size: 12px;
+    background: none;
+    border: 1px solid #ccc;
+}

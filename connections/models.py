@@ -214,3 +214,20 @@ class CostCodeAssignmentRule(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class SpaceClassification(models.Model):
+    """'부지 > 건물 > 층 > 공간' 등 위계를 가지는 공간 분류"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='space_classifications')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = ('project', 'parent', 'name') # 같은 부모 아래에 동일한 이름의 자식은 없도록 설정
+
+    def __str__(self):
+        return self.name
