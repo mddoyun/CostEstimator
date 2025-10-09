@@ -2,16 +2,8 @@
 let allRevitData = [];
 let currentProjectId = null;
 let currentMode = "revit";
-let columnFilters = {};
-let selectedElementIds = new Set();
 let csrftoken;
-let isFilterToSelectionActive = false;
-let revitFilteredIds = new Set();
 let activeTab = "data-management";
-let activeView = "raw-data-view";
-let collapsedGroups = {};
-let currentGroupByFields = [];
-let lastSelectedRowIndex = -1;
 let loadedQuantityMembers = []; //
 let loadedPropertyMappingRules = []; //
 let qmColumnFilters = {};
@@ -36,6 +28,32 @@ let loadedCostCodeAssignmentRules = [];
 let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
 let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
 let spaceMappingState = { active: false, spaceId: null, spaceName: "" }; // 공간 맵핑 모드 상태
+let spaceMgmtColumnFilters = {};
+let spaceMgmtSelectedIds = new Set();
+let spaceMgmtCollapsedGroups = {};
+let lastSpaceMgmtSelectedRowIndex = -1;
+const viewerStates = {
+    "data-management": {
+        selectedElementIds: new Set(),
+        columnFilters: {},
+        isFilterToSelectionActive: false,
+        revitFilteredIds: new Set(),
+        activeView: "raw-data-view",
+        collapsedGroups: {},
+        currentGroupByFields: [],
+        lastSelectedRowIndex: -1,
+    },
+    "space-management": {
+        selectedElementIds: new Set(),
+        columnFilters: {},
+        isFilterToSelectionActive: false,
+        revitFilteredIds: new Set(),
+        activeView: "raw-data-view",
+        collapsedGroups: {},
+        currentGroupByFields: [],
+        lastSelectedRowIndex: -1,
+    },
+};
 
 // main.js
 
@@ -43,12 +61,10 @@ let spaceMappingState = { active: false, spaceId: null, spaceName: "" }; // 공�
 document.addEventListener("DOMContentLoaded", () => {
     csrftoken = document.querySelector("[name=csrfmiddlewaretoken]").value;
     setupWebSocket();
+    const projectSelector = document.getElementById("project-selector");
 
     // --- 이벤트 리스너 설정 (Null-safe) ---
-    const projectSelector = document.getElementById("project-selector");
-    if (projectSelector) {
-        projectSelector.addEventListener("change", handleProjectChange);
-    }
+    projectSelector?.addEventListener("change", handleProjectChange);
 
     document.querySelectorAll(".nav-button").forEach((button) => {
         button.addEventListener("click", handleMainNavClick);
@@ -57,18 +73,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
     // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
 
-    const fetchDataBtn = document.getElementById("fetchDataBtn");
-    if (fetchDataBtn)
-        fetchDataBtn.addEventListener("click", fetchDataFromClient);
-
-    const getFromClientBtn = document.getElementById("get-from-client-btn");
-    if (getFromClientBtn)
-        getFromClientBtn.addEventListener("click", getSelectionFromClient);
-
-    const selectInClientBtn = document.getElementById("select-in-client-btn");
-    if (selectInClientBtn)
-        selectInClientBtn.addEventListener("click", selectInClient);
-
+    document
+        .getElementById("fetchDataBtn")
+        ?.addEventListener("click", fetchDataFromClient);
+    document
+        .getElementById("get-from-client-btn")
+        ?.addEventListener("click", getSelectionFromClient);
+    document
+        .getElementById("select-in-client-btn")
+        ?.addEventListener("click", selectInClient);
     document
         .querySelectorAll('input[name="connector_mode"]')
         .forEach((radio) => {
@@ -107,7 +120,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const renderTableBtn = document.getElementById("render-table-btn");
     if (renderTableBtn)
-        renderTableBtn.addEventListener("click", () => renderDataTable());
+        renderTableBtn.addEventListener("click", () =>
+            renderDataTable(
+                "data-management-data-table-container",
+                "data-management"
+            )
+        );
 
     document
         .querySelectorAll("#data-management .view-tab-button")
@@ -117,11 +135,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const addGroupLevelBtn = document.getElementById("add-group-level-btn");
     if (addGroupLevelBtn)
-        addGroupLevelBtn.addEventListener("click", addGroupingLevel);
+        addGroupLevelBtn.addEventListener("click", () =>
+            addGroupingLevel("data-management")
+        );
 
     const groupingControls = document.getElementById("grouping-controls");
     if (groupingControls)
-        groupingControls.addEventListener("change", () => renderDataTable());
+        groupingControls.addEventListener("change", () =>
+            renderDataTable(
+                "data-management-data-table-container",
+                "data-management"
+            )
+        );
 
     const clearSelectionFilterBtn = document.getElementById(
         "clear-selection-filter-btn"
@@ -141,10 +166,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (clearTagsBtn)
         clearTagsBtn.addEventListener("click", clearTagsFromSelection);
 
-    const tableContainer = document.getElementById("data-table-container");
+    const tableContainer = document.getElementById(
+        "data-management-data-table-container"
+    ); // 이렇게 바꾸고,
     if (tableContainer) {
-        tableContainer.addEventListener("keyup", handleColumnFilter);
-        tableContainer.addEventListener("click", handleTableClick);
+        tableContainer.addEventListener("keyup", (e) =>
+            handleColumnFilter(e, "data-management")
+        );
+
+        // 클릭 이벤트 리스너를 아래와 같이 수정합니다.
+        tableContainer.addEventListener("click", (e) =>
+            handleTableClick(e, "data-management")
+        );
     }
 
     document.querySelectorAll(".ruleset-nav-button").forEach((button) => {
@@ -308,6 +341,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
     const costCodeAssignmentRuleset = document.getElementById(
         "cost-code-assignment-ruleset-table-container"
     );
@@ -320,19 +354,144 @@ document.addEventListener("DOMContentLoaded", () => {
 
     currentProjectId = projectSelector ? projectSelector.value : null;
     initializeBoqUI();
-});
+    const confirmSpaceMapBtn = document.getElementById(
+        "confirm-space-mapping-btn"
+    );
+    if (confirmSpaceMapBtn)
+        confirmSpaceMapBtn.addEventListener("click", applySpaceElementMapping);
 
+    const cancelSpaceMapBtn = document.getElementById(
+        "cancel-space-mapping-btn"
+    );
+    if (cancelSpaceMapBtn)
+        cancelSpaceMapBtn.addEventListener("click", hideSpaceMappingPanel);
+
+    const spaceTableContainer = document.getElementById(
+        "space-data-table-container"
+    );
+    if (spaceTableContainer) {
+        // spaceTableContainer.addEventListener("keyup", (e) => handleColumnFilter(e, 'space-management')); // 필요 시 필터 기능 추가
+        spaceTableContainer.addEventListener("click", (e) =>
+            handleTableClick(e, "space-management")
+        );
+    }
+
+    const spaceRightPanelTabs = document.getElementById(
+        "space-right-panel-tabs"
+    );
+    if (spaceRightPanelTabs) {
+        spaceRightPanelTabs.addEventListener("click", (e) => {
+            const clickedButton = e.target.closest(".left-panel-tab-button");
+            if (!clickedButton || clickedButton.classList.contains("active"))
+                return;
+
+            const tabContainer = clickedButton.closest(
+                ".left-panel-tab-container"
+            );
+            const targetTabId = clickedButton.dataset.tab;
+
+            tabContainer
+                .querySelector(".left-panel-tab-button.active")
+                .classList.remove("active");
+            tabContainer
+                .querySelector(".left-panel-tab-content.active")
+                .classList.remove("active");
+
+            clickedButton.classList.add("active");
+            tabContainer
+                .querySelector(`#${targetTabId}`)
+                .classList.add("active");
+        });
+    }
+    const smPanel = document.getElementById("space-management");
+    if (smPanel) {
+        // 탭 전환 (BIM속성, 필드선택)
+        smPanel
+            .querySelector(".left-panel-tabs")
+            ?.addEventListener("click", (e) => {
+                const button = e.target.closest(".left-panel-tab-button");
+                if (!button || button.classList.contains("active")) return;
+
+                const tabContainer = button.closest(
+                    ".left-panel-tab-container"
+                );
+
+                // 기존 활성 버튼/콘텐츠 비활성화
+                tabContainer
+                    .querySelector(".left-panel-tab-button.active")
+                    .classList.remove("active");
+                tabContainer
+                    .querySelector(".left-panel-tab-content.active")
+                    .classList.remove("active");
+
+                // 새로 클릭된 버튼/콘텐츠 활성화
+                button.classList.add("active");
+                const contentId = button.dataset.tab;
+                tabContainer
+                    .querySelector(`#${contentId}`)
+                    .classList.add("active");
+
+                // BIM속성 탭을 클릭하면, 선택된 항목에 대한 속성 테이블을 다시 그려줍니다.
+                if (contentId === "sm-bim-properties") {
+                    renderBimPropertiesTable("space-management");
+                }
+            });
+
+        // '테이블에 선택 적용' 버튼
+        document
+            .getElementById("sm-render-table-btn")
+            ?.addEventListener("click", () =>
+                renderDataTable(
+                    "space-management-data-table-container",
+                    "space-management"
+                )
+            );
+
+        // '그룹핑 추가' 버튼
+        document
+            .getElementById("add-space-management-group-level-btn")
+            ?.addEventListener("click", () =>
+                addGroupingLevel("space-management")
+            );
+
+        // 그룹핑 Select 변경
+        document
+            .getElementById("space-management-grouping-controls")
+            ?.addEventListener("change", () =>
+                renderDataTable(
+                    "space-management-data-table-container",
+                    "space-management"
+                )
+            );
+
+        // 테이블 내 이벤트 위임 (필터, 행 선택, 그룹 토글)
+        const smTableContainer = document.getElementById(
+            "space-management-data-table-container"
+        );
+        if (smTableContainer) {
+            smTableContainer.addEventListener("keyup", (e) =>
+                handleColumnFilter(e, "space-management")
+            );
+            smTableContainer.addEventListener("click", (e) =>
+                handleTableClick(e, "space-management")
+            );
+        }
+    }
+});
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
     allRevitData = [];
-    selectedElementIds.clear();
-    revitFilteredIds.clear();
-    columnFilters = {};
-    isFilterToSelectionActive = false;
-    collapsedGroups = {};
-    currentGroupByFields = [];
 
-    // Null-safe하게 요소에 접근
+    Object.keys(viewerStates).forEach((context) => {
+        const state = viewerStates[context];
+        state.selectedElementIds.clear();
+        state.revitFilteredIds.clear();
+        state.columnFilters = {};
+        state.isFilterToSelectionActive = false;
+        state.collapsedGroups = {};
+        state.currentGroupByFields = [];
+    });
+
     const groupingControls = document.getElementById("grouping-controls");
     if (groupingControls) groupingControls.innerHTML = "";
 
@@ -341,10 +500,12 @@ function handleProjectChange(e) {
     );
     if (clearSelectionBtn) clearSelectionBtn.style.display = "none";
 
-    renderDataTable();
-
-    // [수정] 이 함수는 더 이상 사용되지 않는 UI를 조작하므로 호출을 삭제합니다.
-    // renderAssignedTagsTable();
+    // ▼▼▼ [수정] renderDataTable 호출 시 올바른 컨테이너 ID를 전달합니다. ▼▼▼
+    // 기존: "data-table-container" -> 수정: "data-management-data-table-container"
+    renderDataTable("data-management-data-table-container", "data-management");
+    renderBimPropertiesTable("data-management");
+    renderAssignedTagsTable("data-management");
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
 
     const tagList = document.getElementById("tag-list");
     if (tagList) tagList.innerHTML = "프로젝트를 선택하세요.";
@@ -372,7 +533,6 @@ function handleProjectChange(e) {
         );
     }
 }
-// ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
 
 function createNewProject() {
     const projectNameInput = document.getElementById("new-project-name");
@@ -457,6 +617,13 @@ function handleMainNavClick(e) {
     }
     if (activeTab === "space-management") {
         loadSpaceClassifications();
+        // ▼▼▼ [수정] 범용 함수를 올바른 인자와 함께 호출하도록 변경 ▼▼▼
+        populateFieldSelection(); // 이제 이 함수는 모든 탭을 알아서 처리합니다.
+        addGroupingLevel("space-management");
+        renderDataTable(
+            "space-management-data-table-container",
+            "space-management"
+        );
     }
     if (activeTab === "boq") {
         loadCostItems();
@@ -467,16 +634,18 @@ function handleMainNavClick(e) {
         loadBoqGroupingFields();
     }
 }
-
 function fetchDataFromClient() {
     document.getElementById("project-selector").disabled = true;
     if (!currentProjectId) {
         showToast("먼저 프로젝트를 선택하세요.", "error");
         return;
     }
-    selectedElementIds.clear();
-    revitFilteredIds.clear();
-    isFilterToSelectionActive = false;
+    // ▼▼▼ [수정] data-management 뷰어의 상태를 초기화합니다. ▼▼▼
+    const state = viewerStates["data-management"];
+    state.selectedElementIds.clear();
+    state.revitFilteredIds.clear();
+    state.isFilterToSelectionActive = false;
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
     document.getElementById("clear-selection-filter-btn").style.display =
         "none";
 
@@ -502,7 +671,7 @@ function fetchDataFromClient() {
             payload: {
                 command: "fetch_all_elements_chunked",
                 project_id: currentProjectId,
-                target_group: targetGroup, // 백엔드가 어떤 그룹으로 보낼지 알려줌
+                target_group: targetGroup,
             },
         })
     );
@@ -516,7 +685,6 @@ function fetchDataFromClient() {
         "info"
     );
 }
-
 function getSelectionFromClient() {
     const targetGroup =
         currentMode === "revit"
@@ -539,7 +707,12 @@ function getSelectionFromClient() {
     );
 }
 function selectInClient() {
-    if (selectedElementIds.size === 0) {
+    // ▼▼▼ [수정] 현재 활성화된 탭에 따라 올바른 선택 ID 집합을 사용합니다. ▼▼▼
+    const state = getCurrentViewerState();
+    const selectedIds = state.selectedElementIds;
+
+    if (selectedIds.size === 0) {
+        // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
         showToast(
             `테이블에서 ${
                 currentMode === "revit" ? "Revit" : "Blender"
@@ -548,9 +721,11 @@ function selectInClient() {
         );
         return;
     }
+    // ▼▼▼ [수정] selectedElementIds를 selectedIds로 변경합니다. ▼▼▼
     const uniqueIdsToSend = allRevitData
-        .filter((item) => selectedElementIds.has(item.id))
+        .filter((item) => selectedIds.has(item.id))
         .map((item) => item.element_unique_id);
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
     const targetGroup =
         currentMode === "revit"
             ? "revit_broadcast_group"
@@ -659,22 +834,38 @@ function exportTags() {
 }
 
 function handleViewTabClick(e) {
-    document
+    const clickedButton = e.currentTarget;
+    const contextPrefix = clickedButton.closest("#data-management")
+        ? "data-management"
+        : "space-management";
+    const state = viewerStates[contextPrefix];
+
+    const viewTabsContainer = clickedButton.closest(".view-tabs");
+    viewTabsContainer
         .querySelector(".view-tab-button.active")
         .classList.remove("active");
-    e.currentTarget.classList.add("active");
-    activeView = e.currentTarget.dataset.view;
-    collapsedGroups = {};
-    columnFilters = {};
-    renderDataTable();
+    clickedButton.classList.add("active");
+
+    // ▼▼▼ [수정] viewerStates의 상태를 업데이트합니다. ▼▼▼
+    state.activeView = clickedButton.dataset.view;
+    state.collapsedGroups = {};
+    state.columnFilters = {};
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
+    const containerId = `${contextPrefix}-data-table-container`;
+    renderDataTable(containerId, contextPrefix);
 }
 
 function clearSelectionFilter() {
-    isFilterToSelectionActive = false;
-    revitFilteredIds.clear();
+    // ▼▼▼ [수정] viewerStates의 상태를 업데이트합니다. ▼▼▼
+    const state = viewerStates["data-management"];
+    state.isFilterToSelectionActive = false;
+    state.revitFilteredIds.clear();
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
     document.getElementById("clear-selection-filter-btn").style.display =
         "none";
-    renderDataTable();
+    renderDataTable("data-management-data-table-container", "data-management");
     showToast("선택 필터를 해제하고 전체 목록을 표시합니다.", "info");
 }
 
@@ -684,6 +875,12 @@ function assignTagsToSelection() {
         showToast("적용할 분류를 선택하세요.", "error");
         return;
     }
+
+    // ▼▼▼ [수정] viewerStates에서 현재 컨텍스트의 선택된 ID를 가져옵니다. ▼▼▼
+    const state = viewerStates["data-management"]; // 이 버튼은 'data-management' 탭에만 존재합니다.
+    const selectedElementIds = state.selectedElementIds;
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
     if (selectedElementIds.size === 0) {
         showToast("분류를 적용할 객체를 테이블에서 선택하세요.", "error");
         return;
@@ -701,6 +898,11 @@ function assignTagsToSelection() {
 }
 
 function clearTagsFromSelection() {
+    // ▼▼▼ [수정] viewerStates에서 현재 컨텍스트의 선택된 ID를 가져옵니다. ▼▼▼
+    const state = viewerStates["data-management"];
+    const selectedElementIds = state.selectedElementIds;
+    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
     if (selectedElementIds.size === 0) {
         showToast("분류를 제거할 객체를 테이블에서 선택하세요.", "error");
         return;
@@ -722,41 +924,46 @@ function clearTagsFromSelection() {
     }
 }
 
-function handleColumnFilter(event) {
+function handleColumnFilter(event, contextPrefix) {
     if (
         event.target.classList.contains("column-filter") &&
         event.key === "Enter"
     ) {
-        columnFilters[event.target.dataset.field] =
+        const state = viewerStates[contextPrefix];
+        if (!state) return;
+
+        state.columnFilters[event.target.dataset.field] =
             event.target.value.toLowerCase();
-        renderDataTable();
+
+        const containerId = `${contextPrefix}-data-table-container`;
+        renderDataTable(containerId, contextPrefix);
     }
 }
+// main.js의 기존 handleTableClick 함수를 아래 코드로 교체
 
-function handleTableClick(event) {
+function handleTableClick(event, contextPrefix) {
     const row = event.target.closest("tr");
     if (!row) return;
+
+    const state = viewerStates[contextPrefix];
+    if (!state) return;
+
+    const containerId = `${contextPrefix}-data-table-container`;
 
     if (row.classList.contains("group-header")) {
         const groupPath = row.dataset.groupPath;
         if (groupPath) {
-            collapsedGroups[groupPath] = !collapsedGroups[groupPath];
-            renderDataTable();
+            state.collapsedGroups[groupPath] =
+                !state.collapsedGroups[groupPath];
+            renderDataTable(containerId, contextPrefix);
         }
-    } else if (row.dataset.id) {
-        handleRowSelection(event, row);
-
-        if (isFilterToSelectionActive) {
-            // ... (이 부분은 수정 없음)
-        } else {
-            renderDataTable();
-        }
-
-        // ▼▼▼ [추가] 이 함수 호출을 다시 추가합니다. ▼▼▼
-        renderAssignedTagsTable();
-        // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
-
-        renderBimPropertiesTable();
+    } else if (row.dataset.dbId) {
+        // ▼▼▼ [수정] data-dbId를 사용하도록 변경 ▼▼▼
+        handleRowSelection(event, row, contextPrefix);
+        renderDataTable(containerId, contextPrefix);
+        // ▼▼▼ [수정] 함수 호출 시 contextPrefix 인자 전달 ▼▼▼
+        renderBimPropertiesTable(contextPrefix);
+        renderAssignedTagsTable(contextPrefix);
     }
 }
 function handleRulesetNavClick(e) {
@@ -3895,8 +4102,8 @@ async function loadSpaceClassifications() {
 }
 
 /**
- * 공간분류 관련 CUD(생성, 수정, 삭제) 작업을 처리합니다.
- * @param {string} action - 수행할 작업 ('add_root', 'add_child', 'rename', 'delete')
+ * 공간분류 관련 CUD(생성, 수정, 삭제) 및 객체 할당 작업을 처리합니다.
+ * @param {string} action - 수행할 작업 ('add_root', 'add_child', 'rename', 'delete', 'assign_elements')
  * @param {object} data - 작업에 필요한 데이터 (ID, 이름 등)
  */
 async function handleSpaceActions(action, data = {}) {
@@ -3905,6 +4112,8 @@ async function handleSpaceActions(action, data = {}) {
         return;
     }
 
+    // ▼▼▼ [핵심 수정] 올바른 선택 ID 상태 객체를 가져옵니다. ▼▼▼
+    const selectedIds = viewerStates["space-management"].selectedElementIds;
     let name, confirmed;
 
     switch (action) {
@@ -3942,11 +4151,29 @@ async function handleSpaceActions(action, data = {}) {
             await deleteSpaceClassification(data.id);
             break;
 
-        // ▼▼▼ [추가] 이 case를 추가해주세요. ▼▼▼
         case "assign_elements":
-            controlSpaceMappingMode(true, { id: data.id, name: data.name });
+            // ▼▼▼ [핵심 수정] 'spaceMgmtSelectedIds' 대신 'selectedIds'를 사용합니다. ▼▼▼
+            if (selectedIds.size === 0) {
+                if (
+                    confirm(
+                        `선택된 BIM 객체가 없습니다. '${data.name}' 공간의 모든 객체 할당을 해제하시겠습니까?`
+                    )
+                ) {
+                    await applySpaceElementMapping(data.id, []);
+                }
+            } else {
+                if (
+                    confirm(
+                        `'${data.name}' 공간에 선택된 ${selectedIds.size}개의 BIM 객체를 할당하시겠습니까?\n기존 할당 정보는 덮어쓰여집니다.`
+                    )
+                ) {
+                    await applySpaceElementMapping(
+                        data.id,
+                        Array.from(selectedIds)
+                    );
+                }
+            }
             break;
-        // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
     }
 }
 
@@ -4002,81 +4229,111 @@ async function deleteSpaceClassification(spaceId) {
         showToast(error.message, "error");
     }
 }
+
 /**
- * 공간 객체 맵핑 모드 UI를 제어합니다.
- * @param {boolean} activate - 모드를 활성화할지 여부
- * @param {object} spaceInfo - {id, name} 정보를 담은 객체
+ * 공간 객체 맵핑을 위한 오른쪽 패널을 보여줍니다.
+ * @param {string} spaceId - 대상 공간의 ID
+ * @param {string} spaceName - 대상 공간의 이름
  */
-function controlSpaceMappingMode(activate, spaceInfo = {}) {
-    const mainContent = document.querySelector(".main-content");
+function showSpaceMappingPanel(spaceId, spaceName) {
+    const panel = document.getElementById("space-mapping-panel");
+    const header = document.getElementById("space-mapping-header");
 
-    if (activate) {
-        spaceMappingState = {
-            active: true,
-            spaceId: spaceInfo.id,
-            spaceName: spaceInfo.name,
-        };
-        // 다른 탭으로 이동 방지
-        document.querySelectorAll(".nav-button").forEach((b) => {
-            if (!b.matches('[data-tab="space-management"]')) b.disabled = true;
-        });
+    // 맵핑 상태 업데이트
+    spaceMappingState = {
+        active: true,
+        spaceId: spaceId,
+        spaceName: spaceName,
+    };
 
-        // 맵핑 모드 UI 생성
-        const mappingBar = document.createElement("div");
-        mappingBar.id = "space-mapping-bar";
-        mappingBar.innerHTML = `
-            <span>'${spaceInfo.name}' 공간에 BIM 객체를 할당하고 있습니다... (BIM 원본데이터 탭에서 객체 선택)</span>
-            <div>
-                <button id="confirm-space-mapping-btn">✅ 선택 완료</button>
-                <button id="cancel-space-mapping-btn">❌ 취소</button>
-            </div>
-        `;
-        mainContent.prepend(mappingBar);
+    // 헤더 텍스트 설정
+    header.textContent = `'${spaceName}' 공간에 객체 할당`;
 
-        // 이벤트 리스너 연결
-        document.getElementById("confirm-space-mapping-btn").onclick =
-            applySpaceElementMapping;
-        document.getElementById("cancel-space-mapping-btn").onclick = () =>
-            controlSpaceMappingMode(false);
-
-        // 'BIM 원본데이터' 탭으로 강제 이동
-        document
-            .querySelector('.nav-button[data-tab="data-management"]')
-            .click();
-        showToast(
-            `'${spaceInfo.name}'에 할당할 객체를 BIM 원본데이터 탭에서 선택 후 '선택 완료'를 누르세요.`,
-            "info",
-            5000
-        );
-    } else {
-        spaceMappingState = { active: false, spaceId: null, spaceName: "" };
-        document
-            .querySelectorAll(".nav-button")
-            .forEach((b) => (b.disabled = false));
-        const mappingBar = document.getElementById("space-mapping-bar");
-        if (mappingBar) mappingBar.remove();
-        // 원래 탭으로 복귀
-        document
-            .querySelector('.nav-button[data-tab="space-management"]')
-            .click();
+    // 이 공간에 이미 맵핑된 객체들을 미리 선택 상태로 표시
+    selectedElementIds.clear();
+    const spaceData = loadedSpaceClassifications.find((s) => s.id === spaceId);
+    if (spaceData) {
+        // 이 부분은 API가 맵핑된 element_id 목록을 반환해야 완벽하게 동작합니다.
+        // 현재는 API가 반환하지 않으므로, 이 기능은 다음 개선사항으로 남겨두고 선택을 초기화합니다.
+        // TODO: space_classifications_api가 맵핑된 element_id 목록도 반환하도록 개선
     }
+
+    // BIM 데이터 테이블 렌더링
+    // 수정된 renderDataTable 함수에 테이블을 그릴 컨테이너의 ID를 전달합니다.
+    renderDataTable("space-mapping-table-container");
+
+    // 패널 보이기
+    panel.style.display = "flex";
+
+    showToast(
+        "오른쪽 패널에서 할당할 객체를 선택하고 '선택 완료'를 누르세요.",
+        "info",
+        4000
+    );
 }
 
 /**
- * 선택된 BIM 객체를 현재 맵핑 모드인 공간에 할당하는 API를 호출합니다.
+ * 공간 객체 맵핑 패널을 숨기고 상태를 초기화합니다.
  */
-async function applySpaceElementMapping() {
-    if (!spaceMappingState.active || !spaceMappingState.spaceId) return;
+function hideSpaceMappingPanel() {
+    const panel = document.getElementById("space-mapping-panel");
+    panel.style.display = "none";
 
-    if (selectedElementIds.size === 0) {
-        if (
-            !confirm(
-                "선택된 객체가 없습니다. 이 공간의 모든 객체 맵핑을 해제하시겠습니까?"
-            )
-        ) {
-            return;
-        }
-    }
+    // 상태 초기화
+    spaceMappingState = { active: false, spaceId: null, spaceName: "" };
+
+    // 선택된 객체 목록 초기화 및 BIM 원본 데이터 테이블 새로고침
+    selectedElementIds.clear();
+    renderDataTable(); // 기본 테이블 컨테이너를 새로고침
+}
+
+// 현재 활성화된 탭의 상태 객체를 가져오는 헬퍼 함수
+function getCurrentViewerState() {
+    // 'space-management' 탭에 있을 때도 BIM 데이터 뷰어의 상태를 참조해야 하므로,
+    // 현재는 'data-management'를 기본으로 하되, 추후 확장성을 고려하여 구조를 유지합니다.
+    // 여기서는 각 탭이 독립적인 상태를 갖도록 구현합니다.
+    return viewerStates[
+        activeTab === "space-management"
+            ? "space-management"
+            : "data-management"
+    ];
+}
+
+function addGroupingLevel(contextPrefix) {
+    const container = document.getElementById(
+        `${contextPrefix}-grouping-controls`
+    );
+    if (!container) return;
+
+    const newIndex = container.children.length + 1;
+    const newLevelDiv = document.createElement("div");
+    newLevelDiv.className = "group-level";
+    newLevelDiv.innerHTML = `
+        <label>${newIndex}차:</label>
+        <select class="group-by-select"></select>
+        <button class="remove-group-level-btn">-</button>
+    `;
+    container.appendChild(newLevelDiv);
+    populateFieldSelection(); // 필드 목록 채우기
+
+    newLevelDiv
+        .querySelector(".remove-group-level-btn")
+        .addEventListener("click", function () {
+            this.parentElement.remove();
+            renderDataTable(
+                `${contextPrefix}-data-table-container`,
+                contextPrefix
+            );
+        });
+}
+
+/**
+ * [수정] 선택된 BIM 객체를 특정 공간에 할당하는 API를 호출합니다.
+ * @param {string} spaceId 할당할 공간의 ID
+ * @param {Array<string>} elementIds 할당할 BIM 원본 객체 ID 목록
+ */
+async function applySpaceElementMapping(spaceId, elementIds) {
+    if (!spaceId) return;
 
     try {
         const response = await fetch(
@@ -4088,8 +4345,8 @@ async function applySpaceElementMapping() {
                     "X-CSRFToken": csrftoken,
                 },
                 body: JSON.stringify({
-                    space_id: spaceMappingState.spaceId,
-                    element_ids: Array.from(selectedElementIds),
+                    space_id: spaceId,
+                    element_ids: elementIds,
                     action: "assign",
                 }),
             }
@@ -4099,10 +4356,63 @@ async function applySpaceElementMapping() {
 
         showToast(result.message, "success");
         await loadSpaceClassifications(); // 성공 후 트리 새로고침
-        controlSpaceMappingMode(false); // 맵핑 모드 종료
-        selectedElementIds.clear(); // 선택 초기화
-        renderDataTable(); // BIM 데이터 테이블 선택 해제 표시
+
+        // ▼▼▼ [핵심 수정] 선택 상태 초기화 및 화면 갱신 로직을 수정합니다. ▼▼▼
+        // 1. 올바른 상태 객체의 선택 목록을 비웁니다.
+        viewerStates["space-management"].selectedElementIds.clear();
+
+        // 2. 범용 렌더링 함수를 호출하여 테이블과 속성 뷰를 새로고침합니다.
+        renderDataTable(
+            "space-management-data-table-container",
+            "space-management"
+        );
+        renderBimPropertiesTable("space-management");
     } catch (error) {
         showToast(error.message, "error");
     }
+}
+
+/**
+ * [신규] 여러 뷰 컨텍스트를 지원하는 범용 행 선택 처리 함수
+ * @param {Event} event - 클릭 이벤트 객체
+ * @param {HTMLElement} clickedRow - 클릭된 <tr> 요소
+ * @param {string} contextPrefix - 뷰 상태를 식별하는 접두사 (예: 'data-management')
+ */
+function handleRowSelection(event, clickedRow, contextPrefix) {
+    const state = viewerStates[contextPrefix];
+    if (!state) return;
+
+    const tableContainer = document.getElementById(
+        `${contextPrefix}-data-table-container`
+    );
+    const allVisibleRows = Array.from(
+        tableContainer.querySelectorAll("tr[data-db-id]")
+    );
+
+    const clickedRowIndex = allVisibleRows.findIndex(
+        (r) => r.dataset.dbId === clickedRow.dataset.dbId
+    );
+    const elementDbId = clickedRow.dataset.dbId;
+
+    if (!elementDbId) return;
+
+    if (event.shiftKey && state.lastSelectedRowIndex > -1) {
+        const start = Math.min(state.lastSelectedRowIndex, clickedRowIndex);
+        const end = Math.max(state.lastSelectedRowIndex, clickedRowIndex);
+        if (!event.ctrlKey) state.selectedElementIds.clear();
+        for (let i = start; i <= end; i++) {
+            const rowId = allVisibleRows[i]?.dataset.dbId;
+            if (rowId) state.selectedElementIds.add(rowId);
+        }
+    } else if (event.ctrlKey) {
+        if (state.selectedElementIds.has(elementDbId)) {
+            state.selectedElementIds.delete(elementDbId);
+        } else {
+            state.selectedElementIds.add(elementDbId);
+        }
+    } else {
+        state.selectedElementIds.clear();
+        state.selectedElementIds.add(elementDbId);
+    }
+    state.lastSelectedRowIndex = clickedRowIndex;
 }

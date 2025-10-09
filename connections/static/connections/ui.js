@@ -1,4 +1,5 @@
-// ui.js
+// connections/static/connections/ui.js
+
 function getValueForItem(item, field) {
     if (!item || !field) return "";
     if (field === "classification_tags")
@@ -18,72 +19,22 @@ function getValueForItem(item, field) {
     if (field in raw_data) return raw_data[field] ?? "";
     return "";
 }
-
-function handleRowSelection(event, clickedRow) {
-    const tableContainer = document.getElementById("data-table-container");
-    const allVisibleRows = Array.from(
-        tableContainer.querySelectorAll("tr[data-id]")
-    );
-    const clickedRowIndex = allVisibleRows.findIndex(
-        (r) => r.dataset.id === clickedRow.dataset.id
-    );
-    const elementDbId = allRevitData.find(
-        (d) => d.element_unique_id === clickedRow.dataset.id
-    )?.id;
-    if (!elementDbId) return;
-
-    if (event.shiftKey && lastSelectedRowIndex > -1) {
-        const start = Math.min(lastSelectedRowIndex, clickedRowIndex);
-        const end = Math.max(lastSelectedRowIndex, clickedRowIndex);
-        if (!event.ctrlKey) selectedElementIds.clear();
-        for (let i = start; i <= end; i++) {
-            const rowId = allRevitData.find(
-                (d) => d.element_unique_id === allVisibleRows[i].dataset.id
-            )?.id;
-            if (rowId) selectedElementIds.add(rowId);
-        }
-    } else if (event.ctrlKey) {
-        if (selectedElementIds.has(elementDbId))
-            selectedElementIds.delete(elementDbId);
-        else selectedElementIds.add(elementDbId);
-    } else {
-        selectedElementIds.clear();
-        selectedElementIds.add(elementDbId);
-    }
-    lastSelectedRowIndex = clickedRowIndex;
-}
-
-// ui.js
-
-// ▼▼▼ [교체] 기존 populateFieldSelection 함수를 아래 코드로 교체하세요. ▼▼▼
 function populateFieldSelection() {
-    const systemContainer = document.getElementById("system-field-container");
-    const revitContainer = document.getElementById("revit-field-container");
-
-    // [수정] 요소가 존재하지 않으면 오류를 방지하고 함수를 즉시 종료합니다.
-    if (!systemContainer || !revitContainer) {
-        return;
-    }
-
-    console.log(
-        "디버깅: 첫 번째 객체의 원본 데이터 ->",
-        allRevitData[0]?.raw_data
+    // 두 탭의 컨테이너를 모두 찾습니다.
+    const dmSystemContainer = document.getElementById("system-field-container");
+    const dmRevitContainer = document.getElementById("revit-field-container");
+    const smSystemContainer = document.getElementById(
+        "sm-system-field-container"
     );
-
-    const previouslyChecked = {};
-    document.querySelectorAll(".field-checkbox:checked").forEach((cb) => {
-        previouslyChecked[cb.value] = true;
-    });
-
-    systemContainer.innerHTML = "";
-    revitContainer.innerHTML = "";
+    const smRevitContainer = document.getElementById(
+        "sm-revit-field-container"
+    );
 
     if (allRevitData.length === 0) return;
 
-    // --- 1. 모든 데이터에서 필드 키 목록을 수집합니다. ---
+    // 공통으로 사용할 데이터 키를 계산합니다.
     const systemKeys = ["id", "element_unique_id", "classification_tags"];
     const revitKeysSet = new Set();
-
     allRevitData.forEach((item) => {
         const raw = item.raw_data;
         if (raw) {
@@ -93,59 +44,58 @@ function populateFieldSelection() {
                 Object.keys(raw.TypeParameters).forEach((k) =>
                     revitKeysSet.add(`TypeParameters.${k}`)
                 );
-
             Object.keys(raw).forEach((k) => {
-                if (k !== "Parameters" && k !== "TypeParameters") {
+                if (k !== "Parameters" && k !== "TypeParameters")
                     revitKeysSet.add(k);
-                }
             });
         }
     });
     const sortedRevitKeys = Array.from(revitKeysSet).sort();
+
+    // UI를 채우는 헬퍼 함수
+    const fillContainers = (sysContainer, revContainer) => {
+        if (!sysContainer || !revContainer) return;
+        sysContainer.innerHTML = systemKeys
+            .map(
+                (k) =>
+                    `<label><input type="checkbox" class="field-checkbox" value="${k}"> ${k}</label>`
+            )
+            .join("");
+        revContainer.innerHTML = sortedRevitKeys
+            .map(
+                (k) =>
+                    `<label><input type="checkbox" class="field-checkbox" value="${k}"> ${k}</label>`
+            )
+            .join("");
+    };
+
+    // 두 탭의 필드 선택 UI를 모두 채웁니다.
+    fillContainers(dmSystemContainer, dmRevitContainer);
+    fillContainers(smSystemContainer, smRevitContainer);
+
+    // 모든 그룹핑 드롭다운 메뉴를 업데이트합니다.
     const allKeysSorted = [...systemKeys, ...sortedRevitKeys].sort();
-
-    // --- 2. 시스템 필드 체크박스를 생성합니다. ---
-    systemContainer.innerHTML = systemKeys
-        .map(
-            (k) =>
-                `<label><input type="checkbox" class="field-checkbox" value="${k}" ${
-                    previouslyChecked[k] ? "checked" : ""
-                }> ${k}</label>`
-        )
-        .join("");
-
-    // --- 3. BIM 객체 데이터 필드 체크박스를 생성합니다. ---
-    revitContainer.innerHTML = sortedRevitKeys
-        .map((k) => {
-            if (currentMode === "blender" && k === "Category") {
-                return "";
-            }
-            if (currentMode === "revit" && k === "IfcClass") {
-                return "";
-            }
-            return `<label><input type="checkbox" class="field-checkbox" value="${k}" ${
-                previouslyChecked[k] ? "checked" : ""
-            }> ${k}</label>`;
-        })
-        .join("");
-
-    // --- 4. 그룹핑 드롭다운 목록을 업데이트합니다. ---
-    const groupBySelects = document.querySelectorAll(".group-by-select");
+    const allGroupBySelects = document.querySelectorAll(
+        ".group-by-select, .sm-group-by-select"
+    );
     let optionsHtml =
         '<option value="">-- 필드 선택 --</option>' +
         allKeysSorted
             .map((key) => `<option value="${key}">${key}</option>`)
             .join("");
-    groupBySelects.forEach((select) => {
+    allGroupBySelects.forEach((select) => {
         const selectedValue = select.value;
         select.innerHTML = optionsHtml;
         select.value = selectedValue;
     });
 }
-// ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
 
-function addGroupingLevel() {
-    const container = document.getElementById("grouping-controls");
+function addGroupingLevel(contextPrefix) {
+    const container = document.getElementById(
+        `${contextPrefix}-grouping-controls`
+    );
+    if (!container) return;
+
     const newIndex = container.children.length + 1;
     const newLevelDiv = document.createElement("div");
     newLevelDiv.className = "group-level";
@@ -155,45 +105,64 @@ function addGroupingLevel() {
         <button class="remove-group-level-btn">-</button>
     `;
     container.appendChild(newLevelDiv);
+
     populateFieldSelection();
+
     newLevelDiv
         .querySelector(".remove-group-level-btn")
         .addEventListener("click", function () {
             this.parentElement.remove();
-            renderDataTable();
+            renderDataTable(
+                `${contextPrefix}-data-table-container`,
+                contextPrefix
+            );
         });
 }
 
-function renderDataTable() {
-    const tableContainer = document.getElementById("data-table-container");
+function renderDataTable(containerId, contextPrefix) {
+    const tableContainer = document.getElementById(containerId);
+    if (!tableContainer) return;
+
     if (allRevitData.length === 0) {
         tableContainer.innerHTML = "표시할 데이터가 없습니다.";
         return;
     }
+
+    const state = viewerStates[contextPrefix];
+    if (!state) return;
+
+    const fieldCheckboxSelector =
+        contextPrefix === "data-management"
+            ? "#fields .field-checkbox:checked"
+            : "#sm-fields .field-checkbox:checked";
+
     const selectedFields = Array.from(
-        document.querySelectorAll(".field-checkbox:checked")
+        document.querySelectorAll(fieldCheckboxSelector)
     ).map((cb) => cb.value);
+
     if (selectedFields.length === 0) {
         tableContainer.innerHTML = "표시할 필드를 하나 이상 선택하세요.";
         return;
     }
 
-    if (activeView === "raw-data-view") {
-        renderRawDataTable(selectedFields);
-    } else if (activeView === "classification-view") {
-        renderClassificationTable(selectedFields);
+    if (state.activeView === "raw-data-view") {
+        renderRawDataTable(containerId, selectedFields, state);
+    } else if (state.activeView === "classification-view") {
+        renderClassificationTable(containerId, selectedFields, state);
     }
 }
 
-// ▼▼▼ [수정] 그룹핑 위계를 표현하기 위해 이 함수를 교체해주세요. ▼▼▼
-function renderRawDataTable(selectedFields) {
-    const tableContainer = document.getElementById("data-table-container");
-    let dataToRender = isFilterToSelectionActive
-        ? allRevitData.filter((item) => revitFilteredIds.has(item.id))
+function renderRawDataTable(containerId, selectedFields, state) {
+    const tableContainer = document.getElementById(containerId);
+    if (!tableContainer) return;
+
+    let dataToRender = state.isFilterToSelectionActive
+        ? allRevitData.filter((item) => state.revitFilteredIds.has(item.id))
         : allRevitData;
+
     let filteredData = dataToRender.filter((item) =>
-        Object.keys(columnFilters).every((field) => {
-            const filterValue = columnFilters[field];
+        Object.keys(state.columnFilters).every((field) => {
+            const filterValue = state.columnFilters[field];
             return (
                 !filterValue ||
                 getValueForItem(item, field)
@@ -203,15 +172,21 @@ function renderRawDataTable(selectedFields) {
             );
         })
     );
-    currentGroupByFields = Array.from(
-        document.querySelectorAll("#grouping-controls .group-by-select")
-    )
+
+    const groupingControlsContainer = tableContainer
+        .closest(".table-area")
+        ?.querySelector(".table-controls");
+    const groupBySelects = groupingControlsContainer
+        ? groupingControlsContainer.querySelectorAll(".group-by-select")
+        : [];
+    const currentGroupByFields = Array.from(groupBySelects)
         .map((s) => s.value)
         .filter(Boolean);
+
     let tableHtml = "<table><thead><tr>";
     selectedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            columnFilters[field] || ""
+            state.columnFilters[field] || ""
         }" placeholder="필터..."></th>`;
     });
     tableHtml += "</tr></thead><tbody>";
@@ -219,8 +194,8 @@ function renderRawDataTable(selectedFields) {
     function renderGroup(items, level, parentPath) {
         if (level >= currentGroupByFields.length || items.length === 0) {
             items.forEach((item) => {
-                tableHtml += `<tr data-id="${item.element_unique_id}" class="${
-                    selectedElementIds.has(item.id) ? "selected-row" : ""
+                tableHtml += `<tr data-db-id="${item.id}" class="${
+                    state.selectedElementIds.has(item.id) ? "selected-row" : ""
                 }" style="cursor: pointer;">`;
                 selectedFields.forEach(
                     (field) =>
@@ -243,10 +218,9 @@ function renderRawDataTable(selectedFields) {
             .sort()
             .forEach((key) => {
                 const currentPath = `${parentPath}|${groupField}:${key}`;
-                const isCollapsed = collapsedGroups[currentPath];
-                const indentPixels = level * 20; // 그룹 레벨당 20px 들여쓰기
+                const isCollapsed = state.collapsedGroups[currentPath];
+                const indentPixels = level * 20;
 
-                // [변경점] 그룹 레벨별 클래스(group-level-N)와 들여쓰기(padding-left) 스타일을 추가합니다.
                 tableHtml += `<tr class="group-header group-level-${level}" data-group-path="${currentPath}">
                             <td colspan="${
                                 selectedFields.length
@@ -257,7 +231,6 @@ function renderRawDataTable(selectedFields) {
                                 ${groupField}: ${key} (${grouped[key].length}개)
                             </td>
                           </tr>`;
-
                 if (!isCollapsed)
                     renderGroup(grouped[key], level + 1, currentPath);
             });
@@ -267,15 +240,21 @@ function renderRawDataTable(selectedFields) {
     tableContainer.innerHTML = tableHtml;
 }
 
-// ▼▼▼ [수정] '수량산출분류 뷰'에서도 하위 그룹핑이 가능하도록 이 함수를 교체해주세요. ▼▼▼
-function renderClassificationTable(selectedFields) {
-    const tableContainer = document.getElementById("data-table-container");
-    let dataToRender = isFilterToSelectionActive
-        ? allRevitData.filter((item) => revitFilteredIds.has(item.id))
+function renderClassificationTable(containerId, selectedFields, state) {
+    const tableContainer = document.getElementById(containerId);
+    if (!tableContainer) return;
+
+    let dataToRender = state.isFilterToSelectionActive
+        ? allRevitData.filter((item) => state.revitFilteredIds.has(item.id))
         : allRevitData;
-    currentGroupByFields = Array.from(
-        document.querySelectorAll("#grouping-controls .group-by-select")
-    )
+
+    const groupingControlsContainer = tableContainer
+        .closest(".table-area")
+        ?.querySelector(".table-controls");
+    const groupBySelects = groupingControlsContainer
+        ? groupingControlsContainer.querySelectorAll(".group-by-select")
+        : [];
+    const currentGroupByFields = Array.from(groupBySelects)
         .map((s) => s.value)
         .filter(Boolean);
 
@@ -296,17 +275,16 @@ function renderClassificationTable(selectedFields) {
     let tableHtml = "<table><thead><tr>";
     selectedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            columnFilters[field] || ""
+            state.columnFilters[field] || ""
         }" placeholder="필터..."></th>`;
     });
     tableHtml += "</tr></thead><tbody>";
 
-    // 재귀적으로 하위 그룹을 렌더링하는 함수
     function renderSubGroup(items, level, parentPath) {
         if (level >= currentGroupByFields.length || items.length === 0) {
             items.forEach((item) => {
-                tableHtml += `<tr data-id="${item.element_unique_id}" class="${
-                    selectedElementIds.has(item.id) ? "selected-row" : ""
+                tableHtml += `<tr data-db-id="${item.id}" class="${
+                    state.selectedElementIds.has(item.id) ? "selected-row" : ""
                 }" style="cursor: pointer;">`;
                 selectedFields.forEach(
                     (field) =>
@@ -331,8 +309,7 @@ function renderClassificationTable(selectedFields) {
             .sort()
             .forEach((key) => {
                 const currentPath = `${parentPath}|${groupField}:${key}`;
-                const isCollapsed = collapsedGroups[currentPath];
-                // [변경점] 기본 들여쓰기(20px) + 하위 그룹 들여쓰기
+                const isCollapsed = state.collapsedGroups[currentPath];
                 const indentPixels = 20 + level * 20;
 
                 tableHtml += `<tr class="group-header group-level-${
@@ -358,21 +335,20 @@ function renderClassificationTable(selectedFields) {
         .sort()
         .forEach((tag) => {
             const items = dataByTag[tag].filter((item) =>
-                Object.keys(columnFilters).every(
+                Object.keys(state.columnFilters).every(
                     (field) =>
-                        !columnFilters[field] ||
+                        !state.columnFilters[field] ||
                         getValueForItem(item, field)
                             .toString()
                             .toLowerCase()
-                            .includes(columnFilters[field])
+                            .includes(state.columnFilters[field])
                 )
             );
             if (items.length === 0) return;
 
             const groupPath = `tag|${tag}`;
-            const isCollapsed = collapsedGroups[groupPath];
+            const isCollapsed = state.collapsedGroups[groupPath];
 
-            // [변경점] 최상위 그룹 헤더는 group-level-0 클래스를 가집니다.
             tableHtml += `<tr class="group-header group-level-0" data-group-path="${groupPath}">
                         <td colspan="${selectedFields.length}">
                             <span class="toggle-icon">${
@@ -383,7 +359,6 @@ function renderClassificationTable(selectedFields) {
                       </tr>`;
 
             if (!isCollapsed) {
-                // [변경점] 하위 그룹 렌더링 함수를 호출합니다.
                 renderSubGroup(items, 0, groupPath);
             }
         });
@@ -432,16 +407,6 @@ function showToast(message, type = "info", duration = 3000) {
     }, duration);
 }
 
-// ▼▼▼ [추가] '분류 할당 룰셋' 관련 UI 함수들 ▼▼▼
-
-/* 기존 renderClassificationRulesetTable 함수를 아래 코드로 교체 */
-
-/**
- * '분류 할당 룰셋' 데이터를 HTML 테이블 형태로 화면에 그립니다.
- * 편집 중인 규칙 ID를 받아 해당 행을 편집 모드로 렌더링할 수 있습니다.
- * @param {Array} rules - 서버에서 받아온 룰셋 데이터 배열
- * @param {Number | String} editingRuleId - 현재 편집 중인 규칙의 ID (새 규칙은 'new')
- */
 function renderClassificationRulesetTable(rules, editingRuleId = null) {
     const container = document.querySelector(
         "#classification-ruleset .ruleset-table-container"
@@ -1992,28 +1957,21 @@ function renderBoqDisplayFieldControls(fields) {
         .join("");
 }
 
-// connections/static/connections/ui.js
-
-// ... 기존 코드 맨 아래에 추가 ...
-
-/**
- * 'BIM속성' 탭의 내용을 렌더링합니다.
- * 테이블에서 선택된 단일 항목의 모든 Raw Data 속성을 테이블 형태로 표시합니다.
- */
-function renderBimPropertiesTable() {
+function renderBimPropertiesTable(contextPrefix) {
     const container = document.getElementById(
         "selected-bim-properties-container"
     );
+    const state = viewerStates[contextPrefix];
 
-    // 1. 선택된 항목이 하나가 아닐 경우 안내 메시지 표시
-    if (selectedElementIds.size !== 1) {
+    if (!container || !state) return;
+
+    if (state.selectedElementIds.size !== 1) {
         container.innerHTML =
             "<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>";
         return;
     }
 
-    // 2. 선택된 항목의 ID를 가져와 전체 데이터에서 해당 객체 찾기
-    const selectedId = selectedElementIds.values().next().value;
+    const selectedId = state.selectedElementIds.values().next().value;
     const selectedItem = allRevitData.find((item) => item.id === selectedId);
 
     if (!selectedItem || !selectedItem.raw_data) {
@@ -2022,11 +1980,8 @@ function renderBimPropertiesTable() {
         return;
     }
 
-    // 3. Raw Data를 테이블로 표시하기 좋게 가공 (key, value, source)
     const properties = [];
     const rawData = selectedItem.raw_data;
-
-    // 최상위 속성, Parameters, TypeParameters를 순회하며 속성 목록 생성
     for (const key in rawData) {
         if (key === "Parameters" && typeof rawData[key] === "object") {
             for (const paramKey in rawData[key]) {
@@ -2051,67 +2006,34 @@ function renderBimPropertiesTable() {
             properties.push({ key: key, value: rawData[key], source: "Root" });
         }
     }
-
-    // 키(key)를 기준으로 가나다순 정렬
     properties.sort((a, b) => a.key.localeCompare(b.key));
 
-    // 4. HTML 테이블 생성
-    let tableHtml = `
-        <table class="properties-table">
-            <thead>
-                <tr>
-                    <th style="width: 40%;">속성 (Property)</th>
-                    <th>값 (Value)</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
+    let tableHtml = `<table class="properties-table"><thead><tr><th style="width: 40%;">속성 (Property)</th><th>값 (Value)</th></tr></thead><tbody>`;
     if (properties.length === 0) {
         tableHtml += '<tr><td colspan="2">표시할 속성이 없습니다.</td></tr>';
     } else {
         properties.forEach((prop) => {
-            tableHtml += `
-                <tr>
-                    <td>${prop.key}</td>
-                    <td>${prop.value}</td>
-                </tr>
-            `;
+            tableHtml += `<tr><td>${prop.key}</td><td>${prop.value}</td></tr>`;
         });
     }
-
     tableHtml += "</tbody></table>";
-
-    // 5. 생성된 테이블을 컨테이너에 삽입
     container.innerHTML = tableHtml;
 }
 
-// ui.js
-
-// ... 기존 코드 맨 아래에 추가 ...
-
-// ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
-/**
- * '선택항목 분류' 탭의 내용을 렌더링합니다.
- * 테이블에서 선택된 항목들에 공통적으로 할당된 태그 목록을 표시합니다.
- */
-function renderAssignedTagsTable() {
+function renderAssignedTagsTable(contextPrefix) {
     const listContainer = document.getElementById("selected-tags-list");
+    const state = viewerStates[contextPrefix];
 
-    // 요소가 존재하지 않을 경우를 대비한 안전장치
-    if (!listContainer) {
-        return;
-    }
+    if (!listContainer || !state) return;
 
-    if (selectedElementIds.size === 0) {
+    if (state.selectedElementIds.size === 0) {
         listContainer.innerHTML = "항목을 선택하세요.";
         return;
     }
-    const selectedItems = allRevitData.filter((item) =>
-        selectedElementIds.has(item.id)
-    );
 
-    // 선택된 모든 항목의 태그를 수집
+    const selectedItems = allRevitData.filter((item) =>
+        state.selectedElementIds.has(item.id)
+    );
     const assignedTags = new Set();
     selectedItems.forEach((item) => {
         if (item.classification_tags)
@@ -2123,45 +2045,33 @@ function renderAssignedTagsTable() {
         return;
     }
 
-    // 화면에 태그 목록 표시
     listContainer.innerHTML = Array.from(assignedTags)
         .sort()
         .map((tag) => `<div>${tag}</div>`)
         .join("");
 }
-// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
-// ui.js
-
-// ... 기존의 다른 함수들 맨 아래에 이어서 추가 ...
-
-// ▼▼▼ [추가] 이 함수 전체를 추가해주세요. ▼▼▼
 /**
- * '선택항목 분류' 탭의 내용을 렌더링합니다.
- * 테이블에서 선택된 항목들에 할당된 태그 목록을 표시합니다.
+ * [수정] '선택항목 분류' 탭의 내용을 렌더링하는 범용 함수
+ * @param {string} contextPrefix
  */
-function renderAssignedTagsTable() {
+function renderAssignedTagsTable(contextPrefix) {
     const listContainer = document.getElementById("selected-tags-list");
+    const state = viewerStates[contextPrefix];
 
-    // 요소가 존재하지 않을 경우를 대비한 안전장치
-    if (!listContainer) {
-        return;
-    }
+    if (!listContainer || !state) return;
 
-    if (selectedElementIds.size === 0) {
+    if (state.selectedElementIds.size === 0) {
         listContainer.innerHTML = "항목을 선택하세요.";
         return;
     }
 
     const selectedItems = allRevitData.filter((item) =>
-        selectedElementIds.has(item.id)
+        state.selectedElementIds.has(item.id)
     );
-
-    // 선택된 모든 항목의 태그를 중복 없이 수집
     const assignedTags = new Set();
     selectedItems.forEach((item) => {
-        if (item.classification_tags) {
+        if (item.classification_tags)
             item.classification_tags.forEach((tag) => assignedTags.add(tag));
-        }
     });
 
     if (assignedTags.size === 0) {
@@ -2169,7 +2079,6 @@ function renderAssignedTagsTable() {
         return;
     }
 
-    // 화면에 태그 목록을 가나다순으로 정렬하여 표시
     listContainer.innerHTML = Array.from(assignedTags)
         .sort()
         .map((tag) => `<div>${tag}</div>`)

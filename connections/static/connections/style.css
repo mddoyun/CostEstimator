@@ -1898,3 +1898,58 @@ th input {
 #space-mapping-bar button {
     padding: 6px 12px;
 }
+
+#space-management.tab-content.active {
+    display: flex;
+}
+
+#space-management .left-panel-tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+#space-management .control-box {
+    height: 100%;
+}
+/* connections/static/connections/style.css 파일 맨 아래에 추가 */
+
+/* --- [추가] 공간분류 관리 탭 상/하 레이아웃 스타일 --- */
+
+/* 탭 전체를 상하 flexbox로 설정 */
+#space-management.tab-content.active {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 20px;
+}
+
+/* 상단: 공간분류 트리 패널 */
+.space-tree-panel {
+    flex: 1; /* 상단 패널이 1의 비율을 가짐 */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+}
+.space-tree-panel .ruleset-header {
+    padding: 15px;
+    flex-shrink: 0;
+}
+.space-tree-panel .ruleset-table-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0 15px 15px 15px;
+}
+
+/* 하단: 상세정보 및 테이블 패널 */
+.space-details-panel {
+    flex: 2.5; /* 하단 패널이 2.5의 비율을 가져 더 넓게 표시 */
+    display: flex;
+    gap: 20px;
+    min-height: 0;
+}
+.space-details-panel .table-area {
+    min-width: 0;
+}

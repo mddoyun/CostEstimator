@@ -152,8 +152,13 @@ function setupWebSocket() {
                     );
                     if (index !== -1) allRevitData[index] = updatedElem;
                 });
-                renderDataTable();
-                renderAssignedTagsTable();
+                // [핵심 수정] renderDataTable과 renderAssignedTagsTable 호출 시,
+                // 'BIM 원본데이터' 뷰의 컨텍스트를 명확하게 전달합니다.
+                renderDataTable(
+                    "data-management-data-table-container",
+                    "data-management"
+                );
+                renderAssignedTagsTable("data-management");
                 showToast(
                     `${data.elements.length}개 항목의 태그가 업데이트되었습니다.`,
                     "info"
