@@ -2004,3 +2004,41 @@ div[id$="-grouping-controls"] {
     max-width: 60%;
     min-width: 0; /* flex 환경에서 너비가 올바르게 계산되도록 설정 */
 }
+
+/* 탭 전체를 가로(row)로 배치하도록 변경 */
+#space-management.tab-content.active {
+    display: flex;
+    flex-direction: row; /* 기존 column에서 row로 변경 */
+    padding: 20px;
+    gap: 20px;
+}
+
+/* 왼쪽 패널 (필드 선택, BIM 속성) */
+#space-management > .left-panel-tab-container {
+    flex: 1; /* 좁은 비율 (1) */
+    min-width: 280px; /* 최소 너비 보장 */
+    max-width: 350px; /* 최대 너비 제한 */
+}
+
+/* 가운데 패널 (테이블) */
+#space-management > .table-area {
+    flex: 2; /* 넓은 비율 (2) */
+    min-width: 0; /* flex 아이템이 줄어들 수 있도록 설정 */
+}
+
+/* 오른쪽 패널 (공간분류 트리) */
+#space-management > .space-tree-panel {
+    flex: 2; /* 넓은 비율 (2) */
+    min-width: 0;
+}
+
+/* 기존 상하 레이아웃 스타일(.space-details-panel)의 영향을 받지 않도록 초기화 */
+.space-details-panel {
+    display: contents; /* flex 컨테이너로서의 역할을 제거 */
+    flex: 0;
+}
+#sm-selected-bim-properties-container {
+    overflow-x: auto; /* 내용이 컨테이너의 가로 폭을 넘어가면 스크롤바를 생성합니다. */
+    flex-grow: 1; /* 부모(.control-box)의 남은 공간을 모두 차지하도록 합니다. */
+    min-height: 0; /* flexbox 레이아웃 내에서 스크롤이 올바르게 동작하도록 보장합니다. */
+}

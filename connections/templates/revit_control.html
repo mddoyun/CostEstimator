@@ -302,6 +302,91 @@
                 </div>
 
                 <div id="space-management" class="tab-content">
+                    <div
+                        class="left-panel-tab-container"
+                        style="width: 300px; flex-shrink: 0"
+                    >
+                        <div class="left-panel-tabs">
+                            <button
+                                class="left-panel-tab-button active"
+                                data-tab="sm-fields"
+                            >
+                                필드 선택
+                            </button>
+                            <button
+                                class="left-panel-tab-button"
+                                data-tab="sm-bim-properties"
+                            >
+                                BIM속성
+                            </button>
+                        </div>
+                        <div
+                            id="sm-fields"
+                            class="left-panel-tab-content active"
+                        >
+                            <div class="control-box">
+                                <div class="field-selection-wrapper">
+                                    <div class="field-container-box">
+                                        <h4>시스템 필드</h4>
+                                        <div
+                                            id="sm-system-field-container"
+                                            class="field-container"
+                                        ></div>
+                                    </div>
+                                    <div class="field-container-box">
+                                        <h4>BIM객체 데이터 필드</h4>
+                                        <div
+                                            id="sm-revit-field-container"
+                                            class="field-container"
+                                        ></div>
+                                    </div>
+                                </div>
+                                <button
+                                    id="sm-render-table-btn"
+                                    style="margin: 15px"
+                                >
+                                    테이블에 선택 적용
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            id="sm-bim-properties"
+                            class="left-panel-tab-content"
+                        >
+                            <div class="control-box">
+                                <div id="sm-selected-bim-properties-container">
+                                    <p>
+                                        테이블에서 항목을 선택하면 BIM 속성이
+                                        여기에 표시됩니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-area">
+                        <div class="table-controls">
+                            <div
+                                id="space-management-grouping-controls-container"
+                            >
+                                <button
+                                    id="add-space-management-group-level-btn"
+                                >
+                                    그룹핑 추가
+                                </button>
+                                <div
+                                    id="space-management-grouping-controls"
+                                ></div>
+                            </div>
+                        </div>
+                        <div
+                            id="space-management-data-table-container"
+                            class="table-container"
+                        >
+                            데이터가 여기에 표시됩니다...
+                        </div>
+                    </div>
+
                     <div class="space-tree-panel">
                         <div class="ruleset-header">
                             <h2>공간분류 관리</h2>
@@ -322,94 +407,6 @@
                             class="ruleset-table-container"
                         >
                             <p>프로젝트를 선택하세요.</p>
-                        </div>
-                    </div>
-
-                    <div class="space-details-panel">
-                        <div
-                            class="left-panel-tab-container"
-                            style="width: 300px; flex-shrink: 0"
-                        >
-                            <div class="left-panel-tabs">
-                                <button
-                                    class="left-panel-tab-button active"
-                                    data-tab="sm-fields"
-                                >
-                                    필드 선택
-                                </button>
-                                <button
-                                    class="left-panel-tab-button"
-                                    data-tab="sm-bim-properties"
-                                >
-                                    BIM속성
-                                </button>
-                            </div>
-                            <div
-                                id="sm-fields"
-                                class="left-panel-tab-content active"
-                            >
-                                <div class="control-box">
-                                    <div class="field-selection-wrapper">
-                                        <div class="field-container-box">
-                                            <h4>시스템 필드</h4>
-                                            <div
-                                                id="sm-system-field-container"
-                                                class="field-container"
-                                            ></div>
-                                        </div>
-                                        <div class="field-container-box">
-                                            <h4>BIM객체 데이터 필드</h4>
-                                            <div
-                                                id="sm-revit-field-container"
-                                                class="field-container"
-                                            ></div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        id="sm-render-table-btn"
-                                        style="margin: 15px"
-                                    >
-                                        테이블에 선택 적용
-                                    </button>
-                                </div>
-                            </div>
-                            <div
-                                id="sm-bim-properties"
-                                class="left-panel-tab-content"
-                            >
-                                <div class="control-box">
-                                    <div
-                                        id="sm-selected-bim-properties-container"
-                                    >
-                                        <p>
-                                            테이블에서 항목을 선택하면 BIM
-                                            속성이 여기에 표시됩니다.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="table-area">
-                            <div class="table-controls">
-                                <div
-                                    id="space-management-grouping-controls-container"
-                                >
-                                    <button
-                                        id="add-space-management-group-level-btn"
-                                    >
-                                        그룹핑 추가
-                                    </button>
-                                    <div
-                                        id="space-management-grouping-controls"
-                                    ></div>
-                                </div>
-                            </div>
-                            <div
-                                id="space-management-data-table-container"
-                                class="table-container"
-                            >
-                                데이터가 여기에 표시됩니다...
-                            </div>
                         </div>
                     </div>
                 </div>
