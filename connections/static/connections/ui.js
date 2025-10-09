@@ -2263,3 +2263,90 @@ function renderAssignedElementsModal(elements, spaceName) {
     tableHtml += "</tbody></table>";
     container.innerHTML = tableHtml;
 }
+
+/**
+ * '공간분류 생성 룰셋' 데이터를 HTML 테이블 형태로 화면에 그립니다.
+ * @param {Array} rules - 서버에서 받아온 룰셋 데이터 배열
+ * @param {String} editId - 현재 편집 중인 규칙의 ID (새 규칙은 'new')
+ */
+function renderSpaceClassificationRulesetTable(rules, editId = null) {
+    const container = document.getElementById(
+        "space-classification-ruleset-table-container"
+    );
+
+    let tableHtml = `<table class="ruleset-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">레벨</th>
+                <th style="width: 15%;">위계 이름</th>
+                <th style="width: 25%;">BIM 객체 필터 (JSON)</th>
+                <th style="width: 15%;">이름 속성</th>
+                <th style="width: 15%;">상위 연결 속성</th>
+                <th style="width: 15%;">하위 연결 속성</th>
+                <th style="width: 10%;">작업</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    const renderRow = (rule) => {
+        if (rule.id === editId) {
+            return `<tr class="rule-edit-row" data-rule-id="${rule.id}">
+                <td><input type="number" class="rule-level-depth-input" value="${
+                    rule.level_depth || 0
+                }"></td>
+                <td><input type="text" class="rule-level-name-input" value="${
+                    rule.level_name || ""
+                }" placeholder="예: Building"></td>
+                <td><textarea class="rule-bim-filter-input" placeholder='{"parameter": "IfcEntityType", "value": "IfcBuilding"}' rows="3">${JSON.stringify(
+                    rule.bim_object_filter || {},
+                    null,
+                    2
+                )}</textarea></td>
+                <td><input type="text" class="rule-name-source-input" value="${
+                    rule.name_source_param || ""
+                }" placeholder="예: Name"></td>
+                <td><input type="text" class="rule-parent-join-input" value="${
+                    rule.parent_join_param || ""
+                }" placeholder="예: GlobalId"></td>
+                <td><input type="text" class="rule-child-join-input" value="${
+                    rule.child_join_param || ""
+                }" placeholder="예: SiteGlobalId"></td>
+                <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
+            </tr>`;
+        }
+        return `<tr data-rule-id="${rule.id}">
+            <td>${rule.level_depth}</td>
+            <td>${rule.level_name}</td>
+            <td><pre>${JSON.stringify(
+                rule.bim_object_filter,
+                null,
+                2
+            )}</pre></td>
+            <td>${rule.name_source_param}</td>
+            <td>${rule.parent_join_param}</td>
+            <td>${rule.child_join_param}</td>
+            <td><button class="edit-rule-btn">수정</button> <button class="delete-rule-btn">삭제</button></td>
+        </tr>`;
+    };
+
+    rules.sort((a, b) => a.level_depth - b.level_depth); // 레벨 순으로 정렬
+
+    rules.forEach((rule) => {
+        tableHtml += renderRow(rule);
+    });
+
+    if (editId === "new") {
+        const newLevel =
+            rules.length > 0
+                ? Math.max(...rules.map((r) => r.level_depth)) + 1
+                : 0;
+        tableHtml += renderRow({ id: "new", level_depth: newLevel });
+    }
+
+    if (rules.length === 0 && editId !== "new") {
+        tableHtml += '<tr><td colspan="7">정의된 규칙이 없습니다.</td></tr>';
+    }
+
+    tableHtml += "</tbody></table>";
+    container.innerHTML = tableHtml;
+}

@@ -26,6 +26,8 @@ urlpatterns = [
     
     path('api/rules/cost-code-assignment/<uuid:project_id>/', views.cost_code_assignment_rules_api, name='cost_code_assignment_rules_api'),
     path('api/rules/cost-code-assignment/<uuid:project_id>/<uuid:rule_id>/', views.cost_code_assignment_rules_api, name='cost_code_assignment_rule_detail_api'),
+    path('api/rules/space-classification/<uuid:project_id>/', views.space_classification_rules_api, name='space_classification_rules_api'),
+    path('api/rules/space-classification/<uuid:project_id>/<uuid:rule_id>/', views.space_classification_rules_api, name='space_classification_rule_detail_api'),
 
     # --- 데이터 관리 API ---
     path('api/cost-codes/<uuid:project_id>/', views.cost_codes_api, name='cost_codes_api'),
@@ -56,5 +58,6 @@ urlpatterns = [
     path('api/space-classifications/manage-elements/<uuid:project_id>/', views.manage_space_element_mapping_api, name='manage_space_element_mapping_api'),
 
     path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/elements/', views.get_space_mapped_elements_api, name='get_space_mapped_elements'),
+    path('api/space-classifications/apply-rules/<uuid:project_id>/', views.apply_space_classification_rules_view, name='apply_space_classification_rules'),
 
 ]

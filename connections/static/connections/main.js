@@ -25,6 +25,8 @@ let lastSelectedCiRowIndex = -1;
 let loadedCostCodeRules = [];
 let loadedMemberMarkAssignmentRules = [];
 let loadedCostCodeAssignmentRules = [];
+let loadedSpaceClassificationRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
+
 let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
 let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
 let spaceMappingState = { active: false, spaceId: null, spaceName: "" }; // 공간 맵핑 모드 상태
@@ -515,6 +517,22 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+    document
+        .getElementById("add-space-classification-rule-btn")
+        ?.addEventListener("click", () => {
+            renderSpaceClassificationRulesetTable(
+                loadedSpaceClassificationRules,
+                "new"
+            );
+        });
+
+    document
+        .getElementById("space-classification-ruleset-table-container")
+        ?.addEventListener("click", handleSpaceClassificationRuleActions);
+
+    document
+        .getElementById("apply-space-rules-btn")
+        ?.addEventListener("click", applySpaceClassificationRules);
 });
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
@@ -631,6 +649,7 @@ function handleMainNavClick(e) {
         loadCostCodeRules();
         loadMemberMarkAssignmentRules();
         loadCostCodeAssignmentRules();
+        loadSpaceClassificationRules();
     }
 
     if (activeTab === "quantity-members") {
@@ -1010,10 +1029,14 @@ function handleRulesetNavClick(e) {
         return; // 이미 활성화된 버튼이면 아무것도 안함
     }
 
-    // 모든 서브 탭 버튼 비활성화
-    document
-        .querySelectorAll(".ruleset-nav-button.active")
-        .forEach((btn) => btn.classList.remove("active"));
+    // [수정] 이전에 활성화된 버튼이 없을 수도 있는 경우를 대비하여 null 체크를 추가합니다.
+    const currentActiveButton = document.querySelector(
+        ".ruleset-nav-button.active"
+    );
+    if (currentActiveButton) {
+        currentActiveButton.classList.remove("active");
+    }
+
     // 클릭된 버튼 활성화
     targetButton.classList.add("active");
 
@@ -1023,15 +1046,18 @@ function handleRulesetNavClick(e) {
     document
         .querySelectorAll(".ruleset-content")
         .forEach((content) => content.classList.remove("active"));
-    // 해당 룰셋 컨텐츠 보여주기
-    document.getElementById(targetRulesetId).classList.add("active");
 
-    showToast(
-        `${targetButton.querySelector("strong").innerText} 탭으로 전환합니다.`,
-        "info"
-    );
+    // [수정] 보여줄 컨텐츠가 존재하는지 확인 후 active 클래스를 추가합니다.
+    const targetContent = document.getElementById(targetRulesetId);
+    if (targetContent) {
+        targetContent.classList.add("active");
+    }
+
+    // [수정] strong 태그가 없는 경우를 대비하여 null 체크를 추가합니다.
+    const buttonText =
+        targetButton.querySelector("strong")?.innerText || "선택된 룰셋";
+    showToast(`${buttonText} 탭으로 전환합니다.`, "info");
 }
-
 let loadedClassificationRules = []; // 전역 변수는 그대로 둡니다.
 
 // 룰셋 테이블의 모든 동작(저장, 수정, 취소, 삭제)을 처리하는 함수
@@ -4538,4 +4564,147 @@ async function handleUnassignElements() {
     // 작업 완료 후 모달을 닫습니다.
     modal.style.display = "none";
     // 공간분류 트리는 applySpaceElementMapping 함수 내부에서 자동으로 새로고침됩니다.
+}
+
+// =====================================================================
+// 공간분류 생성 룰셋(SpaceClassificationRule) 관리 및 적용 함수들
+// =====================================================================
+
+/**
+ * 프로젝트의 모든 '공간분류 생성 룰셋'을 서버에서 불러와 화면을 다시 그립니다.
+ */
+async function loadSpaceClassificationRules() {
+    if (!currentProjectId) {
+        renderSpaceClassificationRulesetTable([]);
+        return;
+    }
+    try {
+        const response = await fetch(
+            `/connections/api/rules/space-classification/${currentProjectId}/`
+        );
+        if (!response.ok) throw new Error("공간분류 생성 룰셋 로딩 실패");
+        loadedSpaceClassificationRules = await response.json();
+        renderSpaceClassificationRulesetTable(loadedSpaceClassificationRules);
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * '공간분류 생성 룰셋' 테이블의 액션(저장, 수정, 취소, 삭제)을 처리합니다.
+ */
+async function handleSpaceClassificationRuleActions(event) {
+    const target = event.target;
+    const ruleRow = target.closest("tr");
+    if (!ruleRow) return;
+    const ruleId = ruleRow.dataset.ruleId;
+
+    if (target.classList.contains("edit-rule-btn")) {
+        renderSpaceClassificationRulesetTable(
+            loadedSpaceClassificationRules,
+            ruleId
+        );
+    } else if (target.classList.contains("cancel-edit-btn")) {
+        renderSpaceClassificationRulesetTable(loadedSpaceClassificationRules);
+    } else if (target.classList.contains("delete-rule-btn")) {
+        if (!confirm("정말 이 규칙을 삭제하시겠습니까?")) return;
+        const response = await fetch(
+            `/connections/api/rules/space-classification/${currentProjectId}/${ruleId}/`,
+            {
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrftoken },
+            }
+        );
+        if (response.ok) {
+            showToast("규칙이 삭제되었습니다.", "success");
+            loadSpaceClassificationRules();
+        } else {
+            showToast("삭제 실패", "error");
+        }
+    } else if (target.classList.contains("save-rule-btn")) {
+        let bim_object_filter;
+        try {
+            bim_object_filter = JSON.parse(
+                ruleRow.querySelector(".rule-bim-filter-input").value || "{}"
+            );
+        } catch (e) {
+            showToast("BIM 객체 필터가 유효한 JSON 형식이 아닙니다.", "error");
+            return;
+        }
+
+        const ruleData = {
+            id: ruleId !== "new" ? ruleId : null,
+            level_depth:
+                parseInt(
+                    ruleRow.querySelector(".rule-level-depth-input").value
+                ) || 0,
+            level_name: ruleRow.querySelector(".rule-level-name-input").value,
+            bim_object_filter: bim_object_filter,
+            name_source_param: ruleRow.querySelector(".rule-name-source-input")
+                .value,
+            parent_join_param: ruleRow.querySelector(".rule-parent-join-input")
+                .value,
+            child_join_param: ruleRow.querySelector(".rule-child-join-input")
+                .value,
+        };
+
+        const response = await fetch(
+            `/connections/api/rules/space-classification/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify(ruleData),
+            }
+        );
+        const result = await response.json();
+        if (response.ok) {
+            showToast(result.message, "success");
+            loadSpaceClassificationRules();
+        } else {
+            showToast(result.message, "error");
+        }
+    }
+}
+
+/**
+ * 정의된 룰셋을 적용하여 공간분류 자동 생성/동기화를 실행합니다.
+ */
+async function applySpaceClassificationRules() {
+    if (!currentProjectId) {
+        showToast("프로젝트를 선택하세요.", "error");
+        return;
+    }
+    if (
+        !confirm(
+            "정의된 룰셋을 기반으로 공간분류를 자동 생성/동기화하시겠습니까?\n이 작업은 룰에 의해 생성된 항목만 영향을 주며, 수동으로 추가한 항목은 보존됩니다."
+        )
+    ) {
+        return;
+    }
+
+    showToast(
+        "룰셋을 적용하여 공간분류를 동기화하고 있습니다. 잠시만 기다려주세요...",
+        "info",
+        5000
+    );
+    try {
+        const response = await fetch(
+            `/connections/api/space-classifications/apply-rules/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: { "X-CSRFToken": csrftoken },
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+
+        showToast(result.message, "success");
+        // 동기화 후, 공간분류 트리 뷰를 새로고침합니다.
+        await loadSpaceClassifications();
+    } catch (error) {
+        showToast(`룰셋 적용 실패: ${error.message}`, "error");
+    }
 }

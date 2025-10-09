@@ -27,6 +27,8 @@ from .models import (
     MemberMarkAssignmentRule, 
     CostCodeAssignmentRule,
     SpaceClassification,
+    SpaceClassificationRule,
+
 )
 # --- Project & Revit Data Views ---
 
@@ -1657,3 +1659,129 @@ def get_space_mapped_elements_api(request, project_id, sc_id):
         return JsonResponse({'status': 'error', 'message': '해당 공간분류를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
+
+
+# ▼▼▼ [추가] 파일 맨 아래에 아래 함수 블록들을 추가합니다. ▼▼▼
+@require_http_methods(["GET", "POST", "DELETE"])
+def space_classification_rules_api(request, project_id, rule_id=None):
+    """공간분류 생성 룰셋을 관리하는 API"""
+    if request.method == 'GET':
+        rules = SpaceClassificationRule.objects.filter(project_id=project_id)
+        rules_data = [{
+            'id': str(rule.id),
+            'level_depth': rule.level_depth,
+            'level_name': rule.level_name,
+            'bim_object_filter': rule.bim_object_filter,
+            'name_source_param': rule.name_source_param,
+            'parent_join_param': rule.parent_join_param,
+            'child_join_param': rule.child_join_param,
+        } for rule in rules]
+        return JsonResponse(rules_data, safe=False)
+
+    elif request.method == 'POST':
+        data = json.loads(request.body)
+        try:
+            project = Project.objects.get(id=project_id)
+            rule_id_from_data = data.get('id')
+            
+            rule, created = SpaceClassificationRule.objects.update_or_create(
+                id=rule_id_from_data,
+                project=project,
+                defaults={
+                    'level_depth': data.get('level_depth'),
+                    'level_name': data.get('level_name'),
+                    'bim_object_filter': data.get('bim_object_filter', {}),
+                    'name_source_param': data.get('name_source_param'),
+                    'parent_join_param': data.get('parent_join_param', ''),
+                    'child_join_param': data.get('child_join_param', ''),
+                }
+            )
+            return JsonResponse({'status': 'success', 'message': '공간분류 생성 규칙이 저장되었습니다.', 'rule_id': str(rule.id)})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    elif request.method == 'DELETE':
+        if not rule_id:
+            return JsonResponse({'status': 'error', 'message': 'Rule ID가 필요합니다.'}, status=400)
+        try:
+            SpaceClassificationRule.objects.get(id=rule_id, project_id=project_id).delete()
+            return JsonResponse({'status': 'success', 'message': '규칙이 삭제되었습니다.'})
+        except SpaceClassificationRule.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': '규칙을 찾을 수 없습니다.'}, status=404)
+
+@require_http_methods(["POST"])
+def apply_space_classification_rules_view(request, project_id):
+    """(수정됨) 정의된 룰셋에 따라 공간분류를 자동으로 생성, 업데이트, 삭제하는 동기화 뷰"""
+    try:
+        project = Project.objects.get(id=project_id)
+        rules = SpaceClassificationRule.objects.filter(project=project).order_by('level_depth')
+        elements = RawElement.objects.filter(project=project)
+        
+        if not rules.exists():
+            return JsonResponse({'status': 'info', 'message': '적용할 공간분류 생성 규칙이 없습니다.'})
+
+        created_count, updated_count = 0, 0
+        processed_space_ids = set()
+
+        # 레벨 순서대로 순회
+        for rule in rules:
+            parent_spaces_map = {}
+            if rule.level_depth > 0:
+                parent_spaces = SpaceClassification.objects.filter(project=project, source_element__isnull=False)
+                for p_space in parent_spaces:
+                    # 상위 공간분류와 연결된 BIM 객체의 속성값을 키로 사용
+                    # (예: 부모의 'Name' 속성값 "My Site"를 키로 사용)
+                    parent_key = get_value_from_element(p_space.source_element.raw_data, rule.parent_join_param)
+                    if parent_key:
+                        parent_spaces_map[parent_key] = p_space
+
+            # 현재 레벨 규칙에 맞는 BIM 객체 필터링
+            matching_elements = [elem for elem in elements if evaluate_conditions(elem.raw_data, rule.bim_object_filter)]
+
+            for element in matching_elements:
+                parent_space = None
+                if rule.level_depth > 0:
+                    # ▼▼▼ [핵심 수정] 하위 연결 속성 값 파싱 로직 추가 ▼▼▼
+                    child_key_raw = get_value_from_element(element.raw_data, rule.child_join_param)
+                    child_key_parsed = child_key_raw
+
+                    # 값이 "타입: 이름" 형태의 문자열이면, 이름 부분만 추출
+                    if isinstance(child_key_raw, str) and ': ' in child_key_raw:
+                        try:
+                            # 예: "IfcSite: My Site" -> "My Site"
+                            child_key_parsed = child_key_raw.split(': ', 1)[1]
+                        except IndexError:
+                            child_key_parsed = child_key_raw # : 뒤에 값이 없는 등 예외 발생 시 원본 값 사용
+
+                    # 파싱된 키 값으로 부모를 찾음
+                    parent_space = parent_spaces_map.get(child_key_parsed)
+                    # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
+                
+                space_name = get_value_from_element(element.raw_data, rule.name_source_param) or "Unnamed Space"
+
+                # DB에서 해당 BIM 객체를 소스로 하는 공간분류가 이미 있는지 확인
+                existing_space, created = SpaceClassification.objects.update_or_create(
+                    project=project,
+                    source_element=element,
+                    defaults={'name': space_name, 'parent': parent_space}
+                )
+
+                if created:
+                    created_count += 1
+                elif existing_space.name != space_name or existing_space.parent != parent_space:
+                    updated_count += 1
+                
+                processed_space_ids.add(existing_space.id)
+
+        # 동기화 후, 더 이상 BIM 모델에 존재하지 않는 객체와 연결된 공간분류 삭제
+        deletable_spaces = SpaceClassification.objects.filter(project=project, source_element__isnull=False).exclude(id__in=processed_space_ids)
+        deleted_count, _ = deletable_spaces.delete()
+
+        message = f"공간분류 동기화 완료: {created_count}개 생성, {updated_count}개 업데이트, {deleted_count}개 삭제되었습니다. (수동 추가 항목은 보존됨)"
+        return JsonResponse({'status': 'success', 'message': message})
+
+    except Project.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        import traceback
+        return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)

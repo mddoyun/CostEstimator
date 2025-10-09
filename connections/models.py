@@ -77,10 +77,22 @@ class SpaceClassification(models.Model):
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     mapped_elements = models.ManyToManyField('RawElement', related_name='space_classifications', blank=True)
+    
+    # ▼▼▼ [수정] 이 필드를 ForeignKey(unique=True)에서 OneToOneField로 변경해주세요. ▼▼▼
+    source_element = models.OneToOneField(
+        'RawElement', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        related_name='source_of_space', 
+        help_text="이 공간분류를 생성한 원본 BIM 객체"
+    )
+    # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
 
     class Meta:
         ordering = ['name']
-        unique_together = ('project', 'parent', 'name') # 같은 부모 아래에 동일한 이름의 자식은 없도록 설정
+        unique_together = ('project', 'parent', 'name')
 
     def __str__(self):
         return self.name
@@ -236,3 +248,25 @@ class CostCodeAssignmentRule(models.Model):
         return self.name
     
 
+# ▼▼▼ [추가] 공간분류 자동 생성을 위한 룰 모델 ▼▼▼
+class SpaceClassificationRule(models.Model):
+    """BIM 객체 데이터로부터 공간분류 위계를 자동으로 생성하기 위한 규칙"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='space_classification_rules')
+    
+    level_depth = models.IntegerField(help_text="위계 수준 (0=최상위)")
+    level_name = models.CharField(max_length=100, help_text="위계의 이름 (예: Project, Site, Building)")
+    
+    bim_object_filter = models.JSONField(help_text="이 위계에 해당하는 BIM 객체를 찾는 조건")
+    name_source_param = models.CharField(max_length=255, help_text="공간분류의 이름으로 사용할 BIM 객체의 속성 이름")
+    
+    # 상위 위계와의 연결을 위한 규칙
+    parent_join_param = models.CharField(max_length=255, blank=True, help_text="상위 객체에서 연결에 사용할 속성 (예: GlobalId)")
+    child_join_param = models.CharField(max_length=255, blank=True, help_text="현재 객체에서 상위 객체와 연결에 사용할 속성 (예: ParentGlobalId)")
+
+    class Meta:
+        unique_together = ('project', 'level_depth')
+        ordering = ['project', 'level_depth']
+
+    def __str__(self):
+        return f"{self.project.name} - Level {self.level_depth}: {self.level_name}"

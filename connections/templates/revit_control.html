@@ -306,6 +306,12 @@
                         <div class="ruleset-header">
                             <h2>공간분류 관리</h2>
                             <div class="ruleset-actions">
+                                <button
+                                    id="apply-space-rules-btn"
+                                    title="정의된 룰셋을 기반으로 공간분류를 자동 생성/동기화합니다."
+                                >
+                                    룰셋 자동적용
+                                </button>
                                 <button id="add-root-space-btn">
                                     최상위 공간 추가
                                 </button>
@@ -472,6 +478,18 @@
                                         ></span
                                     >
                                 </button>
+                                <button
+                                    class="ruleset-nav-button"
+                                    data-ruleset="space-classification-ruleset"
+                                >
+                                    <span class="ruleset-icon">🏗️</span>
+                                    <span class="ruleset-text"
+                                        ><strong>공간분류 생성 룰셋</strong
+                                        ><small
+                                            >BIM객체 → 공간분류 위계</small
+                                        ></span
+                                    >
+                                </button>
                             </nav>
                         </aside>
                         <main class="ruleset-main-panel">
@@ -578,6 +596,30 @@
                                     <p>
                                         QuantityMember 속성 기반으로 공사코드를
                                         자동 할당/생성하는 규칙을 관리합니다.
+                                    </p>
+                                </div>
+                            </div>
+                            <div
+                                id="space-classification-ruleset"
+                                class="ruleset-content"
+                            >
+                                <div class="ruleset-header">
+                                    <h2>공간분류 생성 룰셋 관리</h2>
+                                    <div class="ruleset-actions">
+                                        <button
+                                            id="add-space-classification-rule-btn"
+                                        >
+                                            새 규칙(위계) 추가
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    class="ruleset-table-container"
+                                    id="space-classification-ruleset-table-container"
+                                >
+                                    <p>
+                                        BIM 객체로부터 공간분류 위계를 자동으로
+                                        생성하는 규칙을 관리합니다.
                                     </p>
                                 </div>
                             </div>
