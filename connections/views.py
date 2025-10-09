@@ -1661,7 +1661,13 @@ def get_space_mapped_elements_api(request, project_id, sc_id):
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
 
 
-# ▼▼▼ [추가] 파일 맨 아래에 아래 함수 블록들을 추가합니다. ▼▼▼
+# connections/views.py
+
+# ... (기존의 모든 import 구문과 함수들은 그대로 둡니다) ...
+
+
+# ▼▼▼ [추가] 파일 맨 아래에 아래 함수 블록 전체를 추가해주세요. ▼▼▼
+
 @require_http_methods(["GET", "POST", "DELETE"])
 def space_classification_rules_api(request, project_id, rule_id=None):
     """공간분류 생성 룰셋을 관리하는 API"""
@@ -1683,6 +1689,11 @@ def space_classification_rules_api(request, project_id, rule_id=None):
         try:
             project = Project.objects.get(id=project_id)
             rule_id_from_data = data.get('id')
+            
+            # Django 2.2 이상에서는 update_or_create의 id 파라미터를 None으로 주면 create가 됩니다.
+            # 혹시 모를 구버전 호환성을 위해 id가 'new' 또는 None일 경우를 처리합니다.
+            if rule_id_from_data == 'new' or rule_id_from_data is None:
+                rule_id_from_data = None
             
             rule, created = SpaceClassificationRule.objects.update_or_create(
                 id=rule_id_from_data,
@@ -1709,9 +1720,10 @@ def space_classification_rules_api(request, project_id, rule_id=None):
         except SpaceClassificationRule.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': '규칙을 찾을 수 없습니다.'}, status=404)
 
+
 @require_http_methods(["POST"])
 def apply_space_classification_rules_view(request, project_id):
-    """(수정됨) 정의된 룰셋에 따라 공간분류를 자동으로 생성, 업데이트, 삭제하는 동기화 뷰"""
+    """(최종 버전) 룰셋에 따라 공간분류 자동 생성/동기화 및 객체 자동 할당"""
     try:
         project = Project.objects.get(id=project_id)
         rules = SpaceClassificationRule.objects.filter(project=project).order_by('level_depth')
@@ -1723,48 +1735,52 @@ def apply_space_classification_rules_view(request, project_id):
         created_count, updated_count = 0, 0
         processed_space_ids = set()
 
-        # 레벨 순서대로 순회
-        for rule in rules:
-            parent_spaces_map = {}
-            if rule.level_depth > 0:
-                parent_spaces = SpaceClassification.objects.filter(project=project, source_element__isnull=False)
-                for p_space in parent_spaces:
-                    # 상위 공간분류와 연결된 BIM 객체의 속성값을 키로 사용
-                    # (예: 부모의 'Name' 속성값 "My Site"를 키로 사용)
-                    parent_key = get_value_from_element(p_space.source_element.raw_data, rule.parent_join_param)
-                    if parent_key:
-                        parent_spaces_map[parent_key] = p_space
+        # 각 레벨의 생성된 공간분류를 임시 저장할 딕셔너리
+        spaces_by_level = {}
 
-            # 현재 레벨 규칙에 맞는 BIM 객체 필터링
+        for rule in rules:
+            level = rule.level_depth
+            spaces_by_level[level] = {}
+            
+            parent_level = level - 1
+            parent_spaces_map = {}
+
+            if level > 0 and parent_level in spaces_by_level:
+                # 이전 레벨에서 생성된 공간분류들을 가져와 부모 맵을 만듭니다.
+                for parent_space in spaces_by_level[parent_level].values():
+                    parent_key = get_value_from_element(parent_space.source_element.raw_data, rule.parent_join_param)
+                    if parent_key:
+                        parent_spaces_map[parent_key] = parent_space
+            
             matching_elements = [elem for elem in elements if evaluate_conditions(elem.raw_data, rule.bim_object_filter)]
 
             for element in matching_elements:
                 parent_space = None
-                if rule.level_depth > 0:
-                    # ▼▼▼ [핵심 수정] 하위 연결 속성 값 파싱 로직 추가 ▼▼▼
+                if level > 0:
                     child_key_raw = get_value_from_element(element.raw_data, rule.child_join_param)
                     child_key_parsed = child_key_raw
-
-                    # 값이 "타입: 이름" 형태의 문자열이면, 이름 부분만 추출
+                    
                     if isinstance(child_key_raw, str) and ': ' in child_key_raw:
                         try:
-                            # 예: "IfcSite: My Site" -> "My Site"
                             child_key_parsed = child_key_raw.split(': ', 1)[1]
                         except IndexError:
-                            child_key_parsed = child_key_raw # : 뒤에 값이 없는 등 예외 발생 시 원본 값 사용
-
-                    # 파싱된 키 값으로 부모를 찾음
+                            child_key_parsed = child_key_raw
+                            
                     parent_space = parent_spaces_map.get(child_key_parsed)
-                    # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
                 
                 space_name = get_value_from_element(element.raw_data, rule.name_source_param) or "Unnamed Space"
 
-                # DB에서 해당 BIM 객체를 소스로 하는 공간분류가 이미 있는지 확인
                 existing_space, created = SpaceClassification.objects.update_or_create(
                     project=project,
                     source_element=element,
                     defaults={'name': space_name, 'parent': parent_space}
                 )
+                
+                # '객체 자동 할당' 로직
+                existing_space.mapped_elements.set([element])
+
+                # 현재 레벨에서 생성/업데이트된 공간분류를 다음 레벨에서 사용할 수 있도록 저장
+                spaces_by_level[level][element.id] = existing_space
 
                 if created:
                     created_count += 1
@@ -1785,3 +1801,5 @@ def apply_space_classification_rules_view(request, project_id):
     except Exception as e:
         import traceback
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
+
+# ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
