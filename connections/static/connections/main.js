@@ -4708,3 +4708,50 @@ async function applySpaceClassificationRules() {
         showToast(`룰셋 적용 실패: ${error.message}`, "error");
     }
 }
+/**
+ * '수량산출부재' 탭의 오른쪽 상세 정보 패널의 탭 클릭을 처리합니다.
+ */
+function handleQmDetailTabClick(event) {
+    const clickedButton = event.target.closest(".detail-tab-button");
+    if (!clickedButton || clickedButton.classList.contains("active")) {
+        // 버튼이 아니거나 이미 활성화된 버튼이면 무시
+        return;
+    }
+
+    const targetTab = clickedButton.dataset.tab;
+    const detailsPanel = clickedButton.closest(".details-panel");
+
+    // 모든 탭 버튼과 컨텐츠에서 'active' 클래스 제거
+    detailsPanel
+        .querySelectorAll(".detail-tab-button.active")
+        .forEach((btn) => btn.classList.remove("active"));
+    detailsPanel
+        .querySelectorAll(".detail-tab-content.active")
+        .forEach((content) => content.classList.remove("active"));
+
+    // 클릭된 버튼과 그에 맞는 컨텐츠에 'active' 클래스 추가
+    clickedButton.classList.add("active");
+    const targetContent = detailsPanel.querySelector(
+        `.detail-tab-content[data-tab="${targetTab}"]`
+    );
+    if (targetContent) {
+        targetContent.classList.add("active");
+    }
+}
+
+// DOM이 로드된 후, 누락되었던 이벤트 리스너를 추가합니다.
+document.addEventListener("DOMContentLoaded", () => {
+    // '수량산출부재' 탭의 오른쪽 상세 패널 탭 컨테이너에 이벤트 리스너를 추가합니다.
+    const qmDetailsPanel = document.querySelector(
+        "#quantity-members .details-panel-tabs"
+    );
+    if (qmDetailsPanel) {
+        qmDetailsPanel.addEventListener("click", handleQmDetailTabClick);
+    }
+
+    // '수량산출부재' 탭의 왼쪽 뷰 탭(수량산출부재 뷰, 공사코드별 뷰)에 대한 이벤트 리스너
+    const qmViewTabs = document.querySelector("#quantity-members .view-tabs");
+    if (qmViewTabs) {
+        qmViewTabs.addEventListener("click", handleQmViewTabClick);
+    }
+});
