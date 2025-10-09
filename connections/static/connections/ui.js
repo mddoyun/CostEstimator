@@ -2350,3 +2350,74 @@ function renderSpaceClassificationRulesetTable(rules, editId = null) {
     tableHtml += "</tbody></table>";
     container.innerHTML = tableHtml;
 }
+
+// ▼▼▼ [추가] 공간분류 할당 룰셋 테이블 렌더링 함수 ▼▼▼
+function renderSpaceAssignmentRulesetTable(rules, editId = null) {
+    const container = document.getElementById(
+        "space-assignment-ruleset-table-container"
+    );
+    if (!currentProjectId) {
+        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        return;
+    }
+
+    // '공간분류 관리' 탭에서 로드된 공간 목록을 사용합니다.
+    const spaceOptions = loadedSpaceClassifications
+        .map((opt) => `<option value="${opt.id}">${opt.name}</option>`)
+        .join("");
+
+    let tableHtml = `<table class="ruleset-table"><thead>
+        <tr>
+            <th style="width: 10%;">우선순위</th>
+            <th style="width: 20%;">규칙 이름</th>
+            <th style="width: 35%;">적용 조건 (QuantityMember 속성 기준)</th>
+            <th style="width: 25%;">대상 공간분류</th>
+            <th style="width: 10%;">작업</th>
+        </tr>
+    </thead><tbody>`;
+
+    const renderRow = (rule) => {
+        if (rule.id === editId) {
+            return `<tr class="rule-edit-row" data-rule-id="${rule.id}">
+                <td><input type="number" class="rule-priority-input" value="${
+                    rule.priority || 0
+                }"></td>
+                <td><input type="text" class="rule-name-input" value="${
+                    rule.name || ""
+                }" placeholder="규칙 이름"></td>
+                <td><textarea class="rule-conditions-input" placeholder='[{"parameter": "BIM원본.층", "operator": "equals", "value": "1F"}]'>${JSON.stringify(
+                    rule.conditions || [],
+                    null,
+                    2
+                )}</textarea></td>
+                <td><select class="rule-space-select">${spaceOptions}</select></td>
+                <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
+            </tr>`;
+        }
+        return `<tr data-rule-id="${rule.id}">
+            <td>${rule.priority}</td>
+            <td>${rule.name}</td>
+            <td><pre>${JSON.stringify(rule.conditions, null, 2)}</pre></td>
+            <td>${rule.target_space_name}</td>
+            <td><button class="edit-rule-btn">수정</button> <button class="delete-rule-btn">삭제</button></td>
+        </tr>`;
+    };
+
+    rules.forEach((rule) => {
+        tableHtml += renderRow(rule);
+    });
+    if (editId === "new") tableHtml += renderRow({ id: "new" });
+    if (rules.length === 0 && editId !== "new")
+        tableHtml += '<tr><td colspan="5">정의된 규칙이 없습니다.</td></tr>';
+
+    tableHtml += "</tbody></table>";
+    container.innerHTML = tableHtml;
+
+    if (editId && editId !== "new") {
+        const rule = rules.find((r) => r.id === editId);
+        if (rule)
+            container.querySelector(
+                `tr[data-rule-id="${rule.id}"] .rule-space-select`
+            ).value = rule.target_space_id;
+    }
+}

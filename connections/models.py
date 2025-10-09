@@ -270,3 +270,19 @@ class SpaceClassificationRule(models.Model):
 
     def __str__(self):
         return f"{self.project.name} - Level {self.level_depth}: {self.level_name}"
+    
+
+class SpaceAssignmentRule(models.Model):
+    """'조건'에 맞는 QuantityMember에 SpaceClassification을 할당하는 규칙"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, related_name='space_assignment_rules', on_delete=models.CASCADE)
+    name = models.CharField(max_length=255, default="새 공간분류 할당 규칙")
+    target_space = models.ForeignKey(SpaceClassification, on_delete=models.CASCADE, help_text="규칙을 통해 할당될 대상 공간분류")
+    conditions = models.JSONField(default=list, blank=True, help_text="규칙이 적용될 QuantityMember를 필터링하는 조건")
+    priority = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['priority', 'name']
+
+    def __str__(self):
+        return self.name

@@ -487,6 +487,18 @@
                                         ></span
                                     >
                                 </button>
+                                <button
+                                    class="ruleset-nav-button"
+                                    data-ruleset="space-assignment-ruleset"
+                                >
+                                    <span class="ruleset-icon">🏢</span>
+                                    <span class="ruleset-text"
+                                        ><strong>공간분류 할당 룰셋</strong
+                                        ><small
+                                            >QuantityMember → 공간분류</small
+                                        ></span
+                                    >
+                                </button>
                             </nav>
                         </aside>
                         <main class="ruleset-main-panel">
@@ -620,6 +632,30 @@
                                     </p>
                                 </div>
                             </div>
+                            <div
+                                id="space-assignment-ruleset"
+                                class="ruleset-content"
+                            >
+                                <div class="ruleset-header">
+                                    <h2>공간분류 할당 룰셋 관리</h2>
+                                    <div class="ruleset-actions">
+                                        <button
+                                            id="add-space-assignment-rule-btn"
+                                        >
+                                            새 규칙 추가
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    class="ruleset-table-container"
+                                    id="space-assignment-ruleset-table-container"
+                                >
+                                    <p>
+                                        QuantityMember 속성 기반으로 공간분류를
+                                        자동 할당하는 규칙을 관리합니다.
+                                    </p>
+                                </div>
+                            </div>
                         </main>
                     </div>
                 </div>
@@ -699,6 +735,12 @@
                                         data-tab="raw-data"
                                     >
                                         BIM 원본
+                                    </button>
+                                    <button
+                                        class="detail-tab-button"
+                                        data-tab="spaces"
+                                    >
+                                        공간분류
                                     </button>
                                 </div>
                                 <div
@@ -791,6 +833,33 @@
                                         >
                                             부재를 하나만 선택하면 원본 데이터가
                                             표시됩니다.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div
+                                    class="detail-tab-content"
+                                    data-tab="spaces"
+                                >
+                                    <div class="control-box">
+                                        <h4>선택된 부재의 공간분류</h4>
+                                        <div id="qm-spaces-list">
+                                            공간분류를 보려면 부재를 선택하세요.
+                                        </div>
+                                        <div class="assignment-controls">
+                                            <select
+                                                id="qm-space-assign-select"
+                                                class="control-element"
+                                            >
+                                                <option value="">
+                                                    -- 공간분류 선택 --
+                                                </option>
+                                            </select>
+                                            <button id="qm-assign-space-btn">
+                                                할당
+                                            </button>
+                                            <button id="qm-clear-spaces-btn">
+                                                제거
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

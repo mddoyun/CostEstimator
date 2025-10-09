@@ -26,6 +26,7 @@ let loadedCostCodeRules = [];
 let loadedMemberMarkAssignmentRules = [];
 let loadedCostCodeAssignmentRules = [];
 let loadedSpaceClassificationRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
+let loadedSpaceAssignmentRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
 
 let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
 let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
@@ -533,6 +534,25 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("apply-space-rules-btn")
         ?.addEventListener("click", applySpaceClassificationRules);
+
+    document
+        .getElementById("qm-assign-space-btn")
+        ?.addEventListener("click", assignSpaceToQm);
+    document
+        .getElementById("qm-clear-spaces-btn")
+        ?.addEventListener("click", clearSpacesFromQm);
+
+    document
+        .getElementById("add-space-assignment-rule-btn")
+        ?.addEventListener("click", () => {
+            renderSpaceAssignmentRulesetTable(
+                loadedSpaceAssignmentRules,
+                "new"
+            );
+        });
+    document
+        .getElementById("space-assignment-ruleset-table-container")
+        ?.addEventListener("click", handleSpaceAssignmentRuleActions);
 });
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
@@ -650,6 +670,7 @@ function handleMainNavClick(e) {
         loadMemberMarkAssignmentRules();
         loadCostCodeAssignmentRules();
         loadSpaceClassificationRules();
+        loadSpaceAssignmentRules(); // <<< [추가] 이 함수 호출을 추가합니다.
     }
 
     if (activeTab === "quantity-members") {
@@ -1786,6 +1807,8 @@ async function handleQuantityMemberActions(event) {
         renderQmCostCodesList();
         renderQmMemberMarkDetails();
         renderQmLinkedRawElementPropertiesTable();
+        renderQmSpacesList(); // <<< [추가] 이 함수 호출을 추가합니다.
+
         return;
     }
 
@@ -4159,6 +4182,26 @@ async function loadSpaceClassifications() {
             throw new Error("공간분류 목록을 불러오는데 실패했습니다.");
         loadedSpaceClassifications = await response.json();
         renderSpaceClassificationTree(loadedSpaceClassifications);
+
+        // ▼▼▼ [추가] 수량산출부재 탭의 공간분류 드롭다운도 채웁니다. ▼▼▼
+        const select = document.getElementById("qm-space-assign-select");
+        if (select) {
+            select.innerHTML = '<option value="">-- 공간분류 선택 --</option>'; // 초기화
+            // 위계 구조를 시각적으로 표현하기 위해 재귀 함수 사용
+            const buildOptions = (parentId = null, prefix = "") => {
+                loadedSpaceClassifications
+                    .filter((s) => s.parent_id === parentId)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .forEach((space) => {
+                        const option = document.createElement("option");
+                        option.value = space.id;
+                        option.textContent = `${prefix}${space.name}`;
+                        select.appendChild(option);
+                        buildOptions(space.id, prefix + "  - ");
+                    });
+            };
+            buildOptions();
+        }
     } catch (error) {
         console.error("Error loading space classifications:", error);
         showToast(error.message, "error");
@@ -4755,3 +4798,245 @@ document.addEventListener("DOMContentLoaded", () => {
         qmViewTabs.addEventListener("click", handleQmViewTabClick);
     }
 });
+
+// =====================================================================
+// [신규] 수량산출부재의 공간분류 수동/자동 할당 관련 함수들
+// =====================================================================
+
+/**
+ * 선택된 수량산출부재에 할당된 공간분류 목록을 화면 우측에 표시합니다.
+ */
+function renderQmSpacesList() {
+    const container = document.getElementById("qm-spaces-list");
+    if (selectedQmIds.size === 0) {
+        container.innerHTML = "공간분류를 보려면 부재를 선택하세요.";
+        return;
+    }
+
+    const selectedMembers = loadedQuantityMembers.filter((m) =>
+        selectedQmIds.has(m.id)
+    );
+    if (selectedMembers.length === 0) {
+        container.innerHTML = "선택된 부재를 찾을 수 없습니다.";
+        return;
+    }
+
+    const firstMemberSpaces = new Set(
+        selectedMembers[0].space_classification_ids || []
+    );
+    const commonSpaceIds = [...firstMemberSpaces].filter((spaceId) =>
+        selectedMembers.every((member) =>
+            (member.space_classification_ids || []).includes(spaceId)
+        )
+    );
+
+    if (commonSpaceIds.length === 0) {
+        container.innerHTML =
+            "선택된 부재들에 공통으로 할당된 공간분류가 없습니다.";
+        return;
+    }
+
+    container.innerHTML =
+        "<ul>" +
+        commonSpaceIds
+            .map((spaceId) => {
+                const space = loadedSpaceClassifications.find(
+                    (s) => s.id === spaceId
+                );
+                return space
+                    ? `<li>${space.name}</li>`
+                    : `<li>알 수 없는 공간: ${spaceId}</li>`;
+            })
+            .join("") +
+        "</ul>";
+}
+
+/**
+ * 선택된 부재들에 공간분류를 할당합니다.
+ */
+async function assignSpaceToQm() {
+    const spaceId = document.getElementById("qm-space-assign-select").value;
+    if (!spaceId) {
+        showToast("적용할 공간분류를 선택하세요.", "error");
+        return;
+    }
+    if (selectedQmIds.size === 0) {
+        showToast("공간분류를 적용할 부재를 테이블에서 선택하세요.", "error");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/connections/api/quantity-members/manage-spaces/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify({
+                    member_ids: Array.from(selectedQmIds),
+                    space_id: spaceId,
+                    action: "assign",
+                }),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+
+        showToast(result.message, "success");
+        // 로컬 데이터 업데이트
+        loadedQuantityMembers.forEach((member) => {
+            if (selectedQmIds.has(member.id)) {
+                if (!member.space_classification_ids)
+                    member.space_classification_ids = [];
+                if (!member.space_classification_ids.includes(spaceId)) {
+                    member.space_classification_ids.push(spaceId);
+                }
+            }
+        });
+        renderQmSpacesList(); // 화면 새로고침
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * 선택된 부재들에서 모든 공간분류를 제거합니다.
+ */
+async function clearSpacesFromQm() {
+    if (selectedQmIds.size === 0) {
+        showToast("공간분류를 제거할 부재를 선택하세요.", "error");
+        return;
+    }
+    if (
+        !confirm(
+            `${selectedQmIds.size}개 부재의 모든 공간분류를 제거하시겠습니까?`
+        )
+    )
+        return;
+
+    try {
+        const response = await fetch(
+            `/connections/api/quantity-members/manage-spaces/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify({
+                    member_ids: Array.from(selectedQmIds),
+                    action: "clear",
+                }),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message);
+        showToast(result.message, "success");
+        // 로컬 데이터 업데이트
+        loadedQuantityMembers.forEach((member) => {
+            if (selectedQmIds.has(member.id))
+                member.space_classification_ids = [];
+        });
+        renderQmSpacesList(); // 화면 새로고침
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * 프로젝트의 모든 '공간분류 할당 룰셋'을 불러옵니다.
+ */
+async function loadSpaceAssignmentRules() {
+    if (!currentProjectId) {
+        renderSpaceAssignmentRulesetTable([]);
+        return;
+    }
+    try {
+        await loadSpaceClassifications(); // 룰셋 테이블을 그리기 전에 공간 목록이 먼저 필요합니다.
+        const response = await fetch(
+            `/connections/api/rules/space-assignment/${currentProjectId}/`
+        );
+        if (!response.ok) throw new Error("공간분류 할당 룰셋 로딩 실패");
+        loadedSpaceAssignmentRules = await response.json();
+        renderSpaceAssignmentRulesetTable(loadedSpaceAssignmentRules);
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * '공간분류 할당 룰셋' 테이블의 액션을 처리합니다.
+ */
+async function handleSpaceAssignmentRuleActions(event) {
+    const target = event.target;
+    const ruleRow = target.closest("tr");
+    if (!ruleRow) return;
+    const ruleId = ruleRow.dataset.ruleId;
+
+    if (target.classList.contains("edit-rule-btn")) {
+        renderSpaceAssignmentRulesetTable(loadedSpaceAssignmentRules, ruleId);
+    } else if (target.classList.contains("cancel-edit-btn")) {
+        renderSpaceAssignmentRulesetTable(loadedSpaceAssignmentRules);
+    } else if (target.classList.contains("delete-rule-btn")) {
+        if (!confirm("정말 이 규칙을 삭제하시겠습니까?")) return;
+        const response = await fetch(
+            `/connections/api/rules/space-assignment/${currentProjectId}/${ruleId}/`,
+            {
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrftoken },
+            }
+        );
+        if (response.ok) {
+            showToast("규칙이 삭제되었습니다.", "success");
+            loadSpaceAssignmentRules();
+        } else {
+            showToast("삭제 실패", "error");
+        }
+    } else if (target.classList.contains("save-rule-btn")) {
+        let conditions;
+        try {
+            conditions = JSON.parse(
+                ruleRow.querySelector(".rule-conditions-input").value || "[]"
+            );
+        } catch (e) {
+            showToast("적용 조건이 유효한 JSON 형식이 아닙니다.", "error");
+            return;
+        }
+
+        const ruleData = {
+            id: ruleId !== "new" ? ruleId : null,
+            name: ruleRow.querySelector(".rule-name-input").value,
+            priority:
+                parseInt(ruleRow.querySelector(".rule-priority-input").value) ||
+                0,
+            conditions: conditions,
+            target_space_id: ruleRow.querySelector(".rule-space-select").value,
+        };
+
+        if (!ruleData.target_space_id) {
+            showToast("대상 공간분류를 선택하세요.", "error");
+            return;
+        }
+
+        const response = await fetch(
+            `/connections/api/rules/space-assignment/${currentProjectId}/`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify(ruleData),
+            }
+        );
+        const result = await response.json();
+        if (response.ok) {
+            showToast(result.message, "success");
+            loadSpaceAssignmentRules();
+        } else {
+            showToast(result.message, "error");
+        }
+    }
+}

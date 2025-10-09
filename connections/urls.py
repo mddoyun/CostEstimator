@@ -41,6 +41,9 @@ urlpatterns = [
     path('api/quantity-members/auto-create/<uuid:project_id>/', views.create_quantity_members_auto_view, name='create_quantity_members_auto'),
     path('api/quantity-members/manage-cost-codes/<uuid:project_id>/', views.manage_quantity_member_cost_codes_api, name='manage_qm_cost_codes'),
     path('api/quantity-members/manage-member-marks/<uuid:project_id>/', views.manage_quantity_member_member_marks_api, name='manage_qm_member_marks'),
+    path('api/quantity-members/manage-spaces/<uuid:project_id>/', views.manage_quantity_member_spaces_api, name='manage_qm_spaces'),
+
+    
     path('api/quantity-members/apply-assignment-rules/<uuid:project_id>/', views.apply_assignment_rules_view, name='apply_assignment_rules'),
     
     path('api/cost-items/<uuid:project_id>/', views.cost_items_api, name='cost_items_api'),
@@ -59,5 +62,7 @@ urlpatterns = [
 
     path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/elements/', views.get_space_mapped_elements_api, name='get_space_mapped_elements'),
     path('api/space-classifications/apply-rules/<uuid:project_id>/', views.apply_space_classification_rules_view, name='apply_space_classification_rules'),
+    path('api/rules/space-assignment/<uuid:project_id>/', views.space_assignment_rules_api, name='space_assignment_rules_api'),
+    path('api/rules/space-assignment/<uuid:project_id>/<uuid:rule_id>/', views.space_assignment_rules_api, name='space_assignment_rule_detail_api'),
 
 ]
