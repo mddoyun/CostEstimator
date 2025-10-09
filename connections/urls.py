@@ -55,5 +55,6 @@ urlpatterns = [
     path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/', views.space_classifications_api, name='space_classification_detail_api'),
     path('api/space-classifications/manage-elements/<uuid:project_id>/', views.manage_space_element_mapping_api, name='manage_space_element_mapping_api'),
 
+    path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/elements/', views.get_space_mapped_elements_api, name='get_space_mapped_elements'),
 
 ]

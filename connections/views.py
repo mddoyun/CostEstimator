@@ -1607,3 +1607,53 @@ def manage_space_element_mapping_api(request, project_id):
         return JsonResponse({'status': 'error', 'message': '존재하지 않는 공간분류입니다.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
+
+
+# connections/views.py 파일 맨 아래에 추가
+
+@require_http_methods(["GET"])
+def get_space_mapped_elements_api(request, project_id, sc_id):
+    """특정 공간분류 ID(sc_id)에 맵핑된 RawElement 객체 목록을 반환합니다."""
+    try:
+        space = SpaceClassification.objects.get(id=sc_id, project_id=project_id)
+        
+        # 맵핑된 객체들의 ID 목록을 가져옵니다.
+        element_ids_list = list(space.mapped_elements.values_list('id', flat=True))
+        if not element_ids_list:
+            return JsonResponse([], safe=False)
+
+        # RawElement 객체들의 기본 정보를 조회합니다.
+        elements_values = list(
+            RawElement.objects.filter(id__in=element_ids_list)
+            .values('id', 'element_unique_id', 'raw_data')
+        )
+        
+        # 각 객체에 연결된 태그 정보를 조회합니다.
+        tags_qs = (
+            RawElement.classification_tags.through.objects
+            .filter(rawelement_id__in=element_ids_list)
+            .values('rawelement_id')
+            .annotate(tag_name=F('quantityclassificationtag__name'))
+            .values('rawelement_id', 'tag_name')
+        )
+        
+        # 태그 정보를 객체 ID별로 정리합니다.
+        tags_by_element_id = {}
+        for tag_data in tags_qs:
+            el_id = str(tag_data['rawelement_id']) # UUID를 문자열로 변환
+            if el_id not in tags_by_element_id:
+                tags_by_element_id[el_id] = []
+            tags_by_element_id[el_id].append(tag_data['tag_name'])
+            
+        # 최종적으로 반환할 데이터 형식으로 가공합니다.
+        for element_data in elements_values:
+            element_id_str = str(element_data['id'])
+            element_data['classification_tags'] = tags_by_element_id.get(element_id_str, [])
+            element_data['id'] = element_id_str
+
+        return JsonResponse(elements_values, safe=False)
+
+    except SpaceClassification.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': '해당 공간분류를 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)

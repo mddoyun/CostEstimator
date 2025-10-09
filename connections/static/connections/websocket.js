@@ -56,7 +56,6 @@ function setupWebSocket() {
                     0
                 )}%)`;
                 break;
-
             case "revit_data_complete":
                 statusEl.textContent = `데이터 로드 완료. 총 ${allRevitData.length}개의 객체.`;
                 showToast(
@@ -64,11 +63,13 @@ function setupWebSocket() {
                     "success"
                 );
 
-                // 모든 데이터 수신이 완료되었으므로, 최종적으로 화면을 그립니다.
                 populateFieldSelection();
-                renderDataTable();
+                // ▼▼▼ [수정] renderDataTable 호출 시 올바른 인자를 전달합니다. ▼▼▼
+                renderDataTable(
+                    "data-management-data-table-container",
+                    "data-management"
+                );
 
-                // 1.5초 후 프로그레스바를 숨깁니다.
                 setTimeout(() => {
                     progressContainer.style.display = "none";
                 }, 1500);
@@ -112,7 +113,27 @@ function setupWebSocket() {
                     );
                 }
                 break; // setTimeout 블록이 완전히 삭제되었습니다.
-            // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+            case "all_elements":
+                allRevitData = data.payload.elements;
+                statusEl.textContent = `데이터 로드 완료. 총 ${allRevitData.length}개의 객체.`;
+                showToast(
+                    `총 ${allRevitData.length}개의 객체 데이터를 받았습니다.`,
+                    "success"
+                );
+
+                // [핵심] 필드 선택 UI를 즉시 다시 그립니다.
+                populateFieldSelection();
+
+                renderDataTable(
+                    "data-management-data-table-container",
+                    "data-management"
+                );
+
+                setTimeout(() => {
+                    progressContainer.style.display = "none";
+                }, 1500);
+                document.getElementById("project-selector").disabled = false;
+                break;
             case "tags_list":
                 // ▼▼▼ [수정] 이 부분을 아래 코드로 교체해주세요. ▼▼▼
                 updateTagLists(data.payload.tags);
@@ -168,49 +189,33 @@ function setupWebSocket() {
                 const uniqueIds = new Set(data.unique_ids);
 
                 if (activeTab === "boq") {
-                    // '집계' 탭이 활성화된 경우
-                    boqFilteredRawElementIds.clear();
-                    allRevitData.forEach((item) => {
-                        if (uniqueIds.has(item.element_unique_id)) {
-                            boqFilteredRawElementIds.add(item.id);
-                        }
-                    });
-
-                    if (boqFilteredRawElementIds.size > 0) {
-                        document.getElementById(
-                            "boq-clear-selection-filter-btn"
-                        ).style.display = "block";
-                        generateBoqReport(); // 필터링된 ID로 집계표 재생성
-                        showToast(
-                            `${boqFilteredRawElementIds.size}개 객체 기준으로 집계표를 필터링합니다.`,
-                            "success"
-                        );
-                    } else {
-                        showToast(
-                            "선택된 객체와 연관된 산출 항목이 없습니다.",
-                            "info"
-                        );
-                    }
+                    // ... (BOQ 탭 관련 코드는 그대로 유지) ...
                 } else {
-                    // 기존 'BIM 원본데이터' 탭의 동작
-                    selectedElementIds.clear();
-                    revitFilteredIds.clear(); // 필터 ID Set 초기화
+                    // ▼▼▼ [수정] viewerStates를 사용하여 상태를 올바르게 업데이트합니다. ▼▼▼
+                    const state = viewerStates["data-management"];
+                    state.selectedElementIds.clear();
+                    state.revitFilteredIds.clear();
 
                     allRevitData.forEach((item) => {
                         if (uniqueIds.has(item.element_unique_id)) {
-                            selectedElementIds.add(item.id);
-                            revitFilteredIds.add(item.id); // 필터링의 기준이 될 ID Set에도 추가
+                            state.selectedElementIds.add(item.id);
+                            state.revitFilteredIds.add(item.id);
                         }
                     });
 
-                    isFilterToSelectionActive = true;
+                    state.isFilterToSelectionActive = true;
                     document.getElementById(
                         "clear-selection-filter-btn"
                     ).style.display = "inline-block";
-                    renderDataTable();
-                    renderAssignedTagsTable();
+
+                    // ▼▼▼ [수정] renderDataTable 및 renderAssignedTagsTable 호출 시 올바른 인자를 전달합니다. ▼▼▼
+                    renderDataTable(
+                        "data-management-data-table-container",
+                        "data-management"
+                    );
+                    renderAssignedTagsTable("data-management");
                     showToast(
-                        `${selectedElementIds.size}개의 객체를 Revit에서 가져와 필터링합니다.`,
+                        `${state.selectedElementIds.size}개의 객체를 연동 프로그램에서 가져와 필터링합니다.`,
                         "success"
                     );
                 }

@@ -139,14 +139,17 @@ document.addEventListener("DOMContentLoaded", () => {
             addGroupingLevel("data-management")
         );
 
-    const groupingControls = document.getElementById("grouping-controls");
-    if (groupingControls)
-        groupingControls.addEventListener("change", () =>
+    const dmGroupingControls = document.getElementById(
+        "data-management-grouping-controls"
+    );
+    if (dmGroupingControls) {
+        dmGroupingControls.addEventListener("change", () =>
             renderDataTable(
                 "data-management-data-table-container",
                 "data-management"
             )
         );
+    }
 
     const clearSelectionFilterBtn = document.getElementById(
         "clear-selection-filter-btn"
@@ -331,13 +334,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 handleSpaceActions("rename", { id: spaceId, name: spaceName });
             } else if (target.classList.contains("delete-space-btn")) {
                 handleSpaceActions("delete", { id: spaceId, name: spaceName });
-                // ▼▼▼ [추가] 이 else if 블록을 추가해주세요. ▼▼▼
             } else if (target.classList.contains("assign-elements-btn")) {
                 handleSpaceActions("assign_elements", {
                     id: spaceId,
                     name: spaceName,
                 });
-                // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+            }
+            // ▼▼▼ [추가] 이 else if 블록을 추가합니다. ▼▼▼
+            else if (target.classList.contains("view-assigned-btn")) {
+                showAssignedElements(spaceId, spaceName);
             }
         });
     }
@@ -416,7 +421,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     ".left-panel-tab-container"
                 );
 
-                // 기존 활성 버튼/콘텐츠 비활성화
                 tabContainer
                     .querySelector(".left-panel-tab-button.active")
                     .classList.remove("active");
@@ -424,14 +428,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     .querySelector(".left-panel-tab-content.active")
                     .classList.remove("active");
 
-                // 새로 클릭된 버튼/콘텐츠 활성화
                 button.classList.add("active");
                 const contentId = button.dataset.tab;
                 tabContainer
                     .querySelector(`#${contentId}`)
                     .classList.add("active");
 
-                // BIM속성 탭을 클릭하면, 선택된 항목에 대한 속성 테이블을 다시 그려줍니다.
                 if (contentId === "sm-bim-properties") {
                     renderBimPropertiesTable("space-management");
                 }
@@ -476,6 +478,42 @@ document.addEventListener("DOMContentLoaded", () => {
                 handleTableClick(e, "space-management")
             );
         }
+    }
+
+    const assignedElementsModal = document.getElementById(
+        "assigned-elements-modal"
+    );
+    if (assignedElementsModal) {
+        // 모달 닫기 버튼 (X 버튼, 닫기 버튼)
+        assignedElementsModal
+            .querySelector(".modal-close-btn")
+            .addEventListener("click", () => {
+                assignedElementsModal.style.display = "none";
+            });
+        document
+            .getElementById("modal-close-assigned-elements")
+            .addEventListener("click", () => {
+                assignedElementsModal.style.display = "none";
+            });
+
+        // '선택 항목 할당 해제' 버튼
+        document
+            .getElementById("modal-unassign-btn")
+            .addEventListener("click", handleUnassignElements);
+
+        // 테이블 내부 이벤트 위임 (전체 선택 체크박스)
+        const tableContainer = assignedElementsModal.querySelector(
+            "#assigned-elements-table-container"
+        );
+        tableContainer.addEventListener("click", (e) => {
+            if (e.target.id === "unassign-select-all") {
+                tableContainer
+                    .querySelectorAll(".unassign-checkbox")
+                    .forEach((cb) => {
+                        cb.checked = e.target.checked;
+                    });
+            }
+        });
     }
 });
 function handleProjectChange(e) {
@@ -4415,4 +4453,89 @@ function handleRowSelection(event, clickedRow, contextPrefix) {
         state.selectedElementIds.add(elementDbId);
     }
     state.lastSelectedRowIndex = clickedRowIndex;
+}
+
+/**
+ * 특정 공간에 할당된 객체 목록을 API로 조회하고 모달창에 표시합니다.
+ * @param {string} spaceId - 조회할 공간의 ID
+ * @param {string} spaceName - 조회할 공간의 이름
+ */
+
+async function showAssignedElements(spaceId, spaceName) {
+    if (!currentProjectId) return;
+
+    const modal = document.getElementById("assigned-elements-modal");
+    const unassignBtn = document.getElementById("modal-unassign-btn");
+
+    unassignBtn.dataset.spaceId = spaceId; // 할당 해제 버튼에 spaceId 저장
+
+    showToast("할당된 객체 목록을 불러오는 중...", "info");
+    try {
+        const response = await fetch(
+            `/connections/api/space-classifications/${currentProjectId}/${spaceId}/elements/`
+        );
+        if (!response.ok) {
+            throw new Error("할당된 객체를 불러오는데 실패했습니다.");
+        }
+        const elements = await response.json();
+
+        // 2. 나중에 테이블을 다시 그릴 때 사용하기 위해, 가져온 데이터를 모달 객체에 저장해 둡니다.
+        modal.dataset.elements = JSON.stringify(elements);
+        modal.dataset.spaceName = spaceName;
+
+        // 3. 가져온 데이터로 테이블을 렌더링합니다. (처음에는 필드가 선택되지 않아 안내 메시지가 보임)
+        renderAssignedElementsModal(elements, spaceName);
+
+        // 4. 모든 준비가 끝나면 모달창을 보여줍니다.
+        modal.style.display = "flex";
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+/**
+ * 모달창에서 선택된 객체들의 할당을 해제합니다.
+ */
+async function handleUnassignElements() {
+    const unassignBtn = document.getElementById("modal-unassign-btn");
+    const spaceId = unassignBtn.dataset.spaceId;
+    if (!spaceId) return;
+
+    const modal = document.getElementById("assigned-elements-modal");
+    const selectedCheckboxes = modal.querySelectorAll(
+        ".unassign-checkbox:checked"
+    );
+
+    if (selectedCheckboxes.length === 0) {
+        showToast("할당 해제할 항목을 선택하세요.", "error");
+        return;
+    }
+
+    if (
+        !confirm(
+            `${selectedCheckboxes.length}개의 객체를 이 공간에서 할당 해제하시겠습니까?`
+        )
+    ) {
+        return;
+    }
+
+    // 현재 모달에 표시된 모든 객체의 ID (할당 해제 전 상태)
+    const allAssignedIds = Array.from(
+        modal.querySelectorAll("tr[data-element-id]")
+    ).map((tr) => tr.dataset.elementId);
+
+    // 할당 해제하기로 선택한 객체의 ID
+    const idsToUnassign = Array.from(selectedCheckboxes).map((cb) => cb.value);
+
+    // 최종적으로 할당 상태를 유지해야 할 객체들의 ID 목록
+    const remainingIds = allAssignedIds.filter(
+        (id) => !idsToUnassign.includes(id)
+    );
+
+    // 기존의 할당 API를 재사용하여, 남은 객체들로만 덮어씁니다.
+    await applySpaceElementMapping(spaceId, remainingIds);
+
+    // 작업 완료 후 모달을 닫습니다.
+    modal.style.display = "none";
+    // 공간분류 트리는 applySpaceElementMapping 함수 내부에서 자동으로 새로고침됩니다.
 }

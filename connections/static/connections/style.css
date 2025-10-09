@@ -252,6 +252,10 @@ select {
     display: flex;
     align-items: center;
     gap: 10px;
+
+    /* ▼▼▼ [핵심 수정] 아래 2줄을 추가/수정해주세요. ▼▼▼ */
+    max-width: 50%; /* 컨테이너의 최대 너비를 50%로 제한 */
+    min-width: 0; /* flex 환경에서 너비가 올바르게 계산되도록 설정 */
 }
 #grouping-controls .group-level {
     display: flex;
@@ -1952,4 +1956,51 @@ th input {
 }
 .space-details-panel .table-area {
     min-width: 0;
+}
+
+.element-count-badge:hover {
+    cursor: pointer;
+    background-color: var(--primary-color);
+    transform: scale(1.1);
+    transition: all 0.2s;
+}
+
+/* 할당된 객체 모달의 요소 구분 헤더 스타일 */
+#assigned-elements-table-container .properties-table .group-header td {
+    background-color: #e9ecef;
+    font-weight: bold;
+    border-top: 2px solid #ccc;
+    position: sticky;
+    top: 35px; /* a a little below the main header */
+}
+
+#assigned-elements-table-container
+    .properties-table
+    tbody
+    tr:first-child.group-header
+    td {
+    border-top: none;
+}
+
+/* 모든 탭의 그룹핑 컨트롤 컨테이너 스타일 */
+div[id$="-grouping-controls"] {
+    display: flex; /* 자식 요소(그룹핑 레벨)를 가로로 정렬 */
+    flex-wrap: nowrap; /* 줄바꿈 방지 */
+    overflow-x: auto; /* 내용이 넘칠 경우 가로 스크롤바 표시 */
+    gap: 10px; /* 각 그룹핑 레벨 사이의 간격 */
+    align-items: center; /* 세로 중앙 정렬 */
+    padding-bottom: 8px; /* 스크롤바와 항목 사이의 여유 공간 */
+    min-width: 0; /* flex 아이템이 올바르게 축소되도록 설정 */
+    flex-grow: 1; /* 부모 컨테이너의 남은 공간을 차지하도록 설정 */
+}
+
+/* '공간분류 관리' 탭의 그룹핑 컨트롤 전체를 감싸는 컨테이너 */
+#space-management-grouping-controls-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    /* 그룹핑 영역이 부모 너비의 60%를 넘지 않도록 제한합니다. */
+    max-width: 60%;
+    min-width: 0; /* flex 환경에서 너비가 올바르게 계산되도록 설정 */
 }

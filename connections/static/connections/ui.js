@@ -20,7 +20,18 @@ function getValueForItem(item, field) {
     return "";
 }
 function populateFieldSelection() {
-    // 두 탭의 컨테이너를 모두 찾습니다.
+    // 1. 수정 전, 현재 탭별로 체크된 필드 값을 미리 저장합니다.
+    const getCheckedValues = (contextSelector) =>
+        Array.from(
+            document.querySelectorAll(
+                `${contextSelector} .field-checkbox:checked`
+            )
+        ).map((cb) => cb.value);
+
+    const dmCheckedFields = getCheckedValues("#data-management");
+    const smCheckedFields = getCheckedValues("#space-management");
+
+    // 2. 기존 로직: 컨테이너 탐색 및 키 계산 (이 부분은 동일합니다)
     const dmSystemContainer = document.getElementById("system-field-container");
     const dmRevitContainer = document.getElementById("revit-field-container");
     const smSystemContainer = document.getElementById(
@@ -32,7 +43,6 @@ function populateFieldSelection() {
 
     if (allRevitData.length === 0) return;
 
-    // 공통으로 사용할 데이터 키를 계산합니다.
     const systemKeys = ["id", "element_unique_id", "classification_tags"];
     const revitKeysSet = new Set();
     allRevitData.forEach((item) => {
@@ -52,7 +62,7 @@ function populateFieldSelection() {
     });
     const sortedRevitKeys = Array.from(revitKeysSet).sort();
 
-    // UI를 채우는 헬퍼 함수
+    // 3. 기존 로직: UI를 다시 그립니다 (innerHTML 덮어쓰기)
     const fillContainers = (sysContainer, revContainer) => {
         if (!sysContainer || !revContainer) return;
         sysContainer.innerHTML = systemKeys
@@ -69,15 +79,28 @@ function populateFieldSelection() {
             .join("");
     };
 
-    // 두 탭의 필드 선택 UI를 모두 채웁니다.
     fillContainers(dmSystemContainer, dmRevitContainer);
     fillContainers(smSystemContainer, smRevitContainer);
 
-    // 모든 그룹핑 드롭다운 메뉴를 업데이트합니다.
+    // 4. 추가된 로직: 저장해두었던 값으로 체크 상태를 복원합니다.
+    const restoreCheckedState = (contextSelector, checkedValues) => {
+        checkedValues.forEach((value) => {
+            // CSS.escape()를 사용하여 특수문자가 포함된 값도 안전하게 처리합니다.
+            const checkbox = document.querySelector(
+                `${contextSelector} .field-checkbox[value="${CSS.escape(
+                    value
+                )}"]`
+            );
+            if (checkbox) checkbox.checked = true;
+        });
+    };
+
+    restoreCheckedState("#data-management", dmCheckedFields);
+    restoreCheckedState("#space-management", smCheckedFields);
+
+    // 5. 기존 로직: 모든 그룹핑 드롭다운 메뉴를 업데이트합니다. (이 부분은 동일합니다)
     const allKeysSorted = [...systemKeys, ...sortedRevitKeys].sort();
-    const allGroupBySelects = document.querySelectorAll(
-        ".group-by-select, .sm-group-by-select"
-    );
+    const allGroupBySelects = document.querySelectorAll(".group-by-select");
     let optionsHtml =
         '<option value="">-- 필드 선택 --</option>' +
         allKeysSorted
@@ -1956,15 +1979,23 @@ function renderBoqDisplayFieldControls(fields) {
         )
         .join("");
 }
-
+/**
+ * [수정됨] 현재 활성화된 탭 컨텍스트에 따라 올바른 위치에 BIM 속성 테이블을 렌더링합니다.
+ * @param {string} contextPrefix - 'data-management' 또는 'space-management'
+ */
 function renderBimPropertiesTable(contextPrefix) {
-    const container = document.getElementById(
-        "selected-bim-properties-container"
-    );
+    // 1. [핵심 수정] contextPrefix에 따라 올바른 컨테이너 ID를 선택합니다.
+    const containerId =
+        contextPrefix === "space-management"
+            ? "sm-selected-bim-properties-container"
+            : "selected-bim-properties-container";
+    const container = document.getElementById(containerId);
+
     const state = viewerStates[contextPrefix];
 
     if (!container || !state) return;
 
+    // 2. 이하 로직은 기존과 동일합니다.
     if (state.selectedElementIds.size !== 1) {
         container.innerHTML =
             "<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>";
@@ -2118,11 +2149,11 @@ function renderSpaceClassificationTree(spaces) {
         if (nodes.length === 0) return "";
         let html = "<ul>";
         nodes.forEach((node) => {
-            // ▼▼▼ [수정] li 태그 내부의 내용을 아래 코드로 교체합니다. ▼▼▼
             const count = node.mapped_elements_count || 0;
+            // ▼▼▼ [핵심 수정] span 태그에 view-assigned-btn 클래스를 추가합니다. ▼▼▼
             const countBadge =
                 count > 0
-                    ? `<span class="element-count-badge">${count}</span>`
+                    ? `<span class="element-count-badge view-assigned-btn" title="할당된 객체 보기">${count}</span>`
                     : "";
 
             html += `
@@ -2142,11 +2173,93 @@ function renderSpaceClassificationTree(spaces) {
                     ${buildTreeHtml(node.children)}
                 </li>
             `;
-            // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
         });
         html += "</ul>";
         return html;
     }
 
     container.innerHTML = buildTreeHtml(roots);
+}
+/**
+ * 할당된 객체 목록을 모든 속성을 포함하는 2열(속성-값) 테이블로 모달창에 렌더링합니다.
+ * @param {Array} elements - 할당된 객체 데이터 배열
+ * @param {string} spaceName - 현재 공간의 이름
+ */
+function renderAssignedElementsModal(elements, spaceName) {
+    const title = document.getElementById("assigned-elements-modal-title");
+    const container = document.getElementById(
+        "assigned-elements-table-container"
+    );
+
+    title.textContent = `'${spaceName}'에 할당된 BIM 객체 (${elements.length}개)`;
+
+    if (elements.length === 0) {
+        container.innerHTML =
+            '<p style="padding: 20px;">할당된 객체가 없습니다.</p>';
+        return;
+    }
+
+    // 2열 테이블 구조를 생성합니다.
+    let tableHtml = `<table class="properties-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;"><input type="checkbox" id="unassign-select-all" title="전체 선택/해제"></th>
+                <th style="width: 40%;">속성 (Property)</th>
+                <th>값 (Value)</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    // 각 객체별로 속성을 나열합니다.
+    elements.forEach((item) => {
+        const elementName =
+            getValueForItem(item, "Name") || `객체 (ID: ${item.id})`;
+
+        // 각 객체를 구분하기 위한 헤더 행을 추가합니다.
+        tableHtml += `
+            <tr class="group-header" data-element-id="${item.id}">
+                <td style="text-align: center;"><input type="checkbox" class="unassign-checkbox" value="${item.id}"></td>
+                <td colspan="2"><strong>${elementName}</strong></td>
+            </tr>
+        `;
+
+        // 해당 객체의 모든 속성을 수집합니다.
+        const properties = [];
+        const systemKeys = ["id", "element_unique_id", "classification_tags"];
+        const revitKeysSet = new Set();
+        const raw = item.raw_data;
+
+        if (raw) {
+            if (raw.Parameters)
+                Object.keys(raw.Parameters).forEach((k) => revitKeysSet.add(k));
+            if (raw.TypeParameters)
+                Object.keys(raw.TypeParameters).forEach((k) =>
+                    revitKeysSet.add(`TypeParameters.${k}`)
+                );
+            Object.keys(raw).forEach((k) => {
+                if (k !== "Parameters" && k !== "TypeParameters")
+                    revitKeysSet.add(k);
+            });
+        }
+
+        const allKeys = [...systemKeys, ...Array.from(revitKeysSet).sort()];
+
+        // 속성 이름과 값을 테이블 행으로 추가합니다.
+        allKeys.forEach((key) => {
+            const value = getValueForItem(item, key);
+            // 값이 있는 속성만 표시합니다.
+            if (value !== "" && value !== null && value !== undefined) {
+                tableHtml += `
+                    <tr>
+                        <td></td> 
+                        <td>${key}</td>
+                        <td>${value}</td>
+                    </tr>
+                `;
+            }
+        });
+    });
+
+    tableHtml += "</tbody></table>";
+    container.innerHTML = tableHtml;
 }

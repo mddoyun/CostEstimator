@@ -213,7 +213,9 @@
                                     <button id="add-group-level-btn">
                                         그룹핑 추가
                                     </button>
-                                    <div id="grouping-controls"></div>
+                                    <div
+                                        id="data-management-grouping-controls"
+                                    ></div>
                                 </div>
                                 <div id="tag-assignment-controls">
                                     <select id="tag-assign-select">
@@ -1051,7 +1053,8 @@
                     <input
                         type="text"
                         id="cost-code-search-input"
-                        placeholder="공사코드 또는 품명으로 검색..."
+                        placeholder="코드로 검색..."
+                        style="margin-bottom: 15px"
                     />
                     <div id="cost-code-list-container" class="modal-list"></div>
                 </div>
@@ -1068,6 +1071,40 @@
                         disabled
                     >
                         선택 완료
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div
+            id="assigned-elements-modal"
+            class="modal-overlay"
+            style="display: none"
+        >
+            <div class="modal-content" style="width: 80%; max-width: 1200px">
+                <div class="modal-header">
+                    <h2 id="assigned-elements-modal-title">할당된 BIM 객체</h2>
+                    <button class="modal-close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div
+                        id="assigned-elements-table-container"
+                        class="table-container"
+                        style="height: 60vh"
+                    ></div>
+                </div>
+                <div class="modal-footer">
+                    <button
+                        id="modal-unassign-btn"
+                        class="modal-button-secondary"
+                    >
+                        선택 항목 할당 해제
+                    </button>
+                    <button
+                        id="modal-close-assigned-elements"
+                        class="modal-button-secondary"
+                    >
+                        닫기
                     </button>
                 </div>
             </div>
