@@ -273,12 +273,18 @@ class SpaceClassificationRule(models.Model):
     
 
 class SpaceAssignmentRule(models.Model):
-    """'조건'에 맞는 QuantityMember에 SpaceClassification을 할당하는 규칙"""
+    """'조건'에 맞는 QuantityMember와 SpaceClassification을 동적으로 찾아 연결(Join)하는 규칙"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(Project, related_name='space_assignment_rules', on_delete=models.CASCADE)
-    name = models.CharField(max_length=255, default="새 공간분류 할당 규칙")
-    target_space = models.ForeignKey(SpaceClassification, on_delete=models.CASCADE, help_text="규칙을 통해 할당될 대상 공간분류")
-    conditions = models.JSONField(default=list, blank=True, help_text="규칙이 적용될 QuantityMember를 필터링하는 조건")
+    name = models.CharField(max_length=255, default="새 동적 공간 할당 규칙")
+    
+    # 1. 어떤 부재에 적용할지 결정하는 필터 (선택 사항)
+    member_filter_conditions = models.JSONField(default=list, blank=True, help_text="규칙을 적용할 수량산출부재를 필터링하는 조건 (JSON)")
+    
+    # 2. 부재와 공간을 연결할 '키'가 되는 속성 경로
+    member_join_property = models.CharField(max_length=255, help_text="매칭에 사용할 부재의 속성 경로 (예: BIM원본.참조 레벨)")
+    space_join_property = models.CharField(max_length=255, help_text="매칭에 사용할 공간의 속성 경로 (예: Name 또는 BIM원본.Name)")
+    
     priority = models.IntegerField(default=0)
 
     class Meta:

@@ -197,6 +197,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const createQmAutoBtn = document.getElementById("create-qm-auto-btn");
     if (createQmAutoBtn)
         createQmAutoBtn.addEventListener("click", createAutoQuantityMembers);
+    document
+        .getElementById("apply-assignment-rules-btn")
+        ?.addEventListener("click", applyAssignmentRules);
 
     const qmTableContainer = document.getElementById("qm-table-container");
     if (qmTableContainer)
@@ -4995,13 +4998,16 @@ async function handleSpaceAssignmentRuleActions(event) {
             showToast("삭제 실패", "error");
         }
     } else if (target.classList.contains("save-rule-btn")) {
-        let conditions;
+        let member_filter_conditions;
         try {
-            conditions = JSON.parse(
-                ruleRow.querySelector(".rule-conditions-input").value || "[]"
-            );
+            const conditionsStr = ruleRow
+                .querySelector(".rule-member-filter-input")
+                .value.trim();
+            member_filter_conditions = conditionsStr
+                ? JSON.parse(conditionsStr)
+                : [];
         } catch (e) {
-            showToast("적용 조건이 유효한 JSON 형식이 아닙니다.", "error");
+            showToast("부재 필터 조건이 유효한 JSON 형식이 아닙니다.", "error");
             return;
         }
 
@@ -5011,12 +5017,17 @@ async function handleSpaceAssignmentRuleActions(event) {
             priority:
                 parseInt(ruleRow.querySelector(".rule-priority-input").value) ||
                 0,
-            conditions: conditions,
-            target_space_id: ruleRow.querySelector(".rule-space-select").value,
+            member_filter_conditions: member_filter_conditions,
+            member_join_property: ruleRow
+                .querySelector(".rule-member-join-input")
+                .value.trim(),
+            space_join_property: ruleRow
+                .querySelector(".rule-space-join-input")
+                .value.trim(),
         };
 
-        if (!ruleData.target_space_id) {
-            showToast("대상 공간분류를 선택하세요.", "error");
+        if (!ruleData.member_join_property || !ruleData.space_join_property) {
+            showToast("부재 및 공간 연결 속성은 필수 항목입니다.", "error");
             return;
         }
 

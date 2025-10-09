@@ -2361,17 +2361,13 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
         return;
     }
 
-    // '공간분류 관리' 탭에서 로드된 공간 목록을 사용합니다.
-    const spaceOptions = loadedSpaceClassifications
-        .map((opt) => `<option value="${opt.id}">${opt.name}</option>`)
-        .join("");
-
     let tableHtml = `<table class="ruleset-table"><thead>
         <tr>
-            <th style="width: 10%;">우선순위</th>
-            <th style="width: 20%;">규칙 이름</th>
-            <th style="width: 35%;">적용 조건 (QuantityMember 속성 기준)</th>
-            <th style="width: 25%;">대상 공간분류</th>
+            <th style="width: 5%;">우선순위</th>
+            <th style="width: 15%;">규칙 이름</th>
+            <th style="width: 30%;">부재 필터 조건 (JSON)</th>
+            <th style="width: 20%;">부재 연결 속성</th>
+            <th style="width: 20%;">공간 연결 속성</th>
             <th style="width: 10%;">작업</th>
         </tr>
     </thead><tbody>`;
@@ -2385,20 +2381,30 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
                 <td><input type="text" class="rule-name-input" value="${
                     rule.name || ""
                 }" placeholder="규칙 이름"></td>
-                <td><textarea class="rule-conditions-input" placeholder='[{"parameter": "BIM원본.층", "operator": "equals", "value": "1F"}]'>${JSON.stringify(
-                    rule.conditions || [],
+                <td><textarea class="rule-member-filter-input" placeholder="(선택사항) 부재 필터링 조건 입력">${JSON.stringify(
+                    rule.member_filter_conditions || [],
                     null,
                     2
                 )}</textarea></td>
-                <td><select class="rule-space-select">${spaceOptions}</select></td>
+                <td><input type="text" class="rule-member-join-input" value="${
+                    rule.member_join_property || ""
+                }" placeholder="예: BIM원본.참조 레벨"></td>
+                <td><input type="text" class="rule-space-join-input" value="${
+                    rule.space_join_property || ""
+                }" placeholder="예: Name 또는 BIM원본.Name"></td>
                 <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
             </tr>`;
         }
         return `<tr data-rule-id="${rule.id}">
             <td>${rule.priority}</td>
             <td>${rule.name}</td>
-            <td><pre>${JSON.stringify(rule.conditions, null, 2)}</pre></td>
-            <td>${rule.target_space_name}</td>
+            <td><pre>${JSON.stringify(
+                rule.member_filter_conditions,
+                null,
+                2
+            )}</pre></td>
+            <td><code>${rule.member_join_property}</code></td>
+            <td><code>${rule.space_join_property}</code></td>
             <td><button class="edit-rule-btn">수정</button> <button class="delete-rule-btn">삭제</button></td>
         </tr>`;
     };
@@ -2408,16 +2414,8 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
     });
     if (editId === "new") tableHtml += renderRow({ id: "new" });
     if (rules.length === 0 && editId !== "new")
-        tableHtml += '<tr><td colspan="5">정의된 규칙이 없습니다.</td></tr>';
+        tableHtml += '<tr><td colspan="6">정의된 규칙이 없습니다.</td></tr>';
 
     tableHtml += "</tbody></table>";
     container.innerHTML = tableHtml;
-
-    if (editId && editId !== "new") {
-        const rule = rules.find((r) => r.id === editId);
-        if (rule)
-            container.querySelector(
-                `tr[data-rule-id="${rule.id}"] .rule-space-select`
-            ).value = rule.target_space_id;
-    }
 }

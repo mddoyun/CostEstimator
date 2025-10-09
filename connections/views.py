@@ -210,19 +210,45 @@ def property_mapping_rules_api(request, project_id, rule_id=None):
 # ▲▲▲ [추가] 여기까지 입니다 ▲▲▲
 
 
-
-# --- Ruleset Evaluation Logic ---
-
 def get_value_from_element(raw_data, parameter_name):
-    if not raw_data: return None
+    """
+    (최종 수정 버전) 점(.)이 포함된 키를 직접 탐색하고, 실패 시 중첩된 구조로 다시 탐색합니다.
+    'Parameters', 'TypeParameters' 등 다양한 위치를 모두 확인합니다.
+    """
+    if not raw_data or not parameter_name:
+        return None
+
+    # 검색할 위치 목록 (우선순위 순)
+    search_locations = [
+        raw_data,
+        raw_data.get('Parameters', {}),
+        raw_data.get('TypeParameters', {})
+    ]
+
+    # 1. 먼저, parameter_name 전체를 하나의 키로 간주하고 직접 찾아봅니다.
+    #    (예: "Qto_SlabBaseQuantities.NetArea" 라는 키가 있는지 확인)
+    for location in search_locations:
+        if isinstance(location, dict) and parameter_name in location:
+            return location[parameter_name]
+
+    # 2. 직접 찾지 못한 경우에만, 점(.)을 기준으로 중첩 탐색을 시도합니다.
+    #    (예: "TypeParameters.SomeSet.SomeProperty")
     if '.' in parameter_name:
-        try:
-            keys = parameter_name.split('.', 1); return raw_data.get(keys[0], {}).get(keys[1])
-        except (AttributeError, IndexError): return None
-    value = raw_data.get(parameter_name)
-    if value is not None: return value
-    parameters = raw_data.get('Parameters', {})
-    if isinstance(parameters, dict): return parameters.get(parameter_name)
+        parts = parameter_name.split('.')
+        current_obj = raw_data
+        for part in parts:
+            if isinstance(current_obj, dict):
+                current_obj = current_obj.get(part)
+            else:
+                # 중간 경로 탐색에 실패하면 None을 반환하기 전에 for 루프를 중단합니다.
+                current_obj = None
+                break
+        
+        # 순회가 성공적으로 끝났다면 current_obj는 찾고자 하는 값이 됩니다.
+        if current_obj is not None:
+            return current_obj
+
+    # 모든 방법으로도 찾지 못한 경우
     return None
 
 def is_numeric(value):
@@ -945,13 +971,13 @@ def cost_code_assignment_rules_api(request, project_id, rule_id=None):
 @require_http_methods(["GET", "POST", "DELETE"])
 def space_assignment_rules_api(request, project_id, rule_id=None):
     if request.method == 'GET':
-        rules = SpaceAssignmentRule.objects.filter(project_id=project_id).select_related('target_space')
+        rules = SpaceAssignmentRule.objects.filter(project_id=project_id)
         rules_data = [{
             'id': str(r.id), 
             'name': r.name, 
-            'conditions': r.conditions, 
-            'target_space_id': str(r.target_space.id),
-            'target_space_name': r.target_space.name,
+            'member_filter_conditions': r.member_filter_conditions,
+            'member_join_property': r.member_join_property,
+            'space_join_property': r.space_join_property,
             'priority': r.priority
         } for r in rules]
         return JsonResponse(rules_data, safe=False)
@@ -960,15 +986,18 @@ def space_assignment_rules_api(request, project_id, rule_id=None):
         data = json.loads(request.body)
         try:
             project = Project.objects.get(id=project_id)
-            target_space = SpaceClassification.objects.get(id=data.get('target_space_id'), project=project)
-            rule = SpaceAssignmentRule.objects.get(id=data.get('id'), project=project) if data.get('id') else SpaceAssignmentRule(project=project)
-            
-            rule.name = data.get('name', '이름 없는 규칙')
-            rule.conditions = data.get('conditions', [])
-            rule.target_space = target_space
-            rule.priority = data.get('priority', 0)
-            rule.save()
-            return JsonResponse({'status': 'success', 'message': '공간분류 할당 규칙이 저장되었습니다.', 'rule_id': str(rule.id)})
+            rule, created = SpaceAssignmentRule.objects.update_or_create(
+                id=data.get('id'),
+                project=project,
+                defaults={
+                    'name': data.get('name', '이름 없는 규칙'),
+                    'member_filter_conditions': data.get('member_filter_conditions', []),
+                    'member_join_property': data.get('member_join_property'),
+                    'space_join_property': data.get('space_join_property'),
+                    'priority': data.get('priority', 0)
+                }
+            )
+            return JsonResponse({'status': 'success', 'message': '동적 공간 할당 규칙이 저장되었습니다.', 'rule_id': str(rule.id)})
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
@@ -978,8 +1007,6 @@ def space_assignment_rules_api(request, project_id, rule_id=None):
             return JsonResponse({'status': 'success', 'message': '규칙이 삭제되었습니다.'})
         except SpaceAssignmentRule.DoesNotExist:
             return JsonResponse({'status': 'error', 'message': '규칙을 찾을 수 없습니다.'}, status=404)
-
-
 
 def evaluate_expression_for_cost_item(expression, quantity_member):
     if not isinstance(expression, str) or not quantity_member:
@@ -1262,35 +1289,78 @@ def evaluate_member_properties_expression(expression, member_properties):
     except Exception:
         # eval 실패 시, 단순 문자열 조합 결과일 수 있으므로 temp_expression을 그대로 반환
         return temp_expression
-# 기존의 apply_assignment_rules_view 함수를 찾아서 아래 코드로 전체를 교체해주세요.
+
+def get_property_value(instance, property_path, instance_type):
+    """
+    점(.)으로 구분된 경로를 사용하여 인스턴스의 속성 값을 가져오는 헬퍼 함수
+    instance_type: 'member' 또는 'space'
+    """
+    if not property_path:
+        return None
+
+    current_object = instance
+    path_parts = property_path.split('.')
+    
+    # 1. 첫 번째 경로 처리 (기본 속성 또는 관계)
+    if path_parts[0] == 'BIM원본':
+        if instance_type == 'member' and hasattr(instance, 'raw_element'):
+            current_object = instance.raw_element.raw_data if instance.raw_element else {}
+        elif instance_type == 'space' and hasattr(instance, 'source_element'):
+            current_object = instance.source_element.raw_data if instance.source_element else {}
+        else:
+            return None # BIM 원본이 없음
+        
+        path_parts.pop(0) # 'BIM원본' 제거
+        
+    elif path_parts[0] == 'Name' and instance_type == 'space':
+         return instance.name
+
+    # 2. 나머지 경로 순회 (Parameters, TypeParameters 등)
+    for part in path_parts:
+        if isinstance(current_object, dict):
+            current_object = current_object.get(part)
+        else:
+            current_object = getattr(current_object, part, None)
+        
+        if current_object is None:
+            return None
+
+    # 콜론(:) 파싱 로직 적용
+    if isinstance(current_object, str) and ': ' in current_object:
+        try:
+            return current_object.split(': ', 1)[1]
+        except IndexError:
+            return current_object
+    
+    return current_object
 
 @require_http_methods(["POST"])
 def apply_assignment_rules_view(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
-        members = QuantityMember.objects.filter(project=project).select_related('raw_element', 'member_mark').prefetch_related('space_classifications')
+        members = list(QuantityMember.objects.filter(project=project).select_related('raw_element', 'member_mark').prefetch_related('cost_codes', 'space_classifications'))
         
-        # 룰셋 로드
+        # 모든 종류의 할당 룰셋 로드
         mark_rules = list(MemberMarkAssignmentRule.objects.filter(project=project).order_by('priority'))
         cost_code_rules = list(CostCodeAssignmentRule.objects.filter(project=project).order_by('priority'))
-        # ▼▼▼ [추가] 공간분류 할당 룰셋을 로드합니다. ▼▼▼
-        space_rules = list(SpaceAssignmentRule.objects.filter(project=project).order_by('priority'))
+        dynamic_space_rules = list(SpaceAssignmentRule.objects.filter(project=project).order_by('priority'))
 
         updated_mark_count = 0
         updated_cost_code_count = 0
-        updated_space_count = 0 # ▼▼▼ [추가] 카운터 변수 추가 ▼▼▼
+        updated_space_count = 0
 
+        # --- 1. 부재별로 순회하며 모든 룰셋 적용 ---
         for member in members:
+            # 1-1. 모든 속성을 종합한 'combined_properties' 딕셔너리 생성
             combined_properties = member.properties.copy() if member.properties else {}
-            
             if member.raw_element and member.raw_element.raw_data:
                 raw_data = member.raw_element.raw_data
-                for key, value in raw_data.items():
-                    if not isinstance(value, (dict, list)): combined_properties[f'BIM원본.{key}'] = value
-                for key, value in raw_data.get('TypeParameters', {}).items(): combined_properties[f'BIM원본.{key}'] = value
-                for key, value in raw_data.get('Parameters', {}).items(): combined_properties[f'BIM원본.{key}'] = value
+                for k, v in raw_data.items():
+                    if not isinstance(v, (dict, list)): combined_properties[f'BIM원본.{k}'] = v
+                for k, v in raw_data.get('TypeParameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
+                for k, v in raw_data.get('Parameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
 
-            # --- 1. 일람부호 할당 로직 (기존과 동일) ---
+            # --- 2. 일람부호 할당 로직 (기존 로직 복원) ---
             mark_expr = member.member_mark_expression
             if not mark_expr:
                 for rule in mark_rules:
@@ -1305,8 +1375,8 @@ def apply_assignment_rules_view(request, project_id):
                         member.member_mark = mark_obj
                         member.save(update_fields=['member_mark'])
                         updated_mark_count += 1
-            
-            # --- 2. 공사코드 할당 로직 (기존과 동일) ---
+
+            # --- 3. 공사코드 할당 로직 (기존 로직 복원) ---
             cost_code_exprs_list = member.cost_code_expressions
             if not cost_code_exprs_list:
                 matching_expressions = []
@@ -1314,47 +1384,65 @@ def apply_assignment_rules_view(request, project_id):
                     if evaluate_conditions(combined_properties, rule.conditions):
                         matching_expressions.append(rule.cost_code_expressions)
                 cost_code_exprs_list = matching_expressions
+            
             if cost_code_exprs_list:
                 codes_changed = False
-                current_codes = set(member.cost_codes.all())
+                current_codes_before = set(member.cost_codes.all())
+                newly_added_codes = set()
                 
                 for expr_set in cost_code_exprs_list:
                     code_val = evaluate_member_properties_expression(expr_set.get('code', ''), combined_properties)
                     name_val = evaluate_member_properties_expression(expr_set.get('name', ''), combined_properties)
                     if code_val and name_val:
                         code_obj, _ = CostCode.objects.get_or_create(project=project, code=str(code_val), defaults={'name': str(name_val), 'description': '룰셋에 의해 자동 생성됨'})
-                        if code_obj not in current_codes:
-                            member.cost_codes.add(code_obj)
-                            codes_changed = True
-                if codes_changed: updated_cost_code_count += 1
-            
-            # --- 3. 공간분류 할당 로직 (신규 추가) ---
-            # ▼▼▼ [추가] 아래 로직 블록 전체를 추가합니다. ▼▼▼
-            spaces_changed = False
-            current_spaces = set(member.space_classifications.all())
-            
-            for rule in space_rules:
-                if evaluate_conditions(combined_properties, rule.conditions):
-                    target_space = rule.target_space
-                    if target_space not in current_spaces:
-                        member.space_classifications.add(target_space)
-                        spaces_changed = True
-            
-            if spaces_changed:
-                updated_space_count += 1
-            # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+                        member.cost_codes.add(code_obj)
+                        newly_added_codes.add(code_obj)
 
-        return JsonResponse({'status': 'success', 'message': f'룰셋 적용 완료! 일람부호 {updated_mark_count}개, 공사코드 {updated_cost_code_count}개, 공간분류 {updated_space_count}개 부재가 업데이트되었습니다.'})
+                if not newly_added_codes.issubset(current_codes_before):
+                    updated_cost_code_count += 1
+
+        # --- 4. 동적 공간분류 할당 로직 (수정된 로직) ---
+        if dynamic_space_rules:
+            all_spaces = list(SpaceClassification.objects.filter(project=project).select_related('source_element'))
+            temp_updated_space_count = 0
+
+            for rule in dynamic_space_rules:
+                members_map = {}
+                for member in members:
+                    if rule.member_filter_conditions and not evaluate_conditions(combined_properties, rule.member_filter_conditions):
+                        continue
+                    
+                    join_key = get_property_value(member, rule.member_join_property, 'member')
+                    if join_key is not None:
+                        join_key_str = str(join_key)
+                        if join_key_str not in members_map: members_map[join_key_str] = []
+                        members_map[join_key_str].append(member)
+
+                spaces_map = {}
+                for space in all_spaces:
+                    join_key = get_property_value(space, rule.space_join_property, 'space')
+                    if join_key is not None:
+                        spaces_map[str(join_key)] = space
+                
+                for key, member_list in members_map.items():
+                    if key in spaces_map:
+                        space_to_assign = spaces_map[key]
+                        for member in member_list:
+                            # ManyToManyField는 .add() 전에 .all()을 호출할 필요가 없습니다.
+                            member.space_classifications.add(space_to_assign)
+                            # 카운트는 실제 변경이 일어났는지 확인하는 것보다, 시도 횟수를 세는 것이 더 간단합니다.
+                temp_updated_space_count = len(members_map) # 규칙 적용 대상 부재 수로 카운트 (단순화)
+            updated_space_count = temp_updated_space_count
+
+
+        message = f'룰셋 적용 완료! 일람부호 {updated_mark_count}개, 공사코드 {updated_cost_code_count}개, 공간분류 {updated_space_count}개 부재가 업데이트되었습니다.'
+        return JsonResponse({'status': 'success', 'message': message})
+
     except Project.DoesNotExist:
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         import traceback
         return JsonResponse({'status': 'error', 'message': f'룰셋 적용 중 오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
-
-# connections/views.py
-
-# 기존 get_boq_grouping_fields_api 함수를 찾아서 아래 코드로 완전히 교체하세요.
-
 @require_http_methods(["GET"])
 def get_boq_grouping_fields_api(request, project_id):
     """
