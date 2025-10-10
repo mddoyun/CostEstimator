@@ -2360,11 +2360,9 @@ def export_space_classifications(request, project_id):
             mapped_elements_uids
         ])
     return response
-
-
 @require_http_methods(["POST"])
 def import_space_classifications(request, project_id):
-    """CSV 파일을 읽어 공간분류를 생성하거나 업데이트합니다."""
+    """(수정된 버전) CSV 파일을 읽어 새로운 ID를 부여하며 공간분류를 생성하고 관계를 설정합니다."""
     project = Project.objects.get(id=project_id)
     csv_file = request.FILES.get('csv_file')
     if not csv_file:
@@ -2373,67 +2371,61 @@ def import_space_classifications(request, project_id):
     try:
         decoded_file = csv_file.read().decode('utf-8').splitlines()
         reader = csv.DictReader(decoded_file)
-        
+        csv_data = list(reader)
+
         # 성능 향상을 위해 필요한 데이터를 미리 메모리에 로드
         raw_elements_map = {elem.element_unique_id: elem for elem in RawElement.objects.filter(project=project)}
         
-        csv_data = list(reader)
+        # CSV의 옛날 ID와 새로 생성된 Space 객체를 매핑할 딕셔너리
+        id_map = {}
         created_count = 0
-        updated_count = 0
 
-        # 1차 처리: 객체 생성 및 기본 정보 업데이트 (부모-자식 관계 제외)
-        processed_spaces = {}
+        # 1차 처리: CSV의 ID는 무시하고, 새로운 ID로 객체를 생성합니다. (부모 관계는 아직 설정 안 함)
         for row in csv_data:
-            space_id = row.get('id')
+            old_id = row.get('id')
+            if not old_id: continue
+
             source_element_uid = row.get('source_element_unique_id')
             source_element = raw_elements_map.get(source_element_uid)
 
-            defaults = {
-                'name': row.get('name'),
-                'description': row.get('description', ''),
-                'source_element': source_element,
-            }
-
-            # update_or_create 사용: ID가 있으면 업데이트, 없으면 생성
-            space, created = SpaceClassification.objects.update_or_create(
-                id=space_id,
+            new_space = SpaceClassification.objects.create(
                 project=project,
-                defaults=defaults
+                name=row.get('name'),
+                description=row.get('description', ''),
+                source_element=source_element
             )
-            
-            if created:
-                created_count += 1
-            else:
-                updated_count += 1
-            
-            processed_spaces[str(space.id)] = space
+            created_count += 1
+            id_map[old_id] = new_space # 옛날 ID를 키로, 새로 생성된 객체를 값으로 저장
 
-        # 2차 처리: 부모-자식 관계 및 M2M 관계 설정
+        # 2차 처리: 생성된 객체들을 기반으로 부모-자식 관계 및 M2M 관계를 설정합니다.
         for row in csv_data:
-            space_id = row.get('id')
-            space = processed_spaces.get(space_id)
-            if not space: continue
+            old_id = row.get('id')
+            old_parent_id = row.get('parent_id')
+            
+            # id_map에서 새로 생성된 현재 객체와 부모 객체를 찾습니다.
+            current_space = id_map.get(old_id)
+            parent_space = id_map.get(old_parent_id) if old_parent_id else None
+
+            if not current_space: continue
 
             # 부모 관계 설정
-            parent_id = row.get('parent_id')
-            if parent_id:
-                parent_space = processed_spaces.get(parent_id)
-                if parent_space and space.parent != parent_space:
-                    space.parent = parent_space
-                    space.save(update_fields=['parent'])
+            if parent_space and current_space.parent != parent_space:
+                current_space.parent = parent_space
+                current_space.save(update_fields=['parent'])
 
             # Mapped Elements (M2M) 관계 설정
             mapped_uids_str = row.get('mapped_elements_unique_ids', '')
             if mapped_uids_str:
                 mapped_uids = mapped_uids_str.split('|')
                 elements_to_map = [raw_elements_map[uid] for uid in mapped_uids if uid in raw_elements_map]
-                space.mapped_elements.set(elements_to_map)
+                current_space.mapped_elements.set(elements_to_map)
             else:
-                space.mapped_elements.clear()
+                current_space.mapped_elements.clear()
 
         return JsonResponse({
             'status': 'success', 
-            'message': f'공간분류 가져오기 완료: {created_count}개 생성, {updated_count}개 업데이트'
+            'message': f'공간분류 가져오기 완료: {created_count}개 생성'
         })
     except Exception as e:
-        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+        import traceback
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}', 'details': traceback.format_exc()}, status=400)
