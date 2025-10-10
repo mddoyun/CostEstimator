@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    
     path('export-tags/<uuid:project_id>/', views.export_tags, name='export_tags'),
     path('import-tags/<uuid:project_id>/', views.import_tags, name='import_tags'),
     # --- 기본 프로젝트 및 태그 관리 ---
@@ -64,5 +65,25 @@ urlpatterns = [
     path('api/space-classifications/apply-rules/<uuid:project_id>/', views.apply_space_classification_rules_view, name='apply_space_classification_rules'),
     path('api/rules/space-assignment/<uuid:project_id>/', views.space_assignment_rules_api, name='space_assignment_rules_api'),
     path('api/rules/space-assignment/<uuid:project_id>/<uuid:rule_id>/', views.space_assignment_rules_api, name='space_assignment_rule_detail_api'),
+    path('api/rules/classification/<uuid:project_id>/export/', views.export_classification_rules, name='export_classification_rules'),
+    path('api/rules/classification/<uuid:project_id>/import/', views.import_classification_rules, name='import_classification_rules'),
 
+    path('api/rules/property-mapping/<uuid:project_id>/export/', views.export_property_mapping_rules, name='export_property_mapping_rules'),
+    path('api/rules/property-mapping/<uuid:project_id>/import/', views.import_property_mapping_rules, name='import_property_mapping_rules'),
+
+    path('api/rules/cost-code/<uuid:project_id>/export/', views.export_cost_code_rules, name='export_cost_code_rules'),
+    path('api/rules/cost-code/<uuid:project_id>/import/', views.import_cost_code_rules, name='import_cost_code_rules'),
+
+    path('api/rules/member-mark-assignment/<uuid:project_id>/export/', views.export_member_mark_assignment_rules, name='export_member_mark_assignment_rules'),
+    path('api/rules/member-mark-assignment/<uuid:project_id>/import/', views.import_member_mark_assignment_rules, name='import_member_mark_assignment_rules'),
+
+    path('api/rules/cost-code-assignment/<uuid:project_id>/export/', views.export_cost_code_assignment_rules, name='export_cost_code_assignment_rules'),
+    path('api/rules/cost-code-assignment/<uuid:project_id>/import/', views.import_cost_code_assignment_rules, name='import_cost_code_assignment_rules'),
+    
+    path('api/rules/space-classification/<uuid:project_id>/export/', views.export_space_classification_rules, name='export_space_classification_rules'),
+    path('api/rules/space-classification/<uuid:project_id>/import/', views.import_space_classification_rules, name='import_space_classification_rules'),
+
+    path('api/rules/space-assignment/<uuid:project_id>/export/', views.export_space_assignment_rules, name='export_space_assignment_rules'),
+    path('api/rules/space-assignment/<uuid:project_id>/import/', views.import_space_assignment_rules, name='import_space_assignment_rules'),
+   
 ]

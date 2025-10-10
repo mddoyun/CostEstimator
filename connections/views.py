@@ -1977,4 +1977,258 @@ def apply_space_classification_rules_view(request, project_id):
         import traceback
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
 
-# ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
+# --- 1. ClassificationRule ---
+@require_http_methods(["GET"])
+def export_classification_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = ClassificationRule.objects.filter(project=project).select_related('target_tag')
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_classification_rules.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['priority', 'description', 'target_tag_name', 'conditions'])
+    for rule in rules:
+        writer.writerow([
+            rule.priority,
+            rule.description,
+            rule.target_tag.name if rule.target_tag else '',
+            json.dumps(rule.conditions)
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_classification_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+
+    try:
+        ClassificationRule.objects.filter(project=project).delete()
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        for row in reader:
+            tag_name = row.get('target_tag_name')
+            try:
+                target_tag = QuantityClassificationTag.objects.get(project=project, name=tag_name)
+                ClassificationRule.objects.create(
+                    project=project,
+                    priority=int(row.get('priority', 0)),
+                    description=row.get('description', ''),
+                    target_tag=target_tag,
+                    conditions=json.loads(row.get('conditions', '[]'))
+                )
+            except QuantityClassificationTag.DoesNotExist:
+                print(f"경고: '{tag_name}' 태그를 찾을 수 없어 해당 규칙을 건너뜁니다.")
+                continue
+        return JsonResponse({'status': 'success', 'message': '분류 할당 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 2. PropertyMappingRule ---
+@require_http_methods(["GET"])
+def export_property_mapping_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = PropertyMappingRule.objects.filter(project=project).select_related('target_tag')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_property_mapping_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'description', 'priority', 'target_tag_name', 'conditions', 'mapping_script'])
+    for rule in rules:
+        writer.writerow([
+            rule.name, rule.description, rule.priority,
+            rule.target_tag.name if rule.target_tag else '',
+            json.dumps(rule.conditions), json.dumps(rule.mapping_script)
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_property_mapping_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        PropertyMappingRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            try:
+                target_tag = QuantityClassificationTag.objects.get(project=project, name=row.get('target_tag_name'))
+                PropertyMappingRule.objects.create(
+                    project=project, name=row.get('name'), description=row.get('description', ''),
+                    priority=int(row.get('priority', 0)), target_tag=target_tag,
+                    conditions=json.loads(row.get('conditions', '[]')),
+                    mapping_script=json.loads(row.get('mapping_script', '{}'))
+                )
+            except QuantityClassificationTag.DoesNotExist: continue
+        return JsonResponse({'status': 'success', 'message': '속성 맵핑 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 3. CostCodeRule ---
+@require_http_methods(["GET"])
+def export_cost_code_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = CostCodeRule.objects.filter(project=project).select_related('target_cost_code')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_cost_code_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'description', 'priority', 'target_cost_code_code', 'conditions', 'quantity_mapping_script'])
+    for rule in rules:
+        writer.writerow([
+            rule.name, rule.description, rule.priority,
+            rule.target_cost_code.code if rule.target_cost_code else '',
+            json.dumps(rule.conditions), json.dumps(rule.quantity_mapping_script)
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_cost_code_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        CostCodeRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            try:
+                target_cost_code = CostCode.objects.get(project=project, code=row.get('target_cost_code_code'))
+                CostCodeRule.objects.create(
+                    project=project, name=row.get('name'), description=row.get('description', ''),
+                    priority=int(row.get('priority', 0)), target_cost_code=target_cost_code,
+                    conditions=json.loads(row.get('conditions', '[]')),
+                    quantity_mapping_script=json.loads(row.get('quantity_mapping_script', '{}'))
+                )
+            except CostCode.DoesNotExist: continue
+        return JsonResponse({'status': 'success', 'message': '공사코드 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 4. MemberMarkAssignmentRule ---
+@require_http_methods(["GET"])
+def export_member_mark_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = MemberMarkAssignmentRule.objects.filter(project=project)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_member_mark_assignment_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'priority', 'conditions', 'mark_expression'])
+    for rule in rules:
+        writer.writerow([rule.name, rule.priority, json.dumps(rule.conditions), rule.mark_expression])
+    return response
+
+@require_http_methods(["POST"])
+def import_member_mark_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        MemberMarkAssignmentRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            MemberMarkAssignmentRule.objects.create(
+                project=project, name=row.get('name'), priority=int(row.get('priority', 0)),
+                conditions=json.loads(row.get('conditions', '[]')),
+                mark_expression=row.get('mark_expression', '')
+            )
+        return JsonResponse({'status': 'success', 'message': '일람부호 할당 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 5. CostCodeAssignmentRule ---
+@require_http_methods(["GET"])
+def export_cost_code_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = CostCodeAssignmentRule.objects.filter(project=project)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_cost_code_assignment_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'priority', 'conditions', 'cost_code_expressions'])
+    for rule in rules:
+        writer.writerow([rule.name, rule.priority, json.dumps(rule.conditions), json.dumps(rule.cost_code_expressions)])
+    return response
+
+@require_http_methods(["POST"])
+def import_cost_code_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        CostCodeAssignmentRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            CostCodeAssignmentRule.objects.create(
+                project=project, name=row.get('name'), priority=int(row.get('priority', 0)),
+                conditions=json.loads(row.get('conditions', '[]')),
+                cost_code_expressions=json.loads(row.get('cost_code_expressions', '{}'))
+            )
+        return JsonResponse({'status': 'success', 'message': '공사코드 할당 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 6. SpaceClassificationRule ---
+@require_http_methods(["GET"])
+def export_space_classification_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = SpaceClassificationRule.objects.filter(project=project)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_space_classification_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['level_depth', 'level_name', 'bim_object_filter', 'name_source_param', 'parent_join_param', 'child_join_param'])
+    for rule in rules:
+        writer.writerow([
+            rule.level_depth, rule.level_name, json.dumps(rule.bim_object_filter),
+            rule.name_source_param, rule.parent_join_param, rule.child_join_param
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_space_classification_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        SpaceClassificationRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            SpaceClassificationRule.objects.create(
+                project=project, level_depth=int(row.get('level_depth')), level_name=row.get('level_name'),
+                bim_object_filter=json.loads(row.get('bim_object_filter', '{}')),
+                name_source_param=row.get('name_source_param'),
+                parent_join_param=row.get('parent_join_param', ''),
+                child_join_param=row.get('child_join_param', '')
+            )
+        return JsonResponse({'status': 'success', 'message': '공간분류 생성 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- 7. SpaceAssignmentRule ---
+@require_http_methods(["GET"])
+def export_space_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    rules = SpaceAssignmentRule.objects.filter(project=project)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_space_assignment_rules.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'priority', 'member_filter_conditions', 'member_join_property', 'space_join_property'])
+    for rule in rules:
+        writer.writerow([
+            rule.name, rule.priority, json.dumps(rule.member_filter_conditions),
+            rule.member_join_property, rule.space_join_property
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_space_assignment_rules(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file: return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+    try:
+        SpaceAssignmentRule.objects.filter(project=project).delete()
+        reader = csv.DictReader(csv_file.read().decode('utf-8').splitlines())
+        for row in reader:
+            SpaceAssignmentRule.objects.create(
+                project=project, name=row.get('name'), priority=int(row.get('priority', 0)),
+                member_filter_conditions=json.loads(row.get('member_filter_conditions', '[]')),
+                member_join_property=row.get('member_join_property'),
+                space_join_property=row.get('space_join_property')
+            )
+        return JsonResponse({'status': 'success', 'message': '공간분류 할당 룰셋을 성공적으로 가져왔습니다.'})
+    except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)

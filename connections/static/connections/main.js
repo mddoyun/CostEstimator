@@ -28,6 +28,8 @@ let loadedCostCodeAssignmentRules = [];
 let loadedSpaceClassificationRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
 let loadedSpaceAssignmentRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
 
+let currentCsvImportUrl = null; // <<< [추가] 현재 진행 중인 CSV 가져오기 URL을 저장할 변수
+
 let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
 let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
 let spaceMappingState = { active: false, spaceId: null, spaceName: "" }; // 공간 맵핑 모드 상태
@@ -556,6 +558,83 @@ document.addEventListener("DOMContentLoaded", () => {
     document
         .getElementById("space-assignment-ruleset-table-container")
         ?.addEventListener("click", handleSpaceAssignmentRuleActions);
+
+    // ▼▼▼ [추가] 룰셋 CSV 가져오기/내보내기 버튼 이벤트 리스너 ▼▼▼
+    const csvFileInput = document.getElementById("csv-file-input");
+    if (csvFileInput) {
+        csvFileInput.addEventListener("change", handleCsvFileSelect);
+    }
+
+    // 이벤트 핸들러 맵
+    const rulesetActions = {
+        "classification-rules": {
+            importBtn: "import-classification-rules-btn",
+            exportBtn: "export-classification-rules-btn",
+            path: "classification",
+            loadFunc: loadClassificationRules,
+        },
+        "mapping-rules": {
+            importBtn: "import-mapping-rules-btn",
+            exportBtn: "export-mapping-rules-btn",
+            path: "property-mapping",
+            loadFunc: loadPropertyMappingRules,
+        },
+        "costcode-rules": {
+            importBtn: "import-costcode-rules-btn",
+            exportBtn: "export-costcode-rules-btn",
+            path: "cost-code",
+            loadFunc: loadCostCodeRules,
+        },
+        "member-mark-assignment-rules": {
+            importBtn: "import-member-mark-assignment-rules-btn",
+            exportBtn: "export-member-mark-assignment-rules-btn",
+            path: "member-mark-assignment",
+            loadFunc: loadMemberMarkAssignmentRules,
+        },
+        "cost-code-assignment-rules": {
+            importBtn: "import-cost-code-assignment-rules-btn",
+            exportBtn: "export-cost-code-assignment-rules-btn",
+            path: "cost-code-assignment",
+            loadFunc: loadCostCodeAssignmentRules,
+        },
+        "space-classification-rules": {
+            importBtn: "import-space-classification-rules-btn",
+            exportBtn: "export-space-classification-rules-btn",
+            path: "space-classification",
+            loadFunc: loadSpaceClassificationRules,
+        },
+        "space-assignment-rules": {
+            importBtn: "import-space-assignment-rules-btn",
+            exportBtn: "export-space-assignment-rules-btn",
+            path: "space-assignment",
+            loadFunc: loadSpaceAssignmentRules,
+        },
+    };
+
+    // 맵을 순회하며 이벤트 리스너 동적 할당
+    for (const key in rulesetActions) {
+        const action = rulesetActions[key];
+        const importBtn = document.getElementById(action.importBtn);
+        const exportBtn = document.getElementById(action.exportBtn);
+
+        if (importBtn) {
+            importBtn.addEventListener("click", () => {
+                currentCsvImportUrl = `/connections/api/rules/${action.path}/${currentProjectId}/import/`;
+                csvFileInput.click();
+            });
+        }
+
+        if (exportBtn) {
+            exportBtn.addEventListener("click", () => {
+                if (!currentProjectId) {
+                    showToast("먼저 프로젝트를 선택하세요.", "error");
+                    return;
+                }
+                window.location.href = `/connections/api/rules/${action.path}/${currentProjectId}/export/`;
+            });
+        }
+    }
+    // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
 });
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
@@ -5051,3 +5130,60 @@ async function handleSpaceAssignmentRuleActions(event) {
         }
     }
 }
+
+// ▼▼▼ [추가] CSV 파일이 선택되었을 때 서버로 전송하는 함수 ▼▼▼
+async function handleCsvFileSelect(event) {
+    if (!currentProjectId || !currentCsvImportUrl) {
+        showToast("프로젝트가 선택되지 않았거나, 잘못된 접근입니다.", "error");
+        return;
+    }
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("csv_file", file);
+
+    try {
+        const response = await fetch(currentCsvImportUrl, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrftoken },
+            body: formData,
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.message || "파일 업로드에 실패했습니다.");
+        }
+        showToast(result.message, "success");
+
+        // 어떤 룰셋이든 성공적으로 가져온 후, 해당 룰셋 목록을 다시 로드
+        if (activeTab === "ruleset-management") {
+            const activeRulesetContent = document.querySelector(
+                ".ruleset-content.active"
+            );
+            if (activeRulesetContent) {
+                const rulesetId = activeRulesetContent.id;
+                if (rulesetId === "classification-ruleset")
+                    await loadClassificationRules();
+                else if (rulesetId === "mapping-ruleset")
+                    await loadPropertyMappingRules();
+                else if (rulesetId === "costcode-ruleset")
+                    await loadCostCodeRules();
+                else if (rulesetId === "member-mark-assignment-ruleset")
+                    await loadMemberMarkAssignmentRules();
+                else if (rulesetId === "cost-code-assignment-ruleset")
+                    await loadCostCodeAssignmentRules();
+                else if (rulesetId === "space-classification-ruleset")
+                    await loadSpaceClassificationRules();
+                else if (rulesetId === "space-assignment-ruleset")
+                    await loadSpaceAssignmentRules();
+            }
+        }
+    } catch (error) {
+        showToast(error.message, "error");
+    } finally {
+        // 작업 완료 후, 파일 입력과 URL 변수 초기화
+        event.target.value = "";
+        currentCsvImportUrl = null;
+    }
+}
+// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲

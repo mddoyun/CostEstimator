@@ -11,6 +11,12 @@
     </head>
     <body>
         <div id="toast-container"></div>
+        <input
+            type="file"
+            id="csv-file-input"
+            accept=".csv"
+            style="display: none"
+        />
 
         <div class="app-container">
             <header class="app-header">
@@ -292,7 +298,7 @@
                                             type="file"
                                             id="tag-file-input"
                                             style="display: none"
-                                            accept=".qctags"
+                                            accept=".csv"
                                         />
                                     </div>
                                 </div>
@@ -510,6 +516,16 @@
                                     <h2>분류 할당 룰셋 관리</h2>
                                     <div class="ruleset-actions">
                                         <button
+                                            id="import-classification-rules-btn"
+                                        >
+                                            가져오기
+                                        </button>
+                                        <button
+                                            id="export-classification-rules-btn"
+                                        >
+                                            내보내기
+                                        </button>
+                                        <button
                                             id="add-classification-rule-btn"
                                         >
                                             새 규칙 추가
@@ -526,6 +542,12 @@
                                 <div class="ruleset-header">
                                     <h2>속성 맵핑 룰셋 관리</h2>
                                     <div class="ruleset-actions">
+                                        <button id="import-mapping-rules-btn">
+                                            가져오기
+                                        </button>
+                                        <button id="export-mapping-rules-btn">
+                                            내보내기
+                                        </button>
                                         <button id="add-mapping-rule-btn">
                                             새 규칙 추가
                                         </button>
@@ -545,6 +567,12 @@
                                 <div class="ruleset-header">
                                     <h2>공사코드 룰셋 관리</h2>
                                     <div class="ruleset-actions">
+                                        <button id="import-costcode-rules-btn">
+                                            가져오기
+                                        </button>
+                                        <button id="export-costcode-rules-btn">
+                                            내보내기
+                                        </button>
                                         <button id="add-costcode-rule-btn">
                                             새 규칙 추가
                                         </button>
@@ -567,6 +595,16 @@
                                 <div class="ruleset-header">
                                     <h2>일람부호 할당 룰셋 관리</h2>
                                     <div class="ruleset-actions">
+                                        <button
+                                            id="import-member-mark-assignment-rules-btn"
+                                        >
+                                            가져오기
+                                        </button>
+                                        <button
+                                            id="export-member-mark-assignment-rules-btn"
+                                        >
+                                            내보내기
+                                        </button>
                                         <button
                                             id="add-member-mark-assignment-rule-btn"
                                         >
@@ -592,6 +630,16 @@
                                     <h2>공사코드 할당 룰셋 관리</h2>
                                     <div class="ruleset-actions">
                                         <button
+                                            id="import-cost-code-assignment-rules-btn"
+                                        >
+                                            가져오기
+                                        </button>
+                                        <button
+                                            id="export-cost-code-assignment-rules-btn"
+                                        >
+                                            내보내기
+                                        </button>
+                                        <button
                                             id="add-cost-code-assignment-rule-btn"
                                         >
                                             새 규칙 추가
@@ -616,6 +664,16 @@
                                     <h2>공간분류 생성 룰셋 관리</h2>
                                     <div class="ruleset-actions">
                                         <button
+                                            id="import-space-classification-rules-btn"
+                                        >
+                                            가져오기
+                                        </button>
+                                        <button
+                                            id="export-space-classification-rules-btn"
+                                        >
+                                            내보내기
+                                        </button>
+                                        <button
                                             id="add-space-classification-rule-btn"
                                         >
                                             새 규칙(위계) 추가
@@ -639,6 +697,16 @@
                                 <div class="ruleset-header">
                                     <h2>공간분류 할당 룰셋 관리</h2>
                                     <div class="ruleset-actions">
+                                        <button
+                                            id="import-space-assignment-rules-btn"
+                                        >
+                                            가져오기
+                                        </button>
+                                        <button
+                                            id="export-space-assignment-rules-btn"
+                                        >
+                                            내보내기
+                                        </button>
                                         <button
                                             id="add-space-assignment-rule-btn"
                                         >
