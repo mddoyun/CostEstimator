@@ -2,6 +2,8 @@
 from django.urls import path
 from . import views
 
+
+
 urlpatterns = [
     
     path('export-tags/<uuid:project_id>/', views.export_tags, name='export_tags'),
@@ -33,9 +35,15 @@ urlpatterns = [
     # --- 데이터 관리 API ---
     path('api/cost-codes/<uuid:project_id>/', views.cost_codes_api, name='cost_codes_api'),
     path('api/cost-codes/<uuid:project_id>/<uuid:code_id>/', views.cost_codes_api, name='cost_code_detail_api'),
-    
+    path('api/cost-codes/<uuid:project_id>/export/', views.export_cost_codes, name='export_cost_codes'),
+    path('api/cost-codes/<uuid:project_id>/import/', views.import_cost_codes, name='import_cost_codes'),
+   
     path('api/member-marks/<uuid:project_id>/', views.member_marks_api, name='member_marks_api'),
     path('api/member-marks/<uuid:project_id>/<uuid:mark_id>/', views.member_marks_api, name='member_mark_detail_api'),
+
+    path('api/member-marks/<uuid:project_id>/export/', views.export_member_marks, name='export_member_marks'),
+    path('api/member-marks/<uuid:project_id>/import/', views.import_member_marks, name='import_member_marks'),
+    
 
     path('api/quantity-members/<uuid:project_id>/', views.quantity_members_api, name='quantity_members_api'),
     path('api/quantity-members/<uuid:project_id>/<uuid:member_id>/', views.quantity_members_api, name='quantity_member_detail_api'),
@@ -59,6 +67,10 @@ urlpatterns = [
     # --- 공간분류 API ---
     path('api/space-classifications/<uuid:project_id>/', views.space_classifications_api, name='space_classifications_api'),
     path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/', views.space_classifications_api, name='space_classification_detail_api'),
+    path('api/space-classifications/<uuid:project_id>/export/', views.export_space_classifications, name='export_space_classifications'),
+    path('api/space-classifications/<uuid:project_id>/import/', views.import_space_classifications, name='import_space_classifications'),
+   
+    
     path('api/space-classifications/manage-elements/<uuid:project_id>/', views.manage_space_element_mapping_api, name='manage_space_element_mapping_api'),
 
     path('api/space-classifications/<uuid:project_id>/<uuid:sc_id>/elements/', views.get_space_mapped_elements_api, name='get_space_mapped_elements'),

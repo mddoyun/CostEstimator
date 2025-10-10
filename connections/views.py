@@ -61,7 +61,7 @@ def export_tags(request, project_id):
     project = Project.objects.get(id=project_id)
     tags = project.classification_tags.all().order_by('name')
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="{project.name}_tags.qctags"'
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_tags.csv"'
     writer = csv.writer(response)
     writer.writerow(['name', 'description'])
     for tag in tags:
@@ -2232,3 +2232,208 @@ def import_space_assignment_rules(request, project_id):
             )
         return JsonResponse({'status': 'success', 'message': '공간분류 할당 룰셋을 성공적으로 가져왔습니다.'})
     except Exception as e: return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+
+# --- CostCode (공사코드) ---
+@require_http_methods(["GET"])
+def export_cost_codes(request, project_id):
+    project = Project.objects.get(id=project_id)
+    codes = CostCode.objects.filter(project=project)
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_cost_codes.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['code', 'name', 'spec', 'unit', 'category', 'description'])
+    for code in codes:
+        writer.writerow([
+            code.code, code.name, code.spec, code.unit, code.category, code.description
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_cost_codes(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+
+    try:
+        # 기존 데이터를 모두 삭제 (덮어쓰기 방식)
+        CostCode.objects.filter(project=project).delete()
+        
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        codes_to_create = []
+        for row in reader:
+            codes_to_create.append(CostCode(
+                project=project,
+                code=row.get('code'),
+                name=row.get('name'),
+                spec=row.get('spec', ''),
+                unit=row.get('unit', ''),
+                category=row.get('category', ''),
+                description=row.get('description', '')
+            ))
+        
+        CostCode.objects.bulk_create(codes_to_create)
+        
+        return JsonResponse({'status': 'success', 'message': '공사코드 데이터를 성공적으로 가져왔습니다.'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# --- MemberMark (일람부호) ---
+@require_http_methods(["GET"])
+def export_member_marks(request, project_id):
+    project = Project.objects.get(id=project_id)
+    marks = MemberMark.objects.filter(project=project)
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_member_marks.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['mark', 'description', 'properties'])
+    for mark in marks:
+        writer.writerow([
+            mark.mark, mark.description, json.dumps(mark.properties, ensure_ascii=False)
+        ])
+    return response
+
+@require_http_methods(["POST"])
+def import_member_marks(request, project_id):
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+
+    try:
+        MemberMark.objects.filter(project=project).delete()
+        
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        marks_to_create = []
+        for row in reader:
+            try:
+                properties = json.loads(row.get('properties', '{}'))
+            except json.JSONDecodeError:
+                properties = {} # JSON 형식이 잘못되었을 경우 빈 객체로 처리
+
+            marks_to_create.append(MemberMark(
+                project=project,
+                mark=row.get('mark'),
+                description=row.get('description', ''),
+                properties=properties
+            ))
+            
+        MemberMark.objects.bulk_create(marks_to_create)
+        
+        return JsonResponse({'status': 'success', 'message': '일람부호 데이터를 성공적으로 가져왔습니다.'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+
+@require_http_methods(["GET"])
+def export_space_classifications(request, project_id):
+    """프로젝트의 모든 공간분류 데이터를 CSV로 내보냅니다."""
+    project = Project.objects.get(id=project_id)
+    spaces = SpaceClassification.objects.filter(project=project).select_related('source_element').prefetch_related('mapped_elements')
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{project.name}_space_classifications.csv"'
+    
+    writer = csv.writer(response)
+    # CSV 헤더: mapped_elements는 '|'로 구분된 UniqueID 목록으로 저장
+    writer.writerow(['id', 'name', 'description', 'parent_id', 'source_element_unique_id', 'mapped_elements_unique_ids'])
+    
+    for space in spaces:
+        source_element_uid = space.source_element.element_unique_id if space.source_element else ''
+        mapped_elements_uids = "|".join([elem.element_unique_id for elem in space.mapped_elements.all()])
+        
+        writer.writerow([
+            space.id,
+            space.name,
+            space.description,
+            space.parent_id if space.parent_id else '',
+            source_element_uid,
+            mapped_elements_uids
+        ])
+    return response
+
+
+@require_http_methods(["POST"])
+def import_space_classifications(request, project_id):
+    """CSV 파일을 읽어 공간분류를 생성하거나 업데이트합니다."""
+    project = Project.objects.get(id=project_id)
+    csv_file = request.FILES.get('csv_file')
+    if not csv_file:
+        return JsonResponse({'status': 'error', 'message': 'CSV 파일이 필요합니다.'}, status=400)
+
+    try:
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        # 성능 향상을 위해 필요한 데이터를 미리 메모리에 로드
+        raw_elements_map = {elem.element_unique_id: elem for elem in RawElement.objects.filter(project=project)}
+        
+        csv_data = list(reader)
+        created_count = 0
+        updated_count = 0
+
+        # 1차 처리: 객체 생성 및 기본 정보 업데이트 (부모-자식 관계 제외)
+        processed_spaces = {}
+        for row in csv_data:
+            space_id = row.get('id')
+            source_element_uid = row.get('source_element_unique_id')
+            source_element = raw_elements_map.get(source_element_uid)
+
+            defaults = {
+                'name': row.get('name'),
+                'description': row.get('description', ''),
+                'source_element': source_element,
+            }
+
+            # update_or_create 사용: ID가 있으면 업데이트, 없으면 생성
+            space, created = SpaceClassification.objects.update_or_create(
+                id=space_id,
+                project=project,
+                defaults=defaults
+            )
+            
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+            
+            processed_spaces[str(space.id)] = space
+
+        # 2차 처리: 부모-자식 관계 및 M2M 관계 설정
+        for row in csv_data:
+            space_id = row.get('id')
+            space = processed_spaces.get(space_id)
+            if not space: continue
+
+            # 부모 관계 설정
+            parent_id = row.get('parent_id')
+            if parent_id:
+                parent_space = processed_spaces.get(parent_id)
+                if parent_space and space.parent != parent_space:
+                    space.parent = parent_space
+                    space.save(update_fields=['parent'])
+
+            # Mapped Elements (M2M) 관계 설정
+            mapped_uids_str = row.get('mapped_elements_unique_ids', '')
+            if mapped_uids_str:
+                mapped_uids = mapped_uids_str.split('|')
+                elements_to_map = [raw_elements_map[uid] for uid in mapped_uids if uid in raw_elements_map]
+                space.mapped_elements.set(elements_to_map)
+            else:
+                space.mapped_elements.clear()
+
+        return JsonResponse({
+            'status': 'success', 
+            'message': f'공간분류 가져오기 완료: {created_count}개 생성, {updated_count}개 업데이트'
+        })
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)

@@ -634,8 +634,121 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
     }
-    // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+    const addCostCodeBtn = document.getElementById("add-cost-code-btn");
+    if (addCostCodeBtn) {
+        addCostCodeBtn.addEventListener("click", () => {
+            // 'new' 상태로 테이블을 다시 그려 새 코드 입력 행을 추가합니다.
+            renderCostCodesTable(loadedCostCodes, "new");
+        });
+    }
+
+    const addMemberMarkBtn = document.getElementById("add-member-mark-btn");
+    if (addMemberMarkBtn) {
+        addMemberMarkBtn.addEventListener("click", () => {
+            // 'new' 상태로 테이블을 다시 그려 새 일람부호 입력 행을 추가합니다.
+            renderMemberMarksTable(loadedMemberMarks, "new");
+        });
+    }
+    const costCodesTableContainer = document.getElementById(
+        "cost-codes-table-container"
+    );
+    if (costCodesTableContainer) {
+        costCodesTableContainer.addEventListener(
+            "click",
+            handleCostCodeActions
+        );
+    }
+
+    const memberMarksTableContainer = document.getElementById(
+        "member-marks-table-container"
+    );
+    if (memberMarksTableContainer) {
+        memberMarksTableContainer.addEventListener(
+            "click",
+            handleMemberMarkActions
+        );
+    }
+
+    const exportCostCodesBtn = document.getElementById("export-cost-codes-btn");
+    if (exportCostCodesBtn) {
+        exportCostCodesBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            window.location.href = `/connections/api/cost-codes/${currentProjectId}/export/`;
+        });
+    }
+
+    const importCostCodesBtn = document.getElementById("import-cost-codes-btn");
+    if (importCostCodesBtn) {
+        importCostCodesBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            currentCsvImportUrl = `/connections/api/cost-codes/${currentProjectId}/import/`;
+            csvFileInput.click();
+        });
+    }
+
+    const exportMemberMarksBtn = document.getElementById(
+        "export-member-marks-btn"
+    );
+    if (exportMemberMarksBtn) {
+        exportMemberMarksBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            window.location.href = `/connections/api/member-marks/${currentProjectId}/export/`;
+        });
+    }
+
+    const importMemberMarksBtn = document.getElementById(
+        "import-member-marks-btn"
+    );
+    if (importMemberMarksBtn) {
+        importMemberMarksBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            currentCsvImportUrl = `/connections/api/member-marks/${currentProjectId}/import/`;
+            csvFileInput.click();
+        });
+    }
+
+    const exportSpacesBtn = document.getElementById(
+        "export-space-classifications-btn"
+    );
+    if (exportSpacesBtn) {
+        exportSpacesBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            window.location.href = `/connections/api/space-classifications/${currentProjectId}/export/`;
+        });
+    }
+
+    const importSpacesBtn = document.getElementById(
+        "import-space-classifications-btn"
+    );
+    if (importSpacesBtn) {
+        importSpacesBtn.addEventListener("click", () => {
+            if (!currentProjectId) {
+                showToast("프로젝트를 선택하세요.", "error");
+                return;
+            }
+            currentCsvImportUrl = `/connections/api/space-classifications/${currentProjectId}/import/`;
+            csvFileInput.click();
+        });
+    }
+
+    //DOMContentLoaded 끝
 });
+
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
     allRevitData = [];
@@ -5155,7 +5268,7 @@ async function handleCsvFileSelect(event) {
         }
         showToast(result.message, "success");
 
-        // 어떤 룰셋이든 성공적으로 가져온 후, 해당 룰셋 목록을 다시 로드
+        // 현재 활성화된 탭에 따라 올바른 데이터를 다시 로드합니다.
         if (activeTab === "ruleset-management") {
             const activeRulesetContent = document.querySelector(
                 ".ruleset-content.active"
@@ -5177,6 +5290,13 @@ async function handleCsvFileSelect(event) {
                 else if (rulesetId === "space-assignment-ruleset")
                     await loadSpaceAssignmentRules();
             }
+        } else if (activeTab === "cost-code-management") {
+            await loadCostCodes();
+        } else if (activeTab === "member-mark-management") {
+            await loadMemberMarks();
+        } else if (activeTab === "space-management") {
+            // <<< [추가] 이 else if 블록을 추가합니다.
+            await loadSpaceClassifications();
         }
     } catch (error) {
         showToast(error.message, "error");
@@ -5186,4 +5306,88 @@ async function handleCsvFileSelect(event) {
         currentCsvImportUrl = null;
     }
 }
-// ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+/**
+ * 공사코드 테이블의 액션(저장, 수정, 취소, 삭제)을 처리합니다.
+ * @param {Event} event
+ */
+async function handleCostCodeActions(event) {
+    const target = event.target;
+    const actionRow = target.closest("tr");
+    if (!actionRow) return;
+
+    const codeId = actionRow.dataset.codeId;
+
+    // --- 수정 버튼 ---
+    if (target.classList.contains("edit-cost-code-btn")) {
+        if (
+            document.querySelector("#cost-codes-table-container .rule-edit-row")
+        ) {
+            showToast("이미 편집 중인 항목이 있습니다.", "error");
+            return;
+        }
+        renderCostCodesTable(loadedCostCodes, codeId);
+    }
+    // --- 삭제 버튼 ---
+    else if (target.classList.contains("delete-cost-code-btn")) {
+        if (!confirm("이 공사코드를 정말 삭제하시겠습니까?")) return;
+        try {
+            const response = await fetch(
+                `/connections/api/cost-codes/${currentProjectId}/${codeId}/`,
+                {
+                    method: "DELETE",
+                    headers: { "X-CSRFToken": csrftoken },
+                }
+            );
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message);
+            showToast(result.message, "success");
+            await loadCostCodes();
+        } catch (error) {
+            showToast(error.message, "error");
+        }
+    }
+    // --- 저장 버튼 ---
+    else if (target.classList.contains("save-cost-code-btn")) {
+        const codeData = {
+            code: actionRow.querySelector(".cost-code-input").value,
+            name: actionRow.querySelector(".cost-name-input").value,
+            spec: actionRow.querySelector(".cost-spec-input").value,
+            unit: actionRow.querySelector(".cost-unit-input").value,
+            category: actionRow.querySelector(".cost-category-input").value,
+            description: actionRow.querySelector(".cost-description-input")
+                .value,
+        };
+
+        if (!codeData.code || !codeData.name) {
+            showToast("코드와 품명은 반드시 입력해야 합니다.", "error");
+            return;
+        }
+
+        const isNew = codeId === "new";
+        const url = isNew
+            ? `/connections/api/cost-codes/${currentProjectId}/`
+            : `/connections/api/cost-codes/${currentProjectId}/${codeId}/`;
+        const method = isNew ? "POST" : "PUT";
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify(codeData),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message);
+            showToast(result.message, "success");
+            await loadCostCodes();
+        } catch (error) {
+            showToast(error.message, "error");
+        }
+    }
+    // --- 취소 버튼 ---
+    else if (target.classList.contains("cancel-cost-code-btn")) {
+        renderCostCodesTable(loadedCostCodes);
+    }
+}
