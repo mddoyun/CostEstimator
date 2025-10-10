@@ -216,15 +216,32 @@ class FrontendConsumer(AsyncWebsocketConsumer):
                 tags = await self.db_get_tags(project_id)
                 await self.send_tags_update(tags)
         
-        elif msg_type in ['create_tag', 'update_tag', 'delete_tag']:
+        elif msg_type in ['create_tag', 'update_tag']:
             project_id = payload.get('project_id')
             if not project_id: return
             if msg_type == 'create_tag': await self.db_create_tag(project_id, payload.get('name'))
             elif msg_type == 'update_tag': await self.db_update_tag(payload.get('tag_id'), payload.get('new_name'))
-            elif msg_type == 'delete_tag': await self.db_delete_tag(payload.get('tag_id'))
+            
+            # 생성 또는 수정 후에는 태그 목록만 업데이트하여 브로드캐스트합니다.
             tags = await self.db_get_tags(project_id)
             await self.channel_layer.group_send(self.frontend_group_name, {'type': 'broadcast_tags', 'tags': tags})
-            
+
+        elif msg_type == 'delete_tag':
+            project_id = payload.get('project_id')
+            tag_id = payload.get('tag_id')
+            if not all([project_id, tag_id]): return
+
+            # 1. 태그를 삭제하고, 영향을 받았던 element들의 ID 목록을 가져옵니다.
+            affected_ids = await self.db_delete_tag(tag_id)
+
+            # 2. 변경된 전체 태그 목록을 모든 클라이언트에 브로드캐스트합니다.
+            tags = await self.db_get_tags(project_id)
+            await self.channel_layer.group_send(self.frontend_group_name, {'type': 'broadcast_tags', 'tags': tags})
+
+            # 3. 만약 영향을 받은 element가 있었다면, 해당 element들의 최신 정보를 브로드캐스트합니다.
+            if affected_ids:
+                elements = await serialize_specific_elements(affected_ids)
+                await self.channel_layer.group_send(self.frontend_group_name, {'type': 'broadcast_elements', 'elements': elements})            
         elif msg_type in ['assign_tags', 'clear_tags']:
             element_ids = payload.get('element_ids')
             if msg_type == 'assign_tags': await self.db_assign_tags(payload.get('tag_id'), element_ids)
@@ -254,7 +271,20 @@ class FrontendConsumer(AsyncWebsocketConsumer):
         tag.name = new_name; tag.save()
     @database_sync_to_async
     def db_delete_tag(self, tag_id):
-        QuantityClassificationTag.objects.filter(id=tag_id).delete()
+        """
+        태그를 삭제하고, 해당 태그에 영향을 받았던 RawElement의 ID 목록을 반환합니다.
+        """
+        try:
+            # 삭제하기 전에, 어떤 객체들이 이 태그를 가지고 있었는지 ID를 가져옵니다.
+            tag_to_delete = QuantityClassificationTag.objects.prefetch_related('raw_elements').get(id=tag_id)
+            affected_element_ids = list(tag_to_delete.raw_elements.values_list('id', flat=True))
+            
+            # 태그를 삭제합니다. (ManyToManyField 관계는 자동으로 정리됩니다)
+            tag_to_delete.delete()
+            
+            return affected_element_ids
+        except QuantityClassificationTag.DoesNotExist:
+            return [] # 삭제할 태그가 없으면 빈 목록을 반환합니다.
     @database_sync_to_async
     def db_assign_tags(self, tag_id, element_ids):
         tag = QuantityClassificationTag.objects.get(id=tag_id)

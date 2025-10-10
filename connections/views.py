@@ -11,7 +11,8 @@ import re
 from django.db.models import F, Sum, Count
 from functools import reduce
 import operator
-from .consumers import RevitConsumer, FrontendConsumer
+from .consumers import RevitConsumer, FrontendConsumer, serialize_specific_elements
+
 
 from .models import (
     Project,
@@ -72,28 +73,49 @@ def import_tags(request, project_id):
         project = Project.objects.get(id=project_id)
         tag_file = request.FILES['tag_file']
         try:
+            # [수정] 삭제 전, 영향을 받을 모든 RawElement의 ID를 미리 가져옵니다.
+            affected_element_ids = list(RawElement.objects.filter(
+                project=project, 
+                classification_tags__isnull=False
+            ).values_list('id', flat=True))
+
+            # 기존 태그를 모두 삭제합니다.
             project.classification_tags.all().delete()
+            
+            # 파일에서 새 태그를 읽어 생성합니다.
             decoded_file = tag_file.read().decode('utf-8').splitlines()
             reader = csv.reader(decoded_file)
-            next(reader, None)
+            next(reader, None) # 헤더 건너뛰기
             for row in reader:
                 if row:
                     name = row[0]
                     description = row[1] if len(row) > 1 else ""
                     QuantityClassificationTag.objects.create(project=project, name=name, description=description)
             
+            # [수정] 변경된 태그 목록과 영향을 받은 객체 정보를 프론트엔드로 전송합니다.
             channel_layer = get_channel_layer()
+
+            # 1. 업데이트된 태그 목록 전송
             tags = [{'id': str(tag.id), 'name': tag.name} for tag in project.classification_tags.all()]
             async_to_sync(channel_layer.group_send)(
                 FrontendConsumer.frontend_group_name,
                 {'type': 'broadcast_tags', 'tags': tags}
             )
+
+            # 2. 영향을 받은 객체가 있었다면, 최신 상태를 전송
+            if affected_element_ids:
+                # async 함수를 sync 컨텍스트에서 호출하기 위해 async_to_sync 사용
+                updated_elements_data = async_to_sync(serialize_specific_elements)(affected_element_ids)
+                if updated_elements_data:
+                    async_to_sync(channel_layer.group_send)(
+                        FrontendConsumer.frontend_group_name,
+                        {'type': 'broadcast_elements', 'elements': updated_elements_data}
+                    )
+
             return JsonResponse({'status': 'success'})
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
-
-
 
 
 
