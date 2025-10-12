@@ -1206,20 +1206,21 @@ function clearTagsFromSelection() {
     }
 }
 
-function handleColumnFilter(event, contextPrefix) {
-    if (
-        event.target.classList.contains("column-filter") &&
-        event.key === "Enter"
-    ) {
-        const state = viewerStates[contextPrefix];
-        if (!state) return;
+// [교체] 기존 handleColumnFilter를 아래처럼 교체 (소문자 저장 + 디바운스 대상)
+function handleColumnFilter(e, contextPrefix) {
+    const input = e.target;
+    if (!input.classList || !input.classList.contains("column-filter")) return;
 
-        state.columnFilters[event.target.dataset.field] =
-            event.target.value.toLowerCase();
+    const field = input.dataset.field;
+    const state = viewerStates[contextPrefix];
+    if (!state) return;
 
-        const containerId = `${contextPrefix}-data-table-container`;
-        renderDataTable(containerId, contextPrefix);
-    }
+    // 필터값은 항상 소문자로 저장 (비교 비용 절감)
+    const v = (input.value || "").toLowerCase();
+    state.columnFilters[field] = v;
+
+    // 디바운스로 렌더 호출
+    debouncedRender(contextPrefix)();
 }
 // main.js의 기존 handleTableClick 함수를 아래 코드로 교체
 
@@ -5461,3 +5462,20 @@ function handleSubNavClick(e) {
         );
     }
 }
+function debounce(fn, delay = 300) {
+    let t;
+    return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), delay);
+    };
+}
+
+// [추가] 컨텍스트별 디바운스된 렌더
+const debouncedRender = (contextPrefix) =>
+    debounce(() => {
+        const containerId =
+            contextPrefix === "data-management"
+                ? "data-management-data-table-container"
+                : "space-management-data-table-container";
+        renderDataTable(containerId, contextPrefix);
+    }, 300);

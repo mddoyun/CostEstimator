@@ -38,6 +38,8 @@ function setupWebSocket() {
 
         switch (data.type) {
             case "revit_data_start":
+                lowerValueCache?.clear?.();
+
                 allRevitData = []; // 데이터 배열을 깨끗하게 초기화합니다.
                 progressBar.max = data.payload.total;
                 progressBar.value = 0;
@@ -114,6 +116,8 @@ function setupWebSocket() {
                 }
                 break; // setTimeout 블록이 완전히 삭제되었습니다.
             case "all_elements":
+                lowerValueCache?.clear?.();
+
                 allRevitData = data.payload.elements;
                 statusEl.textContent = `데이터 로드 완료. 총 ${allRevitData.length}개의 객체.`;
                 showToast(
@@ -167,6 +171,8 @@ function setupWebSocket() {
                 // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
                 break;
             case "elements_updated":
+                lowerValueCache?.clear?.();
+
                 data.elements.forEach((updatedElem) => {
                     const index = allRevitData.findIndex(
                         (elem) => elem.id === updatedElem.id

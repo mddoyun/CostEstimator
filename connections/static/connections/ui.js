@@ -19,6 +19,29 @@ function getValueForItem(item, field) {
     if (field in raw_data) return raw_data[field] ?? "";
     return "";
 }
+
+const lowerValueCache = new Map(); // key: `${item.id}::${field}` -> value: string
+
+function getLowerValueForItem(item, field) {
+    const key = `${item?.id ?? ""}::${field}`;
+    if (lowerValueCache.has(key)) return lowerValueCache.get(key);
+    const v = (getValueForItem(item, field) ?? "").toString().toLowerCase();
+    lowerValueCache.set(key, v);
+    return v;
+}
+
+// [도우미] 필터 일치 검사
+function matchesFilter(item, filters) {
+    // filters: state.columnFilters (소문자 저장됨)
+    for (const field in filters) {
+        const needle = filters[field];
+        if (!needle) continue;
+        const hay = getLowerValueForItem(item, field);
+        if (!hay.includes(needle) === true) return false;
+    }
+    return true;
+}
+
 function populateFieldSelection() {
     // 1. 수정 전, 현재 탭별로 체크된 필드 값을 미리 저장합니다.
     const getCheckedValues = (contextSelector) =>
@@ -179,23 +202,15 @@ function renderRawDataTable(containerId, selectedFields, state) {
     const tableContainer = document.getElementById(containerId);
     if (!tableContainer) return;
 
-    let dataToRender = state.isFilterToSelectionActive
+    const dataToRender = state.isFilterToSelectionActive
         ? allRevitData.filter((item) => state.revitFilteredIds.has(item.id))
         : allRevitData;
 
-    let filteredData = dataToRender.filter((item) =>
-        Object.keys(state.columnFilters).every((field) => {
-            const filterValue = state.columnFilters[field];
-            return (
-                !filterValue ||
-                getValueForItem(item, field)
-                    .toString()
-                    .toLowerCase()
-                    .includes(filterValue)
-            );
-        })
+    const filteredData = dataToRender.filter((item) =>
+        matchesFilter(item, state.columnFilters)
     );
 
+    // 그룹핑 필드 수집
     const groupingControlsContainer = tableContainer
         .closest(".table-area")
         ?.querySelector(".table-controls");
@@ -206,61 +221,154 @@ function renderRawDataTable(containerId, selectedFields, state) {
         .map((s) => s.value)
         .filter(Boolean);
 
-    let tableHtml = "<table><thead><tr>";
-    selectedFields.forEach((field) => {
-        tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            state.columnFilters[field] || ""
-        }" placeholder="필터..."></th>`;
-    });
-    tableHtml += "</tr></thead><tbody>";
+    // 기존처럼 전체 문자열을 만들지 말고, DOM을 점진적으로 구성
+    tableContainer.innerHTML = "";
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const tr = document.createElement("tr");
 
-    function renderGroup(items, level, parentPath) {
-        if (level >= currentGroupByFields.length || items.length === 0) {
-            items.forEach((item) => {
-                tableHtml += `<tr data-db-id="${item.id}" class="${
-                    state.selectedElementIds.has(item.id) ? "selected-row" : ""
-                }" style="cursor: pointer;">`;
-                selectedFields.forEach(
-                    (field) =>
-                        (tableHtml += `<td>${getValueForItem(
-                            item,
-                            field
-                        )}</td>`)
-                );
-                tableHtml += "</tr>";
+    // 머리글 + 필터 입력 상자
+    selectedFields.forEach((field) => {
+        const th = document.createElement("th");
+        const label = document.createElement("div");
+        label.textContent = field;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "column-filter";
+        input.dataset.field = field;
+        input.value = state.columnFilters[field] || "";
+        input.placeholder = "필터...";
+
+        th.appendChild(label);
+        th.appendChild(input);
+        tr.appendChild(th);
+    });
+    thead.appendChild(tr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    table.appendChild(tbody);
+    tableContainer.appendChild(table);
+
+    // 그룹핑이 없으면 행만 배치 추가
+    if (currentGroupByFields.length === 0) {
+        const BATCH = 1000; // 환경에 맞춰 500~1500 사이로 조절
+        let i = 0;
+
+        function appendBatch() {
+            const frag = document.createDocumentFragment();
+            for (let c = 0; c < BATCH && i < filteredData.length; c++, i++) {
+                const item = filteredData[i];
+                const row = document.createElement("tr");
+                row.dataset.dbId = item.id;
+                if (state.selectedElementIds.has(item.id))
+                    row.classList.add("selected-row");
+                row.style.cursor = "pointer";
+
+                selectedFields.forEach((field) => {
+                    const td = document.createElement("td");
+                    td.textContent = getValueForItem(item, field);
+                    frag.appendChild(td); // <- 실수 방지: td는 row에 붙여야 함
+                    row.appendChild(td);
+                });
+                frag.appendChild(row);
+            }
+            tbody.appendChild(frag);
+            if (i < filteredData.length) {
+                requestAnimationFrame(appendBatch);
+            }
+        }
+        requestAnimationFrame(appendBatch);
+        return;
+    }
+
+    // 그룹핑이 있는 경우: 그룹 헤더/자식도 프레임 분할로 추가
+    // 그룹 트리 구성
+    function groupItems(items, level) {
+        if (level >= currentGroupByFields.length) return { __leaf__: items };
+        const field = currentGroupByFields[level];
+        const map = {};
+        for (const it of items) {
+            const key = getValueForItem(it, field) || "(값 없음)";
+            (map[key] ??= []).push(it);
+        }
+        const result = {};
+        // 정렬 유지
+        Object.keys(map)
+            .sort()
+            .forEach((k) => {
+                result[k] = groupItems(map[k], level + 1);
             });
+        return result;
+    }
+
+    const root = groupItems(filteredData, 0);
+    const tasks = []; // 렌더 작업 큐 (헤더/행 생성 단위)
+
+    function enqueueGroup(node, level, parentPath) {
+        if (node["__leaf__"]) {
+            for (const item of node["__leaf__"]) {
+                tasks.push(() => {
+                    const row = document.createElement("tr");
+                    row.dataset.dbId = item.id;
+                    if (state.selectedElementIds.has(item.id))
+                        row.classList.add("selected-row");
+                    row.style.cursor = "pointer";
+                    selectedFields.forEach((field) => {
+                        const td = document.createElement("td");
+                        td.textContent = getValueForItem(item, field);
+                        row.appendChild(td);
+                    });
+                    tbody.appendChild(row);
+                });
+            }
             return;
         }
-        const groupField = currentGroupByFields[level];
-        const grouped = items.reduce((acc, item) => {
-            const key = getValueForItem(item, groupField) || "(값 없음)";
-            (acc[key] = acc[key] || []).push(item);
-            return acc;
-        }, {});
-        Object.keys(grouped)
-            .sort()
-            .forEach((key) => {
-                const currentPath = `${parentPath}|${groupField}:${key}`;
-                const isCollapsed = state.collapsedGroups[currentPath];
-                const indentPixels = level * 20;
 
-                tableHtml += `<tr class="group-header group-level-${level}" data-group-path="${currentPath}">
-                            <td colspan="${
-                                selectedFields.length
-                            }" style="padding-left: ${indentPixels}px;">
-                                <span class="toggle-icon">${
-                                    isCollapsed ? "▶" : "▼"
-                                }</span>
-                                ${groupField}: ${key} (${grouped[key].length}개)
-                            </td>
-                          </tr>`;
-                if (!isCollapsed)
-                    renderGroup(grouped[key], level + 1, currentPath);
+        Object.keys(node).forEach((key) => {
+            const groupField = currentGroupByFields[level];
+            const currentPath = `${parentPath}|${groupField}:${key}`;
+            const isCollapsed = !!state.collapsedGroups[currentPath];
+
+            tasks.push(() => {
+                const indentPixels = level * 20;
+                const headerRow = document.createElement("tr");
+                headerRow.className = `group-header group-level-${level}`;
+                headerRow.dataset.groupPath = currentPath;
+
+                const td = document.createElement("td");
+                td.colSpan = selectedFields.length;
+                td.style.paddingLeft = `${indentPixels}px`;
+
+                const icon = document.createElement("span");
+                icon.className = "toggle-icon";
+                icon.textContent = isCollapsed ? "▶" : "▼";
+
+                td.appendChild(icon);
+                td.appendChild(
+                    document.createTextNode(` ${groupField}: ${key}`)
+                );
+                headerRow.appendChild(td);
+                tbody.appendChild(headerRow);
             });
+
+            if (!isCollapsed) enqueueGroup(node[key], level + 1, currentPath);
+        });
     }
-    renderGroup(filteredData, 0, "");
-    tableHtml += "</tbody></table>";
-    tableContainer.innerHTML = tableHtml;
+
+    enqueueGroup(root, 0, "");
+
+    // 프레임 분할로 작업 수행
+    const STEP = 800; // 한 프레임에 처리할 작업 수 (환경/데이터에 맞춰 조절)
+    let idx = 0;
+    function runChunk() {
+        for (let c = 0; c < STEP && idx < tasks.length; c++, idx++) {
+            tasks[idx]();
+        }
+        if (idx < tasks.length) requestAnimationFrame(runChunk);
+    }
+    requestAnimationFrame(runChunk);
 }
 
 function renderClassificationTable(containerId, selectedFields, state) {
@@ -358,15 +466,9 @@ function renderClassificationTable(containerId, selectedFields, state) {
         .sort()
         .forEach((tag) => {
             const items = dataByTag[tag].filter((item) =>
-                Object.keys(state.columnFilters).every(
-                    (field) =>
-                        !state.columnFilters[field] ||
-                        getValueForItem(item, field)
-                            .toString()
-                            .toLowerCase()
-                            .includes(state.columnFilters[field])
-                )
+                matchesFilter(item, state.columnFilters)
             );
+
             if (items.length === 0) return;
 
             const groupPath = `tag|${tag}`;
