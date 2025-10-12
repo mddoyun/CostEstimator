@@ -2042,3 +2042,45 @@ div[id$="-grouping-controls"] {
     flex-grow: 1; /* 부모(.control-box)의 남은 공간을 모두 차지하도록 합니다. */
     min-height: 0; /* flexbox 레이아웃 내에서 스크롤이 올바르게 동작하도록 보장합니다. */
 }
+
+/* --- 2단 탭 구조 스타일 --- */
+.secondary-nav-container {
+    background-color: #f8f9fa;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.secondary-nav {
+    display: none; /* 기본적으로 보조 탭은 숨김 */
+    height: var(--nav-height);
+    align-items: center;
+}
+
+.secondary-nav.active {
+    display: flex; /* 활성화된 보조 탭만 보여줌 */
+}
+
+.sub-nav-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 100%;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #555;
+    transition: all 0.2s ease-in-out;
+}
+
+.sub-nav-button:hover {
+    background-color: #e9ecef;
+}
+
+.sub-nav-button.active {
+    font-weight: bold;
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}

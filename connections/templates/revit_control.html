@@ -53,34 +53,62 @@
                     <p id="status">서버 연결 대기중...</p>
                 </div>
             </header>
-
             <nav class="main-nav">
-                <button class="nav-button" data-tab="ruleset-management">
-                    📜 룰셋 관리
+                <button class="nav-button active" data-primary-tab="management">
+                    🗂️ 관리
                 </button>
-                <button class="nav-button" data-tab="cost-code-management">
-                    💰 공사코드 관리
+                <button class="nav-button" data-primary-tab="takeoff">
+                    🧱 산출
                 </button>
-                <button class="nav-button" data-tab="member-mark-management">
-                    📋 일람부호 관리
+                <button class="nav-button" data-primary-tab="boq">
+                    🧾 집계
                 </button>
-                <button class="nav-button" data-tab="tag-management">
-                    🏷️ 수량산출분류 관리
-                </button>
-                <button class="nav-button" data-tab="space-management">
-                    🏢 공간분류 관리
-                </button>
-                <button class="nav-button active" data-tab="data-management">
-                    🗂️ BIM 원본데이터
-                </button>
-                <button class="nav-button" data-tab="quantity-members">
-                    🧱 수량산출부재
-                </button>
-                <button class="nav-button" data-tab="cost-item-management">
-                    📦 수량산출
-                </button>
-                <button class="nav-button" data-tab="boq">🧾 집계</button>
             </nav>
+            <div class="secondary-nav-container">
+                <nav id="secondary-nav-management" class="secondary-nav active">
+                    <button
+                        class="sub-nav-button"
+                        data-tab="ruleset-management"
+                    >
+                        📜 룰셋 관리
+                    </button>
+                    <button
+                        class="sub-nav-button"
+                        data-tab="cost-code-management"
+                    >
+                        💰 공사코드 관리
+                    </button>
+                    <button
+                        class="sub-nav-button"
+                        data-tab="member-mark-management"
+                    >
+                        📋 일람부호 관리
+                    </button>
+                    <button class="sub-nav-button" data-tab="tag-management">
+                        🏷️ 수량산출분류 관리
+                    </button>
+                    <button class="sub-nav-button" data-tab="space-management">
+                        🏢 공간분류 관리
+                    </button>
+                </nav>
+                <nav id="secondary-nav-takeoff" class="secondary-nav">
+                    <button
+                        class="sub-nav-button active"
+                        data-tab="data-management"
+                    >
+                        🗂️ BIM 원본데이터
+                    </button>
+                    <button class="sub-nav-button" data-tab="quantity-members">
+                        🧱 수량산출부재
+                    </button>
+                    <button
+                        class="sub-nav-button"
+                        data-tab="cost-item-management"
+                    >
+                        📦 수량산출
+                    </button>
+                </nav>
+            </div>
 
             <div class="main-content">
                 <div id="data-management" class="tab-content active">

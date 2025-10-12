@@ -71,10 +71,27 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- 이벤트 리스너 설정 (Null-safe) ---
     projectSelector?.addEventListener("change", handleProjectChange);
 
-    document.querySelectorAll(".nav-button").forEach((button) => {
+    // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
+    // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
+
+    // 주 내비게이션 버튼 이벤트 리스너
+    document.querySelectorAll(".main-nav .nav-button").forEach((button) => {
         button.addEventListener("click", handleMainNavClick);
     });
 
+    // 보조 내비게이션 버튼 이벤트 리스너
+    document.querySelectorAll(".sub-nav-button").forEach((button) => {
+        button.addEventListener("click", handleSubNavClick);
+    });
+
+    // 페이지 로드 시 기본 탭(관리 -> 룰셋 관리)을 강제로 활성화
+    const defaultPrimaryTab = document.querySelector(
+        '.main-nav .nav-button[data-primary-tab="management"]'
+    );
+    if (defaultPrimaryTab) {
+        // 약간의 지연을 주어 다른 스크립트가 로드될 시간을 확보
+        setTimeout(() => defaultPrimaryTab.click(), 100);
+    }
     // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
     // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
 
@@ -847,64 +864,56 @@ function createNewProject() {
 
 function handleMainNavClick(e) {
     const clickedButton = e.currentTarget;
-    if (clickedButton.classList.contains("active")) {
+    const primaryTabId = clickedButton.dataset.primaryTab;
+
+    // 이미 활성 탭이면 아무것도 안함
+    if (clickedButton.classList.contains("active") && primaryTabId !== "boq") {
         return;
     }
-    document.querySelector(".nav-button.active").classList.remove("active");
-    clickedButton.classList.add("active");
-    activeTab = clickedButton.dataset.tab;
+
+    // 모든 주 탭 비활성화
     document
-        .querySelectorAll(".tab-content")
-        .forEach((c) => c.classList.remove("active"));
-    document.getElementById(activeTab).classList.add("active");
+        .querySelectorAll(".main-nav .nav-button.active")
+        .forEach((btn) => btn.classList.remove("active"));
+    // 모든 보조 탭 컨테이너 숨기기
+    document
+        .querySelectorAll(".secondary-nav.active")
+        .forEach((nav) => nav.classList.remove("active"));
+    // 모든 컨텐츠 숨기기
+    document
+        .querySelectorAll(".tab-content.active")
+        .forEach((content) => content.classList.remove("active"));
 
-    if (activeTab === "ruleset-management") {
-        loadClassificationRules();
-        loadPropertyMappingRules();
-        loadCostCodeRules();
-        loadMemberMarkAssignmentRules();
-        loadCostCodeAssignmentRules();
-        loadSpaceClassificationRules();
-        loadSpaceAssignmentRules(); // <<< [추가] 이 함수 호출을 추가합니다.
-    }
+    // 클릭된 주 탭 활성화
+    clickedButton.classList.add("active");
 
-    if (activeTab === "quantity-members") {
-        loadQuantityMembers();
-        loadCostCodes();
-        loadMemberMarks();
-    }
-    if (activeTab === "cost-item-management") {
-        loadCostItems();
-        loadQuantityMembers();
-        loadMemberMarks();
-    }
-    if (activeTab === "cost-code-management") {
-        loadQuantityMembers();
-        loadCostCodes();
-        loadMemberMarks();
-    }
-    if (activeTab === "member-mark-management") {
-        loadQuantityMembers();
-        loadCostCodes();
-        loadMemberMarks();
-    }
-    if (activeTab === "space-management") {
-        loadSpaceClassifications();
-        // ▼▼▼ [수정] 범용 함수를 올바른 인자와 함께 호출하도록 변경 ▼▼▼
-        populateFieldSelection(); // 이제 이 함수는 모든 탭을 알아서 처리합니다.
-        addGroupingLevel("space-management");
-        renderDataTable(
-            "space-management-data-table-container",
-            "space-management"
-        );
-    }
-    if (activeTab === "boq") {
-        loadCostItems();
-        loadQuantityMembers();
-        if (allRevitData.length === 0) {
-            fetchDataFromClient();
+    if (primaryTabId === "boq") {
+        // '집계' 탭은 보조 탭이 없으므로 바로 컨텐츠 표시
+        document.getElementById("boq").classList.add("active");
+        activeTab = "boq";
+        // '집계' 탭에 필요한 데이터 로드 함수 호출
+        if (activeTab === "boq") {
+            loadCostItems();
+            loadQuantityMembers();
+            if (allRevitData.length === 0) {
+                fetchDataFromClient();
+            }
+            loadBoqGroupingFields();
         }
-        loadBoqGroupingFields();
+    } else {
+        // '관리' 또는 '산출' 탭
+        const secondaryNav = document.getElementById(
+            `secondary-nav-${primaryTabId}`
+        );
+        if (secondaryNav) {
+            secondaryNav.classList.add("active");
+            // 해당 보조 탭의 첫 번째 버튼을 찾아 클릭 이벤트를 발생시켜 기본 화면을 띄움
+            const firstSubNavButton =
+                secondaryNav.querySelector(".sub-nav-button");
+            if (firstSubNavButton) {
+                firstSubNavButton.click();
+            }
+        }
     }
 }
 function fetchDataFromClient() {
@@ -5389,5 +5398,66 @@ async function handleCostCodeActions(event) {
     // --- 취소 버튼 ---
     else if (target.classList.contains("cancel-cost-code-btn")) {
         renderCostCodesTable(loadedCostCodes);
+    }
+}
+
+function handleSubNavClick(e) {
+    const clickedButton = e.currentTarget;
+    const targetTabId = clickedButton.dataset.tab;
+    const targetContent = document.getElementById(targetTabId);
+
+    // [핵심 수정] 버튼이 아닌, 컨텐츠가 이미 활성화 상태이면 중복 실행을 방지합니다.
+    if (targetContent && targetContent.classList.contains("active")) {
+        return;
+    }
+
+    // 현재 속한 보조 탭 그룹 내에서만 활성화 상태 변경
+    const parentNav = clickedButton.closest(".secondary-nav");
+    parentNav
+        .querySelector(".sub-nav-button.active")
+        ?.classList.remove("active");
+    clickedButton.classList.add("active");
+
+    // 기존 탭 전환 로직 실행
+    activeTab = clickedButton.dataset.tab;
+    document
+        .querySelectorAll(".tab-content.active")
+        .forEach((c) => c.classList.remove("active"));
+    const activeContent = document.getElementById(activeTab);
+    if (activeContent) {
+        activeContent.classList.add("active");
+    }
+
+    // 각 탭에 필요한 데이터 로드 함수 호출 (기존 로직과 동일)
+    if (activeTab === "ruleset-management") {
+        loadClassificationRules();
+        loadPropertyMappingRules();
+        loadCostCodeRules();
+        loadMemberMarkAssignmentRules();
+        loadCostCodeAssignmentRules();
+        loadSpaceClassificationRules();
+        loadSpaceAssignmentRules();
+    } else if (activeTab === "quantity-members") {
+        loadQuantityMembers();
+        loadCostCodes();
+        loadMemberMarks();
+    } else if (activeTab === "cost-item-management") {
+        loadCostItems();
+        loadQuantityMembers();
+        loadMemberMarks();
+    } else if (
+        activeTab === "cost-code-management" ||
+        activeTab === "member-mark-management"
+    ) {
+        loadQuantityMembers();
+        loadCostCodes();
+        loadMemberMarks();
+    } else if (activeTab === "space-management") {
+        loadSpaceClassifications();
+        populateFieldSelection();
+        renderDataTable(
+            "space-management-data-table-container",
+            "space-management"
+        );
     }
 }
