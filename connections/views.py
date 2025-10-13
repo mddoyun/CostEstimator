@@ -1214,14 +1214,14 @@ def create_cost_items_auto_view(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         rules = CostCodeRule.objects.filter(project=project).order_by('priority').select_related('target_cost_code')
-        
-        # [핵심 수정] DB 조회를 최적화하기 위해 연관된 모델들을 미리 불러옵니다.
+
+        # DB 조회를 최적화하기 위해 연관된 모델들을 미리 불러옵니다.
         members = QuantityMember.objects.filter(
-            project=project, 
-            cost_codes__isnull=False
+            project=project
         ).select_related(
-            'member_mark', 
-            'raw_element' # RawElement도 함께 불러옵니다.
+            'member_mark',
+            'raw_element',
+            'classification_tag' # [!!] classification_tag도 함께 불러옵니다.
         ).prefetch_related(
             'cost_codes'
         ).distinct()
@@ -1234,31 +1234,47 @@ def create_cost_items_auto_view(request, project_id):
         valid_item_ids = set()
         created_count = 0
         updated_count = 0
+        
+        # [핵심 수정] 룰셋 평가에 사용할 모든 공사코드를 미리 메모리에 로드합니다.
+        all_cost_codes_in_project = {cc.id: cc for cc in CostCode.objects.filter(project=project)}
+
 
         for member in members:
-            # [핵심 수정] 규칙 평가를 위한 통합 속성 딕셔너리를 생성합니다.
+            # ▼▼▼ [핵심 수정] 규칙 평가를 위한 통합 속성 딕셔너리 생성 로직 보강 ▼▼▼
             combined_properties = member.properties.copy() if member.properties else {}
 
-            # 1. 일람부호 속성을 '일람부호.' 접두사와 함께 추가합니다.
+            # 1. 일람부호 속성을 추가합니다. (접두사 사용)
             if member.member_mark and member.member_mark.properties:
                 for key, value in member.member_mark.properties.items():
                     combined_properties[f'일람부호.{key}'] = value
 
-            # 2. BIM 원본 데이터 속성을 'BIM원본.' 접두사와 함께 추가합니다.
+            # 2. BIM 원본 데이터 속성을 추가합니다. (접두사 사용)
             if member.raw_element and member.raw_element.raw_data:
                 raw_data = member.raw_element.raw_data
-                # 최상위 키-값 추가
+                # 최상위 키
                 for key, value in raw_data.items():
                     if not isinstance(value, (dict, list)):
                         combined_properties[f'BIM원본.{key}'] = value
-                # TypeParameters 추가
+                # 타입 파라미터
                 for key, value in raw_data.get('TypeParameters', {}).items():
                     combined_properties[f'BIM원본.{key}'] = value
-                # Parameters 추가 (가장 구체적이므로 마지막에 덮어씁니다)
+                # 인스턴스 파라미터 (덮어쓰기)
                 for key, value in raw_data.get('Parameters', {}).items():
                     combined_properties[f'BIM원본.{key}'] = value
 
-            for cost_code in member.cost_codes.all():
+            # 3. [!!!] 부재의 직접적인 관계 필드 값들을 추가합니다. (이 부분이 누락되어 있었습니다)
+            if member.classification_tag:
+                combined_properties['classification_tag_name'] = member.classification_tag.name
+            if member.member_mark:
+                combined_properties['member_mark_name'] = member.member_mark.mark
+            # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
+            
+            # 부재에 연결된 모든 공사코드에 대해 룰셋을 평가합니다.
+            cost_codes_on_member = member.cost_codes.all()
+            if not cost_codes_on_member:
+                continue
+
+            for cost_code in cost_codes_on_member:
                 item, created = CostItem.objects.get_or_create(
                     project=project,
                     quantity_member=member,
@@ -1270,11 +1286,13 @@ def create_cost_items_auto_view(request, project_id):
                 
                 script_to_use = None
                 
+                # 1. 개별 항목에 수량 계산식이 있는지 먼저 확인 (수동 입력 우선)
                 if item.quantity_mapping_expression and isinstance(item.quantity_mapping_expression, dict) and item.quantity_mapping_expression:
                     script_to_use = item.quantity_mapping_expression
+                # 2. 개별 식이 없으면, 룰셋을 찾음
                 else:
                     for rule in rules:
-                        # [핵심 수정] member.properties 대신 통합 속성(combined_properties)을 기준으로 조건을 평가합니다.
+                        # 보강된 combined_properties를 기준으로 조건을 평가합니다.
                         if rule.target_cost_code_id == cost_code.id and evaluate_conditions(combined_properties, rule.conditions):
                             script_to_use = rule.quantity_mapping_script
                             break
@@ -1285,12 +1303,14 @@ def create_cost_items_auto_view(request, project_id):
                     calculated_qty = evaluate_expression_for_cost_item(qty_script, member)
                     final_qty = float(calculated_qty) if is_numeric(calculated_qty) else 0.0
                 
-                if item.quantity != final_qty:
+                # 수량이 변경되었거나, 새로 생성된 경우에만 DB 업데이트
+                if item.quantity != final_qty or created:
                     item.quantity = final_qty
                     item.save(update_fields=['quantity'])
 
                 valid_item_ids.add(item.id)
 
+        # 룰셋 조건에 더 이상 맞지 않거나, 원본 부재/공사코드 연결이 사라진 항목 삭제
         deletable_items = CostItem.objects.filter(project=project, quantity_member__isnull=False).exclude(id__in=valid_item_ids)
         deleted_count, _ = deletable_items.delete()
 
@@ -1302,7 +1322,6 @@ def create_cost_items_auto_view(request, project_id):
     except Exception as e:
         import traceback
         return JsonResponse({'status': 'error', 'message': f'자동 생성 중 오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
-
 
 
 def evaluate_member_properties_expression(expression, member_properties):

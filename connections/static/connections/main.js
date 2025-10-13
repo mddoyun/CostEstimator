@@ -73,7 +73,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
     // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
+    document
+        .getElementById("add-ci-group-level-btn")
+        ?.addEventListener("click", addCiGroupingLevel);
 
+    // 테이블 컨테이너에 이벤트 위임을 사용하여 모든 하위 요소의 이벤트를 처리
+    const ciTableContainer = document.getElementById("ci-table-container");
+    if (ciTableContainer) {
+        // '수정', '삭제', '저장', '취소' 버튼 및 행 선택, 그룹 토글 클릭 처리
+        ciTableContainer.addEventListener("click", handleCostItemActions);
+
+        // 컬럼 필터 입력 처리 (Enter 키 입력 시)
+        ciTableContainer.addEventListener("keyup", handleCiColumnFilter);
+    }
     // 주 내비게이션 버튼 이벤트 리스너
     document.querySelectorAll(".main-nav .nav-button").forEach((button) => {
         button.addEventListener("click", handleMainNavClick);
@@ -3068,105 +3080,102 @@ function handleCiRowSelection(event, clickedRow) {
     }
     lastSelectedCiRowIndex = clickedRowIndex;
 }
-
+/**
+ * '산출항목' 테이블의 모든 동작(수정, 삭제, 저장, 취소, 행 선택, 그룹 토글)을 처리합니다.
+ * @param {Event} event
+ */
 async function handleCostItemActions(event) {
     const target = event.target;
     const actionRow = target.closest("tr");
-    if (!actionRow || target.matches("input, select, textarea")) return;
+    if (!actionRow) return;
+
+    // 그룹 헤더 클릭 시 토글
+    if (actionRow.classList.contains("group-header")) {
+        const groupPath = actionRow.dataset.groupPath;
+        if (groupPath) {
+            ciCollapsedGroups[groupPath] = !ciCollapsedGroups[groupPath];
+            renderCostItemsTable(loadedCostItems, document.querySelector("#ci-table-container .ci-edit-row")?.dataset.id);
+        }
+        return;
+    }
 
     const itemId = actionRow.dataset.id;
-    const isEditRow = document.querySelector(
-        "#ci-table-container .ci-edit-row"
-    );
+    const isEditRow = document.querySelector("#ci-table-container .ci-edit-row");
 
-    // [수정] 버튼이 아닌 행의 데이터 영역을 클릭했을 때 선택 로직을 실행합니다.
+    // 버튼이 아닌 행의 데이터 영역 클릭 시 선택 로직 실행
     if (!target.closest("button") && itemId) {
         handleCiRowSelection(event, actionRow);
-        renderCostItemsTable(loadedCostItems, isEditRow?.dataset.id); // 테이블을 다시 그려 선택된 행을 강조합니다.
-        renderCiLinkedMemberPropertiesTable(); // [핵심] 연관 부재 속성 테이블을 업데이트합니다.
+        renderCostItemsTable(loadedCostItems, isEditRow?.dataset.id);
+        renderCiLinkedMemberPropertiesTable();
         return;
     }
 
     if (!itemId) return;
 
+    // '수정' 버튼 클릭
     if (target.classList.contains("edit-ci-btn")) {
         if (isEditRow) {
             showToast("이미 편집 중인 항목이 있습니다.", "error");
             return;
         }
         renderCostItemsTable(loadedCostItems, itemId);
-    } else if (target.classList.contains("cancel-ci-btn")) {
+    }
+    // '취소' 버튼 클릭
+    else if (target.classList.contains("cancel-ci-btn")) {
         renderCostItemsTable(loadedCostItems);
-        renderCiLinkedMemberPropertiesTable(); // [추가] 취소 시 속성 테이블도 초기화합니다.
-    } else if (target.classList.contains("save-ci-btn")) {
+        renderCiLinkedMemberPropertiesTable();
+    }
+    // '저장' 버튼 클릭
+    else if (target.classList.contains("save-ci-btn")) {
         let mapping_expression;
         try {
-            const rawMappingExpr = actionRow.querySelector(
-                ".ci-mapping-expression-input"
-            ).value;
-            mapping_expression =
-                rawMappingExpr.trim() === "" ? {} : JSON.parse(rawMappingExpr);
+            const rawMappingExpr = actionRow.querySelector(".ci-mapping-expression-input").value;
+            mapping_expression = rawMappingExpr.trim() === "" ? {} : JSON.parse(rawMappingExpr);
         } catch (e) {
             showToast("수량 맵핑식(JSON) 형식이 올바르지 않습니다.", "error");
             return;
         }
 
         const itemData = {
-            quantity: parseFloat(
-                actionRow.querySelector(".ci-quantity-input").value
-            ),
+            quantity: parseFloat(actionRow.querySelector(".ci-quantity-input").value),
             description: actionRow.querySelector(".ci-description-input").value,
             quantity_mapping_expression: mapping_expression,
         };
 
         try {
-            const response = await fetch(
-                `/connections/api/cost-items/${currentProjectId}/${itemId}/`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": csrftoken,
-                    },
-                    body: JSON.stringify(itemData),
-                }
-            );
+            const response = await fetch(`/connections/api/cost-items/${currentProjectId}/${itemId}/`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify(itemData),
+            });
             const result = await response.json();
             if (!response.ok) throw new Error(result.message);
 
             showToast(result.message, "success");
-            // 로컬 데이터 즉시 업데이트
-            const itemIndex = loadedCostItems.findIndex((i) => i.id === itemId);
-            if (itemIndex > -1) {
-                const updatedItem = result.updated_item;
-                loadedCostItems[itemIndex].quantity = updatedItem.quantity;
-                loadedCostItems[itemIndex].description = itemData.description;
-                loadedCostItems[itemIndex].quantity_mapping_expression =
-                    itemData.quantity_mapping_expression;
-            }
-            renderCostItemsTable(loadedCostItems);
-            renderCiLinkedMemberPropertiesTable(); // [추가] 저장 후 속성 테이블도 업데이트합니다.
+            await loadCostItems(); // 전체 데이터 다시 로드하여 갱신
+            renderCiLinkedMemberPropertiesTable();
         } catch (error) {
             showToast(error.message, "error");
         }
-    } else if (target.classList.contains("delete-ci-btn")) {
+    }
+    // '삭제' 버튼 클릭
+    else if (target.classList.contains("delete-ci-btn")) {
         if (!confirm("이 산출항목을 정말 삭제하시겠습니까?")) return;
         try {
-            const response = await fetch(
-                `/connections/api/cost-items/${currentProjectId}/${itemId}/`,
-                {
-                    method: "DELETE",
-                    headers: { "X-CSRFToken": csrftoken },
-                }
-            );
+            const response = await fetch(`/connections/api/cost-items/${currentProjectId}/${itemId}/`, {
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrftoken },
+            });
             const result = await response.json();
             if (!response.ok) throw new Error(result.message);
 
             showToast(result.message, "success");
-            loadedCostItems = loadedCostItems.filter((i) => i.id !== itemId);
-            selectedCiIds.delete(itemId); // [추가] 선택 목록からも 삭제합니다.
-            renderCostItemsTable(loadedCostItems);
-            renderCiLinkedMemberPropertiesTable(); // [추가] 삭제 후 속성 테이블도 업데이트합니다.
+            selectedCiIds.delete(itemId);
+            await loadCostItems(); // 전체 데이터 다시 로드
+            renderCiLinkedMemberPropertiesTable();
         } catch (error) {
             showToast(error.message, "error");
         }
