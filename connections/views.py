@@ -231,46 +231,48 @@ def property_mapping_rules_api(request, project_id, rule_id=None):
             return JsonResponse({'status': 'error', 'message': f'삭제 중 오류 발생: {str(e)}'}, status=500)
 # ▲▲▲ [추가] 여기까지 입니다 ▲▲▲
 
-
 def get_value_from_element(raw_data, parameter_name):
     """
-    (최종 수정 버전) 점(.)이 포함된 키를 직접 탐색하고, 실패 시 중첩된 구조로 다시 탐색합니다.
+    점(.)이 포함된 키를 해석하여 중첩된 객체의 값을 찾아옵니다.
     'Parameters', 'TypeParameters' 등 다양한 위치를 모두 확인합니다.
     """
     if not raw_data or not parameter_name:
         return None
 
-    # 검색할 위치 목록 (우선순위 순)
-    search_locations = [
-        raw_data,
-        raw_data.get('Parameters', {}),
-        raw_data.get('TypeParameters', {})
-    ]
+    # 1. 점(.)을 기준으로 키를 분리합니다.
+    parts = parameter_name.split('.')
+    
+    # 2. 검색을 시작할 초기 객체를 설정합니다.
+    # 만약 첫 번째 키가 'Parameters'나 'TypeParameters'가 아니라면,
+    # raw_data의 최상위, Parameters, TypeParameters 순서로 모두 탐색합니다.
+    potential_starts = []
+    if parts[0] in raw_data:
+        potential_starts.append(raw_data)
+    if 'Parameters' in raw_data:
+        potential_starts.append(raw_data['Parameters'])
+    if 'TypeParameters' in raw_data:
+        potential_starts.append(raw_data['TypeParameters'])
+    
+    # 만약 탐색 시작점을 찾지 못하면, raw_data 자체를 시작점으로 삼습니다.
+    if not potential_starts:
+        potential_starts.append(raw_data)
 
-    # 1. 먼저, parameter_name 전체를 하나의 키로 간주하고 직접 찾아봅니다.
-    #    (예: "Qto_SlabBaseQuantities.NetArea" 라는 키가 있는지 확인)
-    for location in search_locations:
-        if isinstance(location, dict) and parameter_name in location:
-            return location[parameter_name]
-
-    # 2. 직접 찾지 못한 경우에만, 점(.)을 기준으로 중첩 탐색을 시도합니다.
-    #    (예: "TypeParameters.SomeSet.SomeProperty")
-    if '.' in parameter_name:
-        parts = parameter_name.split('.')
-        current_obj = raw_data
+    # 3. 각 잠재적 시작 위치에서 값을 탐색합니다.
+    for start_obj in potential_starts:
+        current_obj = start_obj
+        found = True
         for part in parts:
-            if isinstance(current_obj, dict):
-                current_obj = current_obj.get(part)
+            if isinstance(current_obj, dict) and part in current_obj:
+                current_obj = current_obj[part]
             else:
-                # 중간 경로 탐색에 실패하면 None을 반환하기 전에 for 루프를 중단합니다.
-                current_obj = None
+                found = False
                 break
         
-        # 순회가 성공적으로 끝났다면 current_obj는 찾고자 하는 값이 됩니다.
-        if current_obj is not None:
+        # 값을 성공적으로 찾았다면 즉시 반환합니다.
+        if found:
             return current_obj
-
-    # 모든 방법으로도 찾지 못한 경우
+            
+    # 모든 위치에서 값을 찾지 못한 경우
     return None
 
 def is_numeric(value):
@@ -279,21 +281,21 @@ def is_numeric(value):
     except (ValueError, TypeError): return False
 # 기존의 evaluate_conditions 함수를 찾아서 아래 코드로 교체해주세요.
 
-def evaluate_conditions(data_dict, conditions):
+def evaluate_conditions(raw_data, conditions):
     """
     주어진 데이터 딕셔너리가 모든 조건을 만족하는지 평가합니다.
-    - data_dict: 평가의 기준이 될 키-값 형태의 딕셔너리
-    - conditions: 평가할 조건들의 리스트 또는 딕셔너리
+    [수정됨] get_value_from_element를 사용하여 중첩된 속성을 평가합니다.
     """
     if not conditions: return True
+    
     if isinstance(conditions, list):
         # 조건 리스트의 모든 항목을 만족해야 True (AND)
-        return all(evaluate_conditions(data_dict, cond) for cond in conditions)
+        return all(evaluate_conditions(raw_data, cond) for cond in conditions)
     
     if isinstance(conditions, dict):
         # OR 조건 처리
         if 'OR' in conditions and isinstance(conditions['OR'], list):
-            return any(evaluate_conditions(data_dict, cond) for cond in conditions['OR'])
+            return any(evaluate_conditions(raw_data, cond) for cond in conditions['OR'])
         
         # 개별 조건 처리
         p = conditions.get('parameter')
@@ -302,8 +304,8 @@ def evaluate_conditions(data_dict, conditions):
         
         if not all([p, o, v is not None]): return False
 
-        # [핵심 수정] get_value_from_element 대신 단순 딕셔너리 조회로 변경
-        actual_value = data_dict.get(p)
+        # ▼▼▼ [핵심 수정] get_value_from_element 함수를 호출하도록 변경 ▼▼▼
+        actual_value = get_value_from_element(raw_data, p)
         actual_v_str = str(actual_value or "")
 
         if o == 'equals': return actual_v_str == str(v)
@@ -337,13 +339,22 @@ def apply_classification_rules_view(request, project_id):
         if not rules.exists():
             return JsonResponse({'status': 'info', 'message': '적용할 규칙이 없습니다. 먼저 룰셋을 정의해주세요.'})
 
+        # 성능을 위해 프로젝트의 모든 태그를 미리 메모리에 로드
         project_tags = {tag.name: tag for tag in QuantityClassificationTag.objects.filter(project=project)}
         updated_count = 0
 
         for element in elements:
+            # 현재 객체에 이미 할당된 태그 이름들의 집합
             current_tag_names = {tag.name for tag in element.classification_tags.all()}
-            tags_to_add = {rule.target_tag.name for rule in rules if evaluate_conditions(element.raw_data, rule.conditions)}
             
+            # 모든 규칙을 순회하며 조건을 만족하는 태그들의 이름 집합을 만듦
+            tags_to_add = set()
+            for rule in rules:
+                # 수정된 evaluate_conditions 함수를 호출
+                if evaluate_conditions(element.raw_data, rule.conditions):
+                    tags_to_add.add(rule.target_tag.name)
+            
+            # 새로 추가될 태그가 있을 경우에만 DB 업데이트 수행
             if not tags_to_add.issubset(current_tag_names):
                 final_names = current_tag_names.union(tags_to_add)
                 final_objects = [project_tags[name] for name in final_names if name in project_tags]
@@ -356,8 +367,6 @@ def apply_classification_rules_view(request, project_id):
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
-# aibim_quantity_takeoff_web/connections/views.py
-
 
 # ▼▼▼ [추가] 이 함수를 아래에 추가해주세요 ▼▼▼
 @require_http_methods(["GET", "POST", "DELETE", "PUT"])
