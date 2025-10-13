@@ -229,12 +229,37 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     if (qmClearCostCodesBtn)
         qmClearCostCodesBtn.addEventListener("click", clearCostCodesFromQm);
+    
     const qmAssignCostCodeBtn = document.getElementById(
         "qm-assign-cost-code-btn"
     );
     if (qmAssignCostCodeBtn) {
         qmAssignCostCodeBtn.addEventListener("click", assignCostCodeToQm);
     }
+
+
+    // ▼▼▼ [추가] 이 코드 블록을 추가해주세요. ▼▼▼
+    const qmAssignMemberMarkBtn = document.getElementById(
+        "qm-assign-member-mark-btn"
+    );
+    if (qmAssignMemberMarkBtn) {
+        qmAssignMemberMarkBtn.addEventListener("click", assignMemberMarkToQm);
+    }
+
+    const qmClearMemberMarksBtn = document.getElementById(
+        "qm-clear-member-marks-btn"
+    );
+    if (qmClearMemberMarksBtn) {
+        qmClearMemberMarksBtn.addEventListener("click", clearMemberMarksFromQm);
+    }
+
+        document
+        .getElementById("create-ci-manual-btn")
+        ?.addEventListener("click", createManualCostItem);
+
+    document
+        .getElementById("create-ci-auto-btn")
+        ?.addEventListener("click", createAutoCostItems);
     // ... (이하 모든 addEventListener에 대해 동일한 패턴으로 null-check를 적용했다고 가정합니다) ...
     // 제공된 파일 기준으로 모든 리스너를 안전하게 감쌌습니다.
 

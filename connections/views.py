@@ -281,21 +281,21 @@ def is_numeric(value):
     except (ValueError, TypeError): return False
 # 기존의 evaluate_conditions 함수를 찾아서 아래 코드로 교체해주세요.
 
-def evaluate_conditions(raw_data, conditions):
+def evaluate_conditions(data_dict, conditions):
     """
     주어진 데이터 딕셔너리가 모든 조건을 만족하는지 평가합니다.
-    [수정됨] get_value_from_element를 사용하여 중첩된 속성을 평가합니다.
+    [수정됨] data_dict에서 직접 키를 찾고, 없으면 get_value_from_element를 사용합니다.
     """
     if not conditions: return True
     
     if isinstance(conditions, list):
         # 조건 리스트의 모든 항목을 만족해야 True (AND)
-        return all(evaluate_conditions(raw_data, cond) for cond in conditions)
+        return all(evaluate_conditions(data_dict, cond) for cond in conditions)
     
     if isinstance(conditions, dict):
         # OR 조건 처리
         if 'OR' in conditions and isinstance(conditions['OR'], list):
-            return any(evaluate_conditions(raw_data, cond) for cond in conditions['OR'])
+            return any(evaluate_conditions(data_dict, cond) for cond in conditions['OR'])
         
         # 개별 조건 처리
         p = conditions.get('parameter')
@@ -304,8 +304,16 @@ def evaluate_conditions(raw_data, conditions):
         
         if not all([p, o, v is not None]): return False
 
-        # ▼▼▼ [핵심 수정] get_value_from_element 함수를 호출하도록 변경 ▼▼▼
-        actual_value = get_value_from_element(raw_data, p)
+        # ▼▼▼ [핵심 수정] 값 찾는 로직 개선 ▼▼▼
+        actual_value = None
+        # 1. 먼저 data_dict에서 직접 키를 찾아봅니다 (예: 'classification_tag_name').
+        if p in data_dict:
+            actual_value = data_dict.get(p)
+        # 2. 직접 키가 없으면, 중첩된 구조(raw_data)를 탐색하는 기존 함수를 호출합니다.
+        else:
+            actual_value = get_value_from_element(data_dict, p)
+        # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
+            
         actual_v_str = str(actual_value or "")
 
         if o == 'equals': return actual_v_str == str(v)
@@ -329,6 +337,8 @@ def evaluate_conditions(raw_data, conditions):
         if o == 'not_exists': return actual_value is None
 
     return False
+
+
 @require_http_methods(["POST"])
 def apply_classification_rules_view(request, project_id):
     try:
