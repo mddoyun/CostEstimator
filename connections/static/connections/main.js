@@ -229,7 +229,12 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     if (qmClearCostCodesBtn)
         qmClearCostCodesBtn.addEventListener("click", clearCostCodesFromQm);
-
+    const qmAssignCostCodeBtn = document.getElementById(
+        "qm-assign-cost-code-btn"
+    );
+    if (qmAssignCostCodeBtn) {
+        qmAssignCostCodeBtn.addEventListener("click", assignCostCodeToQm);
+    }
     // ... (이하 모든 addEventListener에 대해 동일한 패턴으로 null-check를 적용했다고 가정합니다) ...
     // 제공된 파일 기준으로 모든 리스너를 안전하게 감쌌습니다.
 

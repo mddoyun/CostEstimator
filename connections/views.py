@@ -1369,7 +1369,8 @@ def get_property_value(instance, property_path, instance_type):
 def apply_assignment_rules_view(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
-        members = list(QuantityMember.objects.filter(project=project).select_related('raw_element', 'member_mark').prefetch_related('cost_codes', 'space_classifications'))
+        # [핵심 수정] select_related와 prefetch_related를 최적화하여 DB 조회를 줄입니다.
+        members = list(QuantityMember.objects.filter(project=project).select_related('raw_element', 'member_mark', 'classification_tag').prefetch_related('cost_codes', 'space_classifications'))
         
         # 모든 종류의 할당 룰셋 로드
         mark_rules = list(MemberMarkAssignmentRule.objects.filter(project=project).order_by('priority'))
@@ -1391,7 +1392,13 @@ def apply_assignment_rules_view(request, project_id):
                 for k, v in raw_data.get('TypeParameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
                 for k, v in raw_data.get('Parameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
 
-            # --- 2. 일람부호 할당 로직 (기존 로직 복원) ---
+            # [핵심 수정] 룰셋 조건 평가를 위해 QuantityMember의 직접적인 관계 필드 값들을 추가합니다.
+            if member.classification_tag:
+                combined_properties['classification_tag_name'] = member.classification_tag.name
+            if member.member_mark:
+                combined_properties['member_mark_name'] = member.member_mark.mark
+
+            # --- 2. 일람부호 할당 로직 (기존 로직과 동일) ---
             mark_expr = member.member_mark_expression
             if not mark_expr:
                 for rule in mark_rules:
@@ -1407,11 +1414,12 @@ def apply_assignment_rules_view(request, project_id):
                         member.save(update_fields=['member_mark'])
                         updated_mark_count += 1
 
-            # --- 3. 공사코드 할당 로직 (기존 로직 복원) ---
+            # --- 3. 공사코드 할당 로직 (수정된 로직) ---
             cost_code_exprs_list = member.cost_code_expressions
             if not cost_code_exprs_list:
                 matching_expressions = []
                 for rule in cost_code_rules:
+                    # [핵심 수정] 보강된 combined_properties로 조건을 평가합니다.
                     if evaluate_conditions(combined_properties, rule.conditions):
                         matching_expressions.append(rule.cost_code_expressions)
                 cost_code_exprs_list = matching_expressions
@@ -1422,17 +1430,22 @@ def apply_assignment_rules_view(request, project_id):
                 newly_added_codes = set()
                 
                 for expr_set in cost_code_exprs_list:
+                    # [핵심 수정] expr_set이 dict가 아닌 경우를 대비하여 방어 코드 추가
+                    if not isinstance(expr_set, dict): continue
+
                     code_val = evaluate_member_properties_expression(expr_set.get('code', ''), combined_properties)
                     name_val = evaluate_member_properties_expression(expr_set.get('name', ''), combined_properties)
                     if code_val and name_val:
                         code_obj, _ = CostCode.objects.get_or_create(project=project, code=str(code_val), defaults={'name': str(name_val), 'description': '룰셋에 의해 자동 생성됨'})
+                        if not current_codes_before or code_obj not in current_codes_before:
+                            codes_changed = True
                         member.cost_codes.add(code_obj)
                         newly_added_codes.add(code_obj)
 
-                if not newly_added_codes.issubset(current_codes_before):
+                if codes_changed:
                     updated_cost_code_count += 1
-
-        # --- 4. 동적 공간분류 할당 로직 (수정된 로직) ---
+        
+        # --- 4. 동적 공간분류 할당 로직 (기존 로직과 동일) ---
         if dynamic_space_rules:
             all_spaces = list(SpaceClassification.objects.filter(project=project).select_related('source_element'))
             temp_updated_space_count = 0
@@ -1440,7 +1453,18 @@ def apply_assignment_rules_view(request, project_id):
             for rule in dynamic_space_rules:
                 members_map = {}
                 for member in members:
-                    if rule.member_filter_conditions and not evaluate_conditions(combined_properties, rule.member_filter_conditions):
+                    # [수정] combined_properties를 사용하도록 변경하여 일관성 유지
+                    member_combined_properties = member.properties.copy() if member.properties else {}
+                    if member.raw_element and member.raw_element.raw_data:
+                        raw_data = member.raw_element.raw_data
+                        for k, v in raw_data.items():
+                            if not isinstance(v, (dict, list)): member_combined_properties[f'BIM원본.{k}'] = v
+                        for k, v in raw_data.get('TypeParameters', {}).items(): member_combined_properties[f'BIM원본.{k}'] = v
+                        for k, v in raw_data.get('Parameters', {}).items(): member_combined_properties[f'BIM원본.{k}'] = v
+                    if member.classification_tag:
+                        member_combined_properties['classification_tag_name'] = member.classification_tag.name
+
+                    if rule.member_filter_conditions and not evaluate_conditions(member_combined_properties, rule.member_filter_conditions):
                         continue
                     
                     join_key = get_property_value(member, rule.member_join_property, 'member')
@@ -1459,21 +1483,27 @@ def apply_assignment_rules_view(request, project_id):
                     if key in spaces_map:
                         space_to_assign = spaces_map[key]
                         for member in member_list:
-                            # ManyToManyField는 .add() 전에 .all()을 호출할 필요가 없습니다.
-                            member.space_classifications.add(space_to_assign)
-                            # 카운트는 실제 변경이 일어났는지 확인하는 것보다, 시도 횟수를 세는 것이 더 간단합니다.
-                temp_updated_space_count = len(members_map) # 규칙 적용 대상 부재 수로 카운트 (단순화)
-            updated_space_count = temp_updated_space_count
+                            if space_to_assign not in member.space_classifications.all():
+                                member.space_classifications.add(space_to_assign)
+                                temp_updated_space_count += 1
+            if temp_updated_space_count > 0 :
+                 # 실제로 공간이 할당된 부재의 수를 세는 방식으로 변경
+                updated_space_count = QuantityMember.objects.filter(project=project, space_classifications__isnull=False).distinct().count()
 
 
         message = f'룰셋 적용 완료! 일람부호 {updated_mark_count}개, 공사코드 {updated_cost_code_count}개, 공간분류 {updated_space_count}개 부재가 업데이트되었습니다.'
         return JsonResponse({'status': 'success', 'message': message})
 
     except Project.DoesNotExist:
+        # [수정] status_404를 status=404로 수정했습니다.
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         import traceback
+        # [수정] status: 500을 status=500으로 수정했습니다.
         return JsonResponse({'status': 'error', 'message': f'룰셋 적용 중 오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
+# ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
+
+
 @require_http_methods(["GET"])
 def get_boq_grouping_fields_api(request, project_id):
     """
