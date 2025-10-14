@@ -379,6 +379,7 @@ def apply_classification_rules_view(request, project_id):
     except Exception as e:
         print(f"[ERROR] 룰셋 적용 중 예외 발생: {e}")
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
+
 # ▼▼▼ [추가] 이 함수를 아래에 추가해주세요 ▼▼▼
 @require_http_methods(["GET", "POST", "DELETE", "PUT"])
 def cost_codes_api(request, project_id, code_id=None):
@@ -1392,31 +1393,47 @@ def create_cost_items_auto_view(request, project_id):
         import traceback
         return JsonResponse({'status': 'error', 'message': f'자동 생성 중 오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
 
-
-def evaluate_member_properties_expression(expression, member_properties):
+def evaluate_member_properties_expression(expression, context_data):
     """
-    '{면적} * 2' 와 같은 문자열 표현식을 QuantityMember의 속성 값으로 계산합니다.
+    '{Name}' 또는 '{BIM원본.Category}'와 같은 표현식을 주어진 데이터 컨텍스트에서 평가합니다.
+    [수정됨] QuantityMember.properties 뿐만 아니라, combined_properties 전체를 사용합니다.
     """
     if not isinstance(expression, str):
         return expression
+    
+    print(f"  [DEBUG] 표현식 평가 시작: '{expression}'")
 
     temp_expression = expression
     placeholders = re.findall(r'\{([^}]+)\}', temp_expression)
     
     for placeholder in set(placeholders):
-        value = member_properties.get(placeholder)
+        # [핵심 수정] context_data (combined_properties)에서 직접 값을 찾습니다.
+        value = context_data.get(placeholder)
+        
+        print(f"    > 플레이스홀더: '{{{placeholder}}}', 찾은 값: '{value}' (타입: {type(value).__name__})")
+        
         if value is not None:
+            # 값이 숫자인지 확인하고, 문자열이면 따옴표로 감싸줍니다.
             replacement = str(value) if is_numeric(value) else f'"{str(value)}"'
             temp_expression = temp_expression.replace(f'{{{placeholder}}}', replacement)
         else:
             # 해당 속성이 없으면 빈 문자열로 처리하여 문자열 조합에 사용될 수 있도록 함
+            # 예: "{층}F" -> "F"가 아닌 ""가 되도록
             temp_expression = temp_expression.replace(f'{{{placeholder}}}', '""')
+            print(f"    > 경고: context_data에서 '{placeholder}' 키를 찾을 수 없습니다. 빈 문자열로 처리합니다.")
             
     try:
+        # eval의 위험성을 줄이기 위해 사용 가능한 내장 함수를 제한합니다.
         safe_dict = {'__builtins__': {'abs': abs, 'round': round, 'max': max, 'min': min, 'len': len, 'str': str, 'int': int, 'float': float}}
-        return eval(temp_expression, safe_dict)
-    except Exception:
+        
+        print(f"    > 최종 평가식: '{temp_expression}'")
+        evaluated_result = eval(temp_expression, safe_dict)
+        print(f"    > 평가 결과: '{evaluated_result}'")
+        
+        return evaluated_result
+    except Exception as e:
         # eval 실패 시, 단순 문자열 조합 결과일 수 있으므로 temp_expression을 그대로 반환
+        print(f"    > eval() 오류 발생: {e}. 표현식을 문자열 조합으로 간주하고 결과를 반환합니다.")
         return temp_expression
 
 def get_property_value(instance, property_path, instance_type):
@@ -1465,59 +1482,100 @@ def get_property_value(instance, property_path, instance_type):
 
 @require_http_methods(["POST"])
 def apply_assignment_rules_view(request, project_id):
+    print("\n[DEBUG] --- '할당 룰셋 일괄적용' API 요청 수신 ---")
     try:
         project = Project.objects.get(id=project_id)
-        # [핵심 수정] select_related와 prefetch_related를 최적화하여 DB 조회를 줄입니다.
+        
         members = list(QuantityMember.objects.filter(project=project).select_related('raw_element', 'member_mark', 'classification_tag').prefetch_related('cost_codes', 'space_classifications'))
         
-        # 모든 종류의 할당 룰셋 로드
         mark_rules = list(MemberMarkAssignmentRule.objects.filter(project=project).order_by('priority'))
         cost_code_rules = list(CostCodeAssignmentRule.objects.filter(project=project).order_by('priority'))
         dynamic_space_rules = list(SpaceAssignmentRule.objects.filter(project=project).order_by('priority'))
+
+        print(f"[DEBUG] {len(members)}개의 수량산출부재에 대해 룰셋 적용을 시작합니다.")
+        print(f"  > 적용할 일람부호 룰셋: {len(mark_rules)}개")
+        print(f"  > 적용할 공사코드 룰셋: {len(cost_code_rules)}개")
+        print(f"  > 적용할 동적 공간 룰셋: {len(dynamic_space_rules)}개")
 
         updated_mark_count = 0
         updated_cost_code_count = 0
         updated_space_count = 0
 
-        # --- 1. 부재별로 순회하며 모든 룰셋 적용 ---
         for member in members:
+            print(f"\n[DEBUG] 부재 처리 중: '{member.name}' (ID: {member.id})")
+            
             # 1-1. 모든 속성을 종합한 'combined_properties' 딕셔너리 생성
             combined_properties = member.properties.copy() if member.properties else {}
+            
+            # [핵심] QuantityMember 모델의 직접적인 속성도 추가 (예: Name)
+            combined_properties['Name'] = member.name
+            
             if member.raw_element and member.raw_element.raw_data:
                 raw_data = member.raw_element.raw_data
                 for k, v in raw_data.items():
                     if not isinstance(v, (dict, list)): combined_properties[f'BIM원본.{k}'] = v
-                for k, v in raw_data.get('TypeParameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
-                for k, v in raw_data.get('Parameters', {}).items(): combined_properties[f'BIM원본.{k}'] = v
-
-            # [핵심 수정] 룰셋 조건 평가를 위해 QuantityMember의 직접적인 관계 필드 값들을 추가합니다.
+                for k, v in raw_data.get('TypeParameters', {}).items(): combined_properties[f'BIM원본.TypeParameters.{k}'] = v
+                for k, v in raw_data.get('Parameters', {}).items(): combined_properties[f'BIM원본.Parameters.{k}'] = v
+            
             if member.classification_tag:
                 combined_properties['classification_tag_name'] = member.classification_tag.name
             if member.member_mark:
                 combined_properties['member_mark_name'] = member.member_mark.mark
 
-            # --- 2. 일람부호 할당 로직 (기존 로직과 동일) ---
+            # --- 2. 일람부호 할당 로직 ---
+            print("[DEBUG] --- 일람부호 할당 룰셋 적용 시작 ---")
             mark_expr = member.member_mark_expression
-            if not mark_expr:
+            if mark_expr:
+                 print(f"  [DEBUG] 부재에 개별 할당된 Mark 표현식 '{mark_expr}'을(를) 사용합니다.")
+            else:
+                print(f"  [DEBUG] {len(mark_rules)}개의 일람부호 룰셋을 순차적으로 검사합니다.")
                 for rule in mark_rules:
+                    print(f"  [DEBUG] >> 규칙 검사: '{rule.name}' (Priority: {rule.priority})")
                     if evaluate_conditions(combined_properties, rule.conditions):
                         mark_expr = rule.mark_expression
+                        print(f"  [DEBUG] >> 조건 일치! Mark 표현식 '{mark_expr}'을(를) 사용합니다.")
                         break
+                    else:
+                        print(f"  [DEBUG] >> 조건 불일치.")
+            
             if mark_expr:
+                # [핵심 수정] combined_properties를 전달
                 evaluated_mark_value = evaluate_member_properties_expression(mark_expr, combined_properties)
-                if evaluated_mark_value:
-                    mark_obj, _ = MemberMark.objects.get_or_create(project=project, mark=str(evaluated_mark_value), defaults={'description': '룰셋에 의해 자동 생성됨'})
+                print(f"  [DEBUG] 최종 평가된 Mark 값: '{evaluated_mark_value}'")
+                
+                if evaluated_mark_value and str(evaluated_mark_value).strip():
+                    # get_or_create로 일람부호가 없으면 생성, 있으면 가져옴
+                    mark_obj, created = MemberMark.objects.get_or_create(
+                        project=project, 
+                        mark=str(evaluated_mark_value), 
+                        defaults={'description': '룰셋에 의해 자동 생성됨'}
+                    )
+                    
+                    if created:
+                        print(f"  [DEBUG] >> 새로운 일람부호 '{mark_obj.mark}'을(를) 생성했습니다.")
+                    else:
+                        print(f"  [DEBUG] >> 기존 일람부호 '{mark_obj.mark}'을(를) 찾았습니다.")
+
                     if member.member_mark != mark_obj:
                         member.member_mark = mark_obj
                         member.save(update_fields=['member_mark'])
                         updated_mark_count += 1
+                        print(f"  [DEBUG] >> 부재 '{member.name}'에 일람부호 '{mark_obj.mark}'을(를) 할당했습니다.")
+                    else:
+                        print(f"  [DEBUG] >> 이미 올바른 일람부호가 할당되어 있어 변경하지 않습니다.")
+                else:
+                    print(f"  [DEBUG] Mark 표현식의 평가 결과가 비어있어 할당을 건너뜁니다.")
+            else:
+                 print("  [DEBUG] 이 부재에 일치하는 일람부호 할당 규칙이 없습니다.")
 
-            # --- 3. 공사코드 할당 로직 (수정된 로직) ---
+            # --- 3. 공사코드 할당 로직 (기존 로직과 동일, 디버깅 프린트 추가) ---
+            print("[DEBUG] --- 공사코드 할당 룰셋 적용 시작 ---")
             cost_code_exprs_list = member.cost_code_expressions
-            if not cost_code_exprs_list:
+            if cost_code_exprs_list:
+                print(f"  [DEBUG] 부재에 개별 할당된 공사코드 표현식을 사용합니다.")
+            else:
                 matching_expressions = []
                 for rule in cost_code_rules:
-                    # [핵심 수정] 보강된 combined_properties로 조건을 평가합니다.
                     if evaluate_conditions(combined_properties, rule.conditions):
                         matching_expressions.append(rule.cost_code_expressions)
                 cost_code_exprs_list = matching_expressions
@@ -1525,51 +1583,49 @@ def apply_assignment_rules_view(request, project_id):
             if cost_code_exprs_list:
                 codes_changed = False
                 current_codes_before = set(member.cost_codes.all())
-                newly_added_codes = set()
                 
                 for expr_set in cost_code_exprs_list:
-                    # [핵심 수정] expr_set이 dict가 아닌 경우를 대비하여 방어 코드 추가
                     if not isinstance(expr_set, dict): continue
 
                     code_val = evaluate_member_properties_expression(expr_set.get('code', ''), combined_properties)
                     name_val = evaluate_member_properties_expression(expr_set.get('name', ''), combined_properties)
                     if code_val and name_val:
-                        code_obj, _ = CostCode.objects.get_or_create(project=project, code=str(code_val), defaults={'name': str(name_val), 'description': '룰셋에 의해 자동 생성됨'})
-                        if not current_codes_before or code_obj not in current_codes_before:
+                        code_obj, created = CostCode.objects.get_or_create(project=project, code=str(code_val), defaults={'name': str(name_val), 'description': '룰셋에 의해 자동 생성됨'})
+                        if code_obj not in current_codes_before:
                             codes_changed = True
                         member.cost_codes.add(code_obj)
-                        newly_added_codes.add(code_obj)
+                        print(f"  [DEBUG] >> 공사코드 '{code_obj.code}' 할당/생성 완료.")
 
                 if codes_changed:
                     updated_cost_code_count += 1
         
         # --- 4. 동적 공간분류 할당 로직 (기존 로직과 동일) ---
+        print("[DEBUG] --- 동적 공간분류 할당 룰셋 적용 시작 ---")
         if dynamic_space_rules:
             all_spaces = list(SpaceClassification.objects.filter(project=project).select_related('source_element'))
             temp_updated_space_count = 0
 
             for rule in dynamic_space_rules:
                 members_map = {}
-                for member in members:
-                    # [수정] combined_properties를 사용하도록 변경하여 일관성 유지
-                    member_combined_properties = member.properties.copy() if member.properties else {}
-                    if member.raw_element and member.raw_element.raw_data:
-                        raw_data = member.raw_element.raw_data
+                for member_for_space in members:
+                    member_combined_properties = member_for_space.properties.copy() if member_for_space.properties else {}
+                    if member_for_space.raw_element and member_for_space.raw_element.raw_data:
+                        raw_data = member_for_space.raw_element.raw_data
                         for k, v in raw_data.items():
                             if not isinstance(v, (dict, list)): member_combined_properties[f'BIM원본.{k}'] = v
                         for k, v in raw_data.get('TypeParameters', {}).items(): member_combined_properties[f'BIM원본.{k}'] = v
                         for k, v in raw_data.get('Parameters', {}).items(): member_combined_properties[f'BIM원본.{k}'] = v
-                    if member.classification_tag:
-                        member_combined_properties['classification_tag_name'] = member.classification_tag.name
+                    if member_for_space.classification_tag:
+                        member_combined_properties['classification_tag_name'] = member_for_space.classification_tag.name
 
                     if rule.member_filter_conditions and not evaluate_conditions(member_combined_properties, rule.member_filter_conditions):
                         continue
                     
-                    join_key = get_property_value(member, rule.member_join_property, 'member')
+                    join_key = get_property_value(member_for_space, rule.member_join_property, 'member')
                     if join_key is not None:
                         join_key_str = str(join_key)
                         if join_key_str not in members_map: members_map[join_key_str] = []
-                        members_map[join_key_str].append(member)
+                        members_map[join_key_str].append(member_for_space)
 
                 spaces_map = {}
                 for space in all_spaces:
@@ -1580,26 +1636,22 @@ def apply_assignment_rules_view(request, project_id):
                 for key, member_list in members_map.items():
                     if key in spaces_map:
                         space_to_assign = spaces_map[key]
-                        for member in member_list:
-                            if space_to_assign not in member.space_classifications.all():
-                                member.space_classifications.add(space_to_assign)
+                        for member_to_assign in member_list:
+                            if space_to_assign not in member_to_assign.space_classifications.all():
+                                member_to_assign.space_classifications.add(space_to_assign)
                                 temp_updated_space_count += 1
-            if temp_updated_space_count > 0 :
-                 # 실제로 공간이 할당된 부재의 수를 세는 방식으로 변경
+            if temp_updated_space_count > 0:
                 updated_space_count = QuantityMember.objects.filter(project=project, space_classifications__isnull=False).distinct().count()
 
-
         message = f'룰셋 적용 완료! 일람부호 {updated_mark_count}개, 공사코드 {updated_cost_code_count}개, 공간분류 {updated_space_count}개 부재가 업데이트되었습니다.'
+        print(f"[DEBUG] --- 최종 결과: {message} ---")
         return JsonResponse({'status': 'success', 'message': message})
 
     except Project.DoesNotExist:
-        # [수정] status_404를 status=404로 수정했습니다.
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         import traceback
-        # [수정] status: 500을 status=500으로 수정했습니다.
         return JsonResponse({'status': 'error', 'message': f'룰셋 적용 중 오류 발생: {str(e)}', 'details': traceback.format_exc()}, status=500)
-# ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
 
 
 @require_http_methods(["GET"])
