@@ -805,6 +805,56 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+
+
+    // --- '집계' 탭 버튼 이벤트 리스너 ---
+    const generateBoqBtn = document.getElementById("generate-boq-btn");
+    if (generateBoqBtn) {
+        generateBoqBtn.addEventListener("click", generateBoqReport);
+    }
+
+    const boqResetColumnsBtn = document.getElementById("boq-reset-columns-btn");
+    if (boqResetColumnsBtn) {
+        boqResetColumnsBtn.addEventListener("click", resetBoqColumnsAndRegenerate);
+    }
+
+    const exportBoqBtn = document.getElementById("export-boq-btn");
+    if (exportBoqBtn) {
+        // Excel 내보내기 기능은 아직 구현되지 않았으므로, 임시 함수를 연결합니다.
+        exportBoqBtn.addEventListener("click", exportBoqReportToExcel);
+    }
+
+    const boqGetFromClientBtn = document.getElementById("boq-get-from-client-btn");
+    if (boqGetFromClientBtn) {
+        boqGetFromClientBtn.addEventListener("click", handleBoqGetFromClient);
+    }
+
+    const boqSelectInClientBtn = document.getElementById("boq-select-in-client-btn");
+    if (boqSelectInClientBtn) {
+        boqSelectInClientBtn.addEventListener("click", handleBoqSelectInClient);
+    }
+
+    const boqClearFilterBtn = document.getElementById("boq-clear-selection-filter-btn");
+    if (boqClearFilterBtn) {
+        boqClearFilterBtn.addEventListener("click", handleBoqClearFilter);
+    }
+
+    const addBoqGroupLevelBtn = document.getElementById("add-boq-group-level-btn");
+    if (addBoqGroupLevelBtn) {
+        addBoqGroupLevelBtn.addEventListener("click", addBoqGroupingLevel);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
     //DOMContentLoaded 끝
 });
 
@@ -3755,15 +3805,15 @@ async function loadBoqGroupingFields() {
     }
 }
 
-/**
- * '집계' 탭에 그룹핑 레벨 Select Box를 추가합니다.
- */
+
 function addBoqGroupingLevel() {
+    console.log("[DEBUG] '+ 그룹핑 추가' 버튼 클릭됨");
     const container = document.getElementById("boq-grouping-controls");
     const newIndex = container.children.length;
 
     if (availableBoqFields.length === 0) {
         showToast("그룹핑 필드 정보를 먼저 불러와야 합니다.", "info");
+        console.warn("[DEBUG] availableBoqFields가 비어있어 그룹핑 레벨 추가 중단.");
         return;
     }
 
@@ -3782,70 +3832,80 @@ function addBoqGroupingLevel() {
         <button class="remove-boq-group-level-btn" style="padding: 2px 6px; font-size: 12px;">-</button>
     `;
     container.appendChild(newLevelDiv);
+    console.log(`[DEBUG] ${newIndex + 1}차 그룹핑 레벨 추가됨.`);
 
     newLevelDiv
         .querySelector(".remove-boq-group-level-btn")
         .addEventListener("click", function () {
+            console.log("[DEBUG] 그룹핑 레벨 제거 버튼 클릭됨");
             this.parentElement.remove();
-            // 삭제 후 순서를 다시 매겨줍니다.
             container
                 .querySelectorAll(".boq-group-level label")
                 .forEach((label, index) => {
                     label.textContent = `${index + 1}차:`;
                 });
+            console.log("[DEBUG] 그룹핑 레벨 재정렬 완료.");
         });
 }
 
-async function generateBoqReport() {
-    /* ▼▼▼ [수정] 열 순서와 별칭을 초기화하는 아래 두 줄을 삭제합니다. ▼▼▼ */
-    // currentBoqColumns = [];  <-- 이 줄 삭제
-    // boqColumnAliases = {}; <-- 이 줄 삭제
-    /* ▲▲▲ 여기까지 수정 ▲▲▲ */
 
+
+async function generateBoqReport() {
+    console.log("[DEBUG] '집계표 생성' 버튼 클릭됨");
+    
     if (!currentProjectId) {
         showToast("먼저 프로젝트를 선택하세요.", "error");
+        console.error("[DEBUG] 프로젝트가 선택되지 않아 중단됨.");
         return;
     }
     const groupBySelects = document.querySelectorAll(".boq-group-by-select");
     if (groupBySelects.length === 0) {
         showToast("하나 이상의 그룹핑 기준을 추가하세요.", "error");
+        console.error("[DEBUG] 그룹핑 기준이 없어 중단됨.");
         return;
     }
 
     const params = new URLSearchParams();
     groupBySelects.forEach((select) => params.append("group_by", select.value));
+    console.log("[DEBUG] 그룹핑 기준:", params.getAll("group_by"));
 
     const displayByCheckboxes = document.querySelectorAll(
         ".boq-display-field-cb:checked"
     );
     displayByCheckboxes.forEach((cb) => params.append("display_by", cb.value));
+    console.log("[DEBUG] 표시 필드:", params.getAll("display_by"));
+
 
     if (boqFilteredRawElementIds.size > 0) {
         boqFilteredRawElementIds.forEach((id) =>
             params.append("raw_element_ids", id)
         );
+        console.log(`[DEBUG] Revit 필터링 ID ${boqFilteredRawElementIds.size}개 적용됨.`);
     }
 
     const tableContainer = document.getElementById("boq-table-container");
     tableContainer.innerHTML =
         '<p style="padding: 20px;">집계 데이터를 생성 중입니다...</p>';
     showToast("집계표 생성 중...", "info");
+    console.log("[DEBUG] 서버에 집계표 데이터 요청 시작...");
 
     try {
         const response = await fetch(
             `/connections/api/boq/report/${currentProjectId}/?${params.toString()}`
         );
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`서버 오류 (${response.status})`);
+            const errorResult = await response.json();
+            throw new Error(errorResult.message || `서버 오류 (${response.status})`);
         }
 
         const data = await response.json();
+        console.log("[DEBUG] 서버로부터 집계표 데이터 수신 완료:", data);
 
         renderBoqTable(data.report, data.summary);
         setupBoqTableInteractions();
+        console.log("[DEBUG] 집계표 렌더링 완료.");
     } catch (error) {
-        console.error("최종 오류 발생:", error);
+        console.error("[DEBUG] 집계표 생성 중 오류 발생:", error);
         tableContainer.innerHTML = `<p style="padding: 20px; color: red;">오류: ${error.message}</p>`;
         showToast(error.message, "error");
     }
@@ -4218,23 +4278,25 @@ function initializeBoqUI() {
     }
 }
 
-/**
- * '집계' 탭에서 '연동 프로그램에서 선택 확인' 버튼 클릭을 처리합니다.
- */
 function handleBoqSelectInClient() {
+    console.log("[DEBUG] '연동 프로그램에서 선택 확인' 버튼 클릭됨");
     const selectedRow = document.querySelector(
         ".boq-table tr.selected-boq-row"
     );
     if (!selectedRow) {
         showToast("먼저 집계표에서 확인할 행을 선택하세요.", "error");
+        console.warn("[DEBUG] 집계표에서 선택된 행이 없음.");
         return;
     }
 
     const itemIds = JSON.parse(selectedRow.dataset.itemIds || "[]");
     if (itemIds.length === 0) {
         showToast("선택된 행에 연관된 산출항목이 없습니다.", "info");
+        console.warn("[DEBUG] 선택된 행에 item_ids가 없음.");
         return;
     }
+    console.log(`[DEBUG] 선택된 행의 CostItem ID 목록:`, itemIds);
+
 
     const rawElementIds = new Set();
     itemIds.forEach((itemId) => {
@@ -4254,8 +4316,10 @@ function handleBoqSelectInClient() {
             "선택된 항목들은 BIM 객체와 직접 연관되어 있지 않습니다.",
             "info"
         );
+        console.warn("[DEBUG] 연관된 BIM 객체를 찾지 못함.");
         return;
     }
+    console.log(`[DEBUG] 최종 RawElement ID 목록:`, Array.from(rawElementIds));
 
     const uniqueIdsToSend = [];
     rawElementIds.forEach((rawId) => {
@@ -4266,7 +4330,6 @@ function handleBoqSelectInClient() {
     });
 
     if (uniqueIdsToSend.length > 0) {
-        // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
         const targetGroup =
             currentMode === "revit"
                 ? "revit_broadcast_group"
@@ -4286,19 +4349,18 @@ function handleBoqSelectInClient() {
             `${uniqueIdsToSend.length}개 객체의 선택 명령을 ${clientName}(으)로 보냈습니다.`,
             "success"
         );
+        console.log(`[DEBUG] ${clientName}으로 ${uniqueIdsToSend.length}개 객체 선택 명령 전송:`, uniqueIdsToSend);
     } else {
         showToast(
             "연동 프로그램으로 보낼 유효한 객체를 찾지 못했습니다.",
             "error"
         );
+        console.error("[DEBUG] 전송할 최종 Unique ID를 찾지 못함.");
     }
 }
 
-/**
- * '집계' 탭에서 '선택 객체 가져오기' 버튼 클릭을 처리합니다.
- */
 function handleBoqGetFromClient() {
-    // ▼▼▼ [핵심 수정] currentMode에 따라 동적으로 메시지를 보냅니다. ▼▼▼
+    console.log("[DEBUG] '선택 객체 가져오기 (BOQ)' 버튼 클릭됨");
     const targetGroup =
         currentMode === "revit"
             ? "revit_broadcast_group"
@@ -4314,36 +4376,33 @@ function handleBoqGetFromClient() {
     );
     const clientName = currentMode === "revit" ? "Revit" : "Blender";
     showToast(`${clientName}에 선택 정보 가져오기를 요청했습니다.`, "info");
+    console.log(`[DEBUG] ${clientName}에 get_selection 명령 전송`);
 }
 
-/**
- * '집계' 탭에서 '선택 필터 해제' 버튼 클릭을 처리합니다.
- */
 function handleBoqClearFilter() {
+    console.log("[DEBUG] '선택 필터 해제 (BOQ)' 버튼 클릭됨");
     boqFilteredRawElementIds.clear();
     document.getElementById("boq-clear-selection-filter-btn").style.display =
         "none";
-    generateBoqReport(); // 필터 없이 전체 집계표를 다시 생성
+    generateBoqReport(); 
     showToast("Revit 선택 필터를 해제하고 전체 집계표를 표시합니다.", "info");
 }
 
-/**
- * '집계' 탭의 열 순서와 이름을 초기화하고 집계표를 다시 생성합니다.
- */
 function resetBoqColumnsAndRegenerate() {
+    console.log("[DEBUG] '열 순서/이름 초기화' 버튼 클릭됨");
     if (!confirm("테이블의 열 순서와 이름을 기본값으로 초기화하시겠습니까?")) {
+        console.log("[DEBUG] 초기화 취소됨.");
         return;
     }
 
-    // 전역 변수를 초기화합니다.
     currentBoqColumns = [];
     boqColumnAliases = {};
+    console.log("[DEBUG] 열 상태(currentBoqColumns, boqColumnAliases) 초기화됨.");
 
     showToast("열 상태를 초기화하고 집계표를 다시 생성합니다.", "info");
-
-    // 집계표를 다시 생성하여 변경사항을 적용합니다.
     generateBoqReport();
 }
+
 
 function importTags(event) {
     if (!currentProjectId) {
@@ -5518,3 +5577,12 @@ const debouncedRender = (contextPrefix) =>
                 : "space-management-data-table-container";
         renderDataTable(containerId, contextPrefix);
     }, 300);
+
+/**
+ * [임시] '집계' 탭의 내용을 Excel로 내보내는 기능 (현재는 미구현)
+ */
+function exportBoqReportToExcel() {
+    console.log("[DEBUG] 'Excel 내보내기' 버튼 클릭됨 (현재 미구현).");
+    showToast("Excel 내보내기 기능은 현재 준비 중입니다.", "info");
+    // TODO: SheetJS 등의 라이브러리를 사용하여 실제 Excel 내보내기 기능 구현
+}
