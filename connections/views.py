@@ -341,43 +341,44 @@ def evaluate_conditions(data_dict, conditions):
 
 @require_http_methods(["POST"])
 def apply_classification_rules_view(request, project_id):
+    print("\n[DEBUG] --- '룰셋 일괄적용' API 요청 수신 ---")
     try:
         project = Project.objects.get(id=project_id)
         rules = ClassificationRule.objects.filter(project=project).order_by('priority').select_related('target_tag')
         elements = RawElement.objects.filter(project=project).prefetch_related('classification_tags')
 
         if not rules.exists():
+            print("[DEBUG] 적용할 룰셋이 없어 조기 종료합니다.")
             return JsonResponse({'status': 'info', 'message': '적용할 규칙이 없습니다. 먼저 룰셋을 정의해주세요.'})
 
-        # 성능을 위해 프로젝트의 모든 태그를 미리 메모리에 로드
+        print(f"[DEBUG] {elements.count()}개의 BIM 객체에 대해 {rules.count()}개의 룰셋 적용을 시작합니다.")
+        
         project_tags = {tag.name: tag for tag in QuantityClassificationTag.objects.filter(project=project)}
         updated_count = 0
 
         for element in elements:
-            # 현재 객체에 이미 할당된 태그 이름들의 집합
             current_tag_names = {tag.name for tag in element.classification_tags.all()}
             
-            # 모든 규칙을 순회하며 조건을 만족하는 태그들의 이름 집합을 만듦
             tags_to_add = set()
             for rule in rules:
-                # 수정된 evaluate_conditions 함수를 호출
                 if evaluate_conditions(element.raw_data, rule.conditions):
                     tags_to_add.add(rule.target_tag.name)
             
-            # 새로 추가될 태그가 있을 경우에만 DB 업데이트 수행
             if not tags_to_add.issubset(current_tag_names):
                 final_names = current_tag_names.union(tags_to_add)
                 final_objects = [project_tags[name] for name in final_names if name in project_tags]
                 element.classification_tags.set(final_objects)
                 updated_count += 1
-
+        
+        print(f"[DEBUG] 총 {updated_count}개의 객체 분류 정보가 업데이트되었습니다.")
         message = f'룰셋을 적용하여 총 {updated_count}개 객체의 분류를 업데이트했습니다.' if updated_count > 0 else '모든 객체가 이미 룰셋의 조건과 일치하여, 변경된 사항이 없습니다.'
         return JsonResponse({'status': 'success', 'message': message})
     except Project.DoesNotExist:
+        print(f"[ERROR] 프로젝트 ID '{project_id}'를 찾을 수 없습니다.")
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
+        print(f"[ERROR] 룰셋 적용 중 예외 발생: {e}")
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
-
 # ▼▼▼ [추가] 이 함수를 아래에 추가해주세요 ▼▼▼
 @require_http_methods(["GET", "POST", "DELETE", "PUT"])
 def cost_codes_api(request, project_id, code_id=None):

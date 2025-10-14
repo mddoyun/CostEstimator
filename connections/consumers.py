@@ -186,6 +186,7 @@ class FrontendConsumer(AsyncWebsocketConsumer):
     async def connect(self): await self.channel_layer.group_add(self.frontend_group_name, self.channel_name); await self.accept()
     async def disconnect(self, close_code): await self.channel_layer.group_discard(self.frontend_group_name, self.channel_name)
     
+ 
     async def receive(self, text_data):
         data = json.loads(text_data)
         msg_type = data.get('type')
@@ -197,18 +198,25 @@ class FrontendConsumer(AsyncWebsocketConsumer):
             print(f"   ➡️  '{target_group}' 그룹으로 명령을 전달합니다: {payload}")
             await self.channel_layer.group_send(target_group, {'type': 'send.command', 'command_data': payload})
         
+        # ▼▼▼ [수정] get_all_elements 메시지 처리 부분에 print문 추가 ▼▼▼
         elif msg_type == 'get_all_elements':
             project_id = payload.get('project_id')
             if project_id:
+                print(f"\n[DEBUG] 프론트엔드로부터 '{project_id}' 프로젝트의 모든 객체 데이터 요청을 받았습니다.")
                 total_elements = await get_total_element_count(project_id)
+                print(f"[DEBUG] 총 {total_elements}개의 객체를 전송 시작합니다.")
                 await self.send(text_data=json.dumps({'type': 'revit_data_start', 'payload': {'total': total_elements}}))
+                
                 CHUNK_SIZE = 1000
                 for offset in range(0, total_elements, CHUNK_SIZE):
                     chunk = await get_serialized_element_chunk(project_id, offset, CHUNK_SIZE)
                     if chunk:
                         await self.send(text_data=json.dumps({'type': 'revit_data_chunk', 'payload': chunk}))
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.01) # 부하 분산을 위한 약간의 지연
+                
+                print(f"[DEBUG] {total_elements}개 객체 전송을 완료했습니다.")
                 await self.send(text_data=json.dumps({'type': 'revit_data_complete'}))
+        # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
         
         elif msg_type == 'get_tags':
             project_id = payload.get('project_id')
@@ -248,7 +256,6 @@ class FrontendConsumer(AsyncWebsocketConsumer):
             elif msg_type == 'clear_tags': await self.db_clear_tags(element_ids)
             elements = await serialize_specific_elements(element_ids)
             await self.channel_layer.group_send(self.frontend_group_name, {'type': 'broadcast_elements', 'elements': elements})
-
     async def broadcast_progress(self, event): await self.send(text_data=json.dumps(event['data']))
     async def broadcast_tags(self, event): await self.send(text_data=json.dumps({'type': 'tags_updated', 'tags': event['tags']}))
     async def broadcast_elements(self, event): await self.send(text_data=json.dumps({'type': 'elements_updated', 'elements': event['elements']}))

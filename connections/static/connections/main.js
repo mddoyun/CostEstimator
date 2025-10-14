@@ -1547,7 +1547,6 @@ async function loadClassificationRules() {
         showToast(error.message, "error");
     }
 }
-
 async function applyClassificationRules() {
     if (!currentProjectId) {
         showToast("먼저 프로젝트를 선택하세요.", "error");
@@ -1562,6 +1561,7 @@ async function applyClassificationRules() {
         return;
     }
 
+    console.log("[DEBUG] '룰셋 일괄적용' 시작. 서버에 API 요청을 보냅니다.");
     showToast("룰셋을 적용하고 있습니다... 잠시만 기다려주세요.", "info", 5000);
 
     try {
@@ -1583,15 +1583,28 @@ async function applyClassificationRules() {
         }
 
         showToast(result.message, "success");
+        console.log("[DEBUG] 서버에서 룰셋 적용 성공. 결과 메시지:", result.message);
 
-        // ▼▼▼ [핵심 수정] fetchDataFromRevit()을 fetchDataFromClient()로 변경합니다. ▼▼▼
-        fetchDataFromClient();
+        // ▼▼▼ [핵심 수정] Revit 데이터 재요청 대신, 서버 DB로부터 최신 데이터 다시 가져오기 ▼▼▼
+        console.log("[DEBUG] Revit/Blender 재호출 없이, 서버에 최신 객체 데이터 재요청을 보냅니다.");
+        if (frontendSocket && frontendSocket.readyState === WebSocket.OPEN) {
+            frontendSocket.send(
+                JSON.stringify({
+                    type: "get_all_elements",
+                    payload: { project_id: currentProjectId },
+                })
+            );
+        } else {
+            console.error("[ERROR] 웹소켓이 연결되어 있지 않아 최신 데이터를 가져올 수 없습니다.");
+            showToast("웹소켓 연결 오류. 페이지를 새로고침해주세요.", "error");
+        }
+        // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
     } catch (error) {
-        console.error("Error applying rules:", error);
+        console.error("[ERROR] 룰셋 적용 중 오류 발생:", error);
         showToast(error.message, "error");
     }
 }
-
 // ▼▼▼ [추가] 파일의 이 위치에 아래 함수들을 모두 추가해주세요. ▼▼▼
 
 /**
