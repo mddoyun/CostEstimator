@@ -1050,6 +1050,13 @@ def space_assignment_rules_api(request, project_id, rule_id=None):
             return JsonResponse({'status': 'error', 'message': '규칙을 찾을 수 없습니다.'}, status=404)
 
 def evaluate_expression_for_cost_item(expression, quantity_member):
+    """
+    (개선된 버전)
+    CostItem의 수량 계산식을 평가합니다.
+    - [MarkProperty]: MemberMark.properties (일람부호 속성)
+    - {{RawProperty}}: RawElement.raw_data (BIM 원본 숫자만 추출)
+    - {Property}: QuantityMember.properties (부재 속성) 또는 RawElement.raw_data (BIM 원본 속성)
+    """
     if not isinstance(expression, str) or not quantity_member:
         return expression
 
@@ -1058,7 +1065,6 @@ def evaluate_expression_for_cost_item(expression, quantity_member):
     # 1단계: [MemberMark 속성] 처리 - 대괄호 []
     mark_placeholders = re.findall(r'\[([^\]]+)\]', temp_expression)
     if mark_placeholders:
-        # ▼▼▼ [핵심 수정] .member_marks.first() 대신 .member_mark 를 직접 사용합니다. ▼▼▼
         member_mark = quantity_member.member_mark
         if member_mark and member_mark.properties:
             for placeholder in set(mark_placeholders):
@@ -1072,25 +1078,54 @@ def evaluate_expression_for_cost_item(expression, quantity_member):
             for placeholder in set(mark_placeholders):
                 temp_expression = temp_expression.replace(f'[{placeholder}]', '0')
 
+    # (공통) 검색할 데이터 소스 준비
+    raw_data = quantity_member.raw_element.raw_data if quantity_member.raw_element else {}
+    member_props = quantity_member.properties if quantity_member.properties else {}
 
-    # 2단계: {QuantityMember 속성} 처리 - 중괄호 {}
+    # 2단계: {{RawElement 숫자 속성}} 처리 - 이중 중괄호 {{}}
+    # (이것을 { } 보다 먼저 처리해야 함)
+    numeric_placeholders = re.findall(r'\{\{([^}]+)\}\}', temp_expression)
+    for placeholder in set(numeric_placeholders):
+        # {{...}}는 RawElement의 숫자 값만 추출하는 것으로 가정
+        value = get_value_from_element(raw_data, placeholder)
+        
+        if value is not None:
+            match = re.match(r'^\s*(-?\d+(\.\d+)?)\s*', str(value))
+            if match:
+                numeric_value = match.group(1)
+                temp_expression = temp_expression.replace(f'{{{{{placeholder}}}}}', str(numeric_value))
+            else:
+                temp_expression = temp_expression.replace(f'{{{{{placeholder}}}}}', '0')
+        else:
+            temp_expression = temp_expression.replace(f'{{{{{placeholder}}}}}', '0')
+
+    # 3단계: {QuantityMember 또는 RawElement 속성} 처리 - 중괄호 {}
     member_placeholders = re.findall(r'\{([^}]+)\}', temp_expression)
-    if member_placeholders and quantity_member.properties:
+    if member_placeholders:
         for placeholder in set(member_placeholders):
-            value = quantity_member.properties.get(placeholder)
+            value = None
+            
+            # 1순위: QuantityMember.properties에서 찾기 (예: '체적')
+            if placeholder in member_props:
+                value = member_props.get(placeholder)
+            # 2순위: RawElement.raw_data에서 찾기 (예: 'Volume')
+            else:
+                value = get_value_from_element(raw_data, placeholder)
+
             if value is not None:
                 replacement = str(value) if is_numeric(value) else f'"{str(value)}"'
                 temp_expression = temp_expression.replace(f'{{{placeholder}}}', replacement)
             else:
+                # 해당 속성이 없으면 0으로 처리하여 계산 오류 방지
                 temp_expression = temp_expression.replace(f'{{{placeholder}}}', '0')
 
-    # 3단계: 최종 문자열 계산
+    # 4단계: 최종 문자열 계산
     if not temp_expression.strip(): return ""
     try:
         safe_dict = {'__builtins__': {'abs': abs, 'round': round, 'max': max, 'min': min, 'len': len}}
         return eval(temp_expression, safe_dict)
-    except Exception:
-        return f"Error: Failed to evaluate '{expression}' -> '{temp_expression}'"
+    except Exception as e:
+        return f"Error: Failed to evaluate '{expression}' -> '{temp_expression}' ({str(e)})"
 
 # connections/views.py 파일에서 cost_items_api 함수를 찾아 아래 코드로 교체하세요.
 
@@ -1208,20 +1243,19 @@ def cost_items_api(request, project_id, item_id=None):
             return JsonResponse({'status': 'error', 'message': f'삭제 중 오류 발생: {str(e)}'}, status=500)
 
 
-
 @require_http_methods(["POST"])
 def create_cost_items_auto_view(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
+        # select_related를 통해 target_cost_code 객체 전체를 미리 불러옵니다.
         rules = CostCodeRule.objects.filter(project=project).order_by('priority').select_related('target_cost_code')
 
-        # DB 조회를 최적화하기 위해 연관된 모델들을 미리 불러옵니다.
         members = QuantityMember.objects.filter(
             project=project
         ).select_related(
             'member_mark',
             'raw_element',
-            'classification_tag' # [!!] classification_tag도 함께 불러옵니다.
+            'classification_tag'
         ).prefetch_related(
             'cost_codes'
         ).distinct()
@@ -1235,46 +1269,53 @@ def create_cost_items_auto_view(request, project_id):
         created_count = 0
         updated_count = 0
         
-        # [핵심 수정] 룰셋 평가에 사용할 모든 공사코드를 미리 메모리에 로드합니다.
+        # ▼▼▼ [디버깅] 룰셋 자동 생성 시작 로그 ▼▼▼
+        print("\n[DEBUG] --- '자동생성(공사코드기준)' 실행 시작 ---")
+        print(f"[DEBUG] {members.count()}개의 QuantityMembers를 처리합니다.")
+        # ▲▲▲ [디버깅] --- ▲▲▲
+        
         all_cost_codes_in_project = {cc.id: cc for cc in CostCode.objects.filter(project=project)}
 
-
         for member in members:
-            # ▼▼▼ [핵심 수정] 규칙 평가를 위한 통합 속성 딕셔너리 생성 로직 보강 ▼▼▼
+            # ▼▼▼ [디버깅] 현재 멤버의 '체적'과 '태그' 값을 확인합니다. ▼▼▼
+            member_chejeok = member.properties.get('체적') if member.properties else '속성 없음'
+            member_tag_name = member.classification_tag.name if member.classification_tag else '태그 없음'
+            print(f"\n[DEBUG] 멤버 처리 중: {member.name} (ID: {member.id})")
+            print(f"  > '체적' 속성 값: {member_chejeok}")
+            print(f"  > '태그' 이름: {member_tag_name}")
+            # ▲▲▲ [디버깅] --- ▲▲▲
+
             combined_properties = member.properties.copy() if member.properties else {}
 
-            # 1. 일람부호 속성을 추가합니다. (접두사 사용)
             if member.member_mark and member.member_mark.properties:
                 for key, value in member.member_mark.properties.items():
                     combined_properties[f'일람부호.{key}'] = value
 
-            # 2. BIM 원본 데이터 속성을 추가합니다. (접두사 사용)
             if member.raw_element and member.raw_element.raw_data:
                 raw_data = member.raw_element.raw_data
-                # 최상위 키
                 for key, value in raw_data.items():
                     if not isinstance(value, (dict, list)):
                         combined_properties[f'BIM원본.{key}'] = value
-                # 타입 파라미터
                 for key, value in raw_data.get('TypeParameters', {}).items():
                     combined_properties[f'BIM원본.{key}'] = value
-                # 인스턴스 파라미터 (덮어쓰기)
                 for key, value in raw_data.get('Parameters', {}).items():
                     combined_properties[f'BIM원본.{key}'] = value
 
-            # 3. [!!!] 부재의 직접적인 관계 필드 값들을 추가합니다. (이 부분이 누락되어 있었습니다)
             if member.classification_tag:
                 combined_properties['classification_tag_name'] = member.classification_tag.name
             if member.member_mark:
                 combined_properties['member_mark_name'] = member.member_mark.mark
-            # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
             
-            # 부재에 연결된 모든 공사코드에 대해 룰셋을 평가합니다.
             cost_codes_on_member = member.cost_codes.all()
             if not cost_codes_on_member:
+                print("  > [DEBUG] 이 멤버에 할당된 공사코드가 없어 건너뜁니다.")
                 continue
 
             for cost_code in cost_codes_on_member:
+                # ▼▼▼ [디버깅] 현재 공사코드 ID/Code 출력 ▼▼▼
+                print(f"  > [DEBUG] 공사코드 '{cost_code.code}' (ID: {cost_code.id}) 처리 중...")
+                # ▲▲▲ [디버깅] ▲▲▲
+                
                 item, created = CostItem.objects.get_or_create(
                     project=project,
                     quantity_member=member,
@@ -1286,31 +1327,58 @@ def create_cost_items_auto_view(request, project_id):
                 
                 script_to_use = None
                 
-                # 1. 개별 항목에 수량 계산식이 있는지 먼저 확인 (수동 입력 우선)
                 if item.quantity_mapping_expression and isinstance(item.quantity_mapping_expression, dict) and item.quantity_mapping_expression:
                     script_to_use = item.quantity_mapping_expression
-                # 2. 개별 식이 없으면, 룰셋을 찾음
+                    print(f"    > [DEBUG] CostItem의 개별 맵핑식을 사용합니다.")
                 else:
+                    print(f"    > [DEBUG] 룰셋 {rules.count()}개를 순회합니다...")
                     for rule in rules:
-                        # 보강된 combined_properties를 기준으로 조건을 평가합니다.
-                        if rule.target_cost_code_id == cost_code.id and evaluate_conditions(combined_properties, rule.conditions):
+                        # ▼▼▼ [디버깅] 현재 룰의 ID와 타겟 ID/Code 출력 ▼▼▼
+                        print(f"      > [DEBUG] 검사 중인 룰 ID: {rule.id}, 타겟 Code: {rule.target_cost_code.code}")
+                        # ▲▲▲ [디버깅] ▲▲▲
+
+                        # ▼▼▼ [핵심 수정] ID 비교 대신 Code 문자열 비교로 변경 ▼▼▼
+                        code_match = rule.target_cost_code.code == cost_code.code
+                        condition_met = evaluate_conditions(combined_properties, rule.conditions)
+                        
+                        # ▼▼▼ [디버깅] Code 비교 결과와 조건 평가 결과 출력 ▼▼▼
+                        print(f"        > [DEBUG] Code 일치? {code_match} (룰 타겟: '{rule.target_cost_code.code}' vs 멤버 코드: '{cost_code.code}')")
+                        print(f"        > [DEBUG] 조건 만족? {condition_met}")
+                        # ▲▲▲ [디버깅] ▲▲▲
+
+                        if code_match and condition_met:
                             script_to_use = rule.quantity_mapping_script
-                            break
+                            break # 일치하는 룰을 찾았으므로 더 이상 순회하지 않음
+                        
+                        elif code_match and not condition_met:
+                            print(f"        > [DEBUG] 룰 ID {rule.id}을(를) 찾았으나, 조건 불일치.")
 
                 final_qty = 0.0
                 if script_to_use:
+                    # ▼▼▼ [디버깅] 룰 매칭 및 계산 결과 출력 ▼▼▼
+                    print(f"    > [DEBUG] 공사코드 '{cost_code.code}': 룰 매칭 성공! (script: {script_to_use})")
                     qty_script = script_to_use.get('수량', 0)
+                    print(f"    > [DEBUG]   -> qty_script: {qty_script}")
+                    
                     calculated_qty = evaluate_expression_for_cost_item(qty_script, member)
+                    print(f"    > [DEBUG]   -> calculated_qty: {calculated_qty} (Type: {type(calculated_qty)})")
+                    
                     final_qty = float(calculated_qty) if is_numeric(calculated_qty) else 0.0
+                    print(f"    > [DEBUG]   -> final_qty: {final_qty}")
+                    # ▲▲▲ [디버깅] ▲▲▲
+                elif not item.quantity_mapping_expression:
+                     print(f"    > [DEBUG] 공사코드 '{cost_code.code}': 일치하는 룰이 없습니다.")
                 
-                # 수량이 변경되었거나, 새로 생성된 경우에만 DB 업데이트
                 if item.quantity != final_qty or created:
                     item.quantity = final_qty
                     item.save(update_fields=['quantity'])
 
                 valid_item_ids.add(item.id)
 
-        # 룰셋 조건에 더 이상 맞지 않거나, 원본 부재/공사코드 연결이 사라진 항목 삭제
+        # ▼▼▼ [디버깅] ▼▼▼
+        print("\n[DEBUG] --- '자동생성(공사코드기준)' 실행 종료 ---")
+        # ▲▲▲ [디버깅] ▲▲▲
+
         deletable_items = CostItem.objects.filter(project=project, quantity_member__isnull=False).exclude(id__in=valid_item_ids)
         deleted_count, _ = deletable_items.delete()
 
