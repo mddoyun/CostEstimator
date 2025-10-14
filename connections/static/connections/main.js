@@ -3782,26 +3782,47 @@ async function loadBoqGroupingFields() {
         showToast("먼저 프로젝트를 선택하세요.", "error");
         return;
     }
-    // 이미 필드를 불러왔으면 다시 불러오지 않도록 하여 성능을 개선합니다.
-    if (availableBoqFields.length > 0) return;
+    
+    // ▼▼▼ [핵심 수정] 탭에 진입할 때마다 필드 목록을 새로 가져오도록 기존 캐싱 로직(if 문)을 삭제합니다. ▼▼▼
+    console.log("[DEBUG] BOQ 탭의 그룹핑/표시 필드 목록을 서버에 요청합니다.");
 
     try {
         const response = await fetch(
             `/connections/api/boq/grouping-fields/${currentProjectId}/`
         );
-        if (!response.ok)
+        if (!response.ok) {
             throw new Error("그룹핑 필드 목록을 불러오는데 실패했습니다.");
+        }
 
         availableBoqFields = await response.json();
+        console.log(`[DEBUG] ${availableBoqFields.length}개의 사용 가능한 BOQ 필드를 수신했습니다.`, availableBoqFields);
 
-        // [핵심 수정]
-        // 1. 가져온 필드 목록으로 '표시할 필드' 체크박스 UI를 먼저 렌더링합니다.
+        // 기존 UI 렌더링 로직은 그대로 유지합니다.
         renderBoqDisplayFieldControls(availableBoqFields);
-        // 2. 기본 그룹핑 레벨을 하나 추가합니다. (내부적으로 availableBoqFields를 사용)
-        addBoqGroupingLevel();
+        
+        // 그룹핑 컨트롤 UI가 비어있을 때만 첫 번째 그룹핑 레벨을 추가합니다.
+        if (document.querySelectorAll(".boq-group-level").length === 0) {
+            addBoqGroupingLevel();
+        } else {
+            // 이미 그룹핑 컨트롤이 있다면, 필드 목록만 최신화합니다.
+            const groupBySelects = document.querySelectorAll(".boq-group-by-select");
+            let optionsHtml = availableBoqFields
+                .map(field => `<option value="${field.value}">${field.label}</option>`)
+                .join("");
+            
+            groupBySelects.forEach(select => {
+                const selectedValue = select.value;
+                select.innerHTML = optionsHtml;
+                select.value = selectedValue; // 기존 선택값 유지
+            });
+            console.log("[DEBUG] 기존 그룹핑 컨트롤의 필드 목록을 최신화했습니다.");
+        }
+
     } catch (error) {
         console.error("Error loading BOQ grouping fields:", error);
         showToast(error.message, "error");
+        availableBoqFields = []; // 에러 발생 시 목록 초기화
+        renderBoqDisplayFieldControls([]);
     }
 }
 
@@ -3849,7 +3870,6 @@ function addBoqGroupingLevel() {
 }
 
 
-
 async function generateBoqReport() {
     console.log("[DEBUG] '집계표 생성' 버튼 클릭됨");
     
@@ -3875,7 +3895,7 @@ async function generateBoqReport() {
     displayByCheckboxes.forEach((cb) => params.append("display_by", cb.value));
     console.log("[DEBUG] 표시 필드:", params.getAll("display_by"));
 
-
+    // ▼▼▼ [핵심 수정] 필터링 ID가 있으면 API 요청 파라미터에 추가 ▼▼▼
     if (boqFilteredRawElementIds.size > 0) {
         boqFilteredRawElementIds.forEach((id) =>
             params.append("raw_element_ids", id)
@@ -3887,7 +3907,7 @@ async function generateBoqReport() {
     tableContainer.innerHTML =
         '<p style="padding: 20px;">집계 데이터를 생성 중입니다...</p>';
     showToast("집계표 생성 중...", "info");
-    console.log("[DEBUG] 서버에 집계표 데이터 요청 시작...");
+    console.log("[DEBUG] 서버에 집계표 데이터 요청 시작...", `/connections/api/boq/report/${currentProjectId}/?${params.toString()}`);
 
     try {
         const response = await fetch(
@@ -4378,13 +4398,19 @@ function handleBoqGetFromClient() {
     showToast(`${clientName}에 선택 정보 가져오기를 요청했습니다.`, "info");
     console.log(`[DEBUG] ${clientName}에 get_selection 명령 전송`);
 }
-
 function handleBoqClearFilter() {
     console.log("[DEBUG] '선택 필터 해제 (BOQ)' 버튼 클릭됨");
+    // 1. 필터링 ID 목록을 비웁니다.
     boqFilteredRawElementIds.clear();
-    document.getElementById("boq-clear-selection-filter-btn").style.display =
-        "none";
+    console.log("[DEBUG] boqFilteredRawElementIds 초기화 완료.");
+    
+    // 2. 버튼을 다시 숨깁니다.
+    document.getElementById("boq-clear-selection-filter-btn").style.display = "none";
+    
+    // 3. 필터 없이 전체 데이터를 기준으로 집계표를 다시 생성합니다.
     generateBoqReport(); 
+    
+    // 4. 사용자에게 알림을 표시합니다.
     showToast("Revit 선택 필터를 해제하고 전체 집계표를 표시합니다.", "info");
 }
 

@@ -191,13 +191,35 @@ function setupWebSocket() {
                     "info"
                 );
                 break;
-            case "revit_selection_update":
+             case "revit_selection_update": { //
+                console.log(`[DEBUG] Revit/Blender 선택 업데이트 수신: ${data.unique_ids.length}개`);
                 const uniqueIds = new Set(data.unique_ids);
 
                 if (activeTab === "boq") {
-                    // ... (BOQ 탭 관련 코드는 그대로 유지) ...
+                    // ▼▼▼ [핵심 수정] '집계' 탭 필터링 로직 추가 ▼▼▼
+                    
+                    // 1. 이전에 필터링된 ID 목록을 초기화합니다.
+                    boqFilteredRawElementIds.clear();
+
+                    // 2. Revit/Blender에서 받은 unique_id를 기준으로 allRevitData에서 DB ID(UUID)를 찾아 필터링 목록에 추가합니다.
+                    allRevitData.forEach(item => {
+                        if (uniqueIds.has(item.element_unique_id)) {
+                            boqFilteredRawElementIds.add(item.id);
+                        }
+                    });
+                    console.log(`[DEBUG] BOQ 필터링에 사용할 RawElement ID ${boqFilteredRawElementIds.size}개를 찾음.`);
+
+                    // 3. '선택 필터 해제' 버튼을 표시합니다.
+                    document.getElementById("boq-clear-selection-filter-btn").style.display = 'inline-block';
+
+                    // 4. 필터링된 ID를 사용하여 집계표를 다시 생성합니다.
+                    generateBoqReport();
+
+                    // 5. 사용자에게 알림을 표시합니다.
+                    showToast(`${boqFilteredRawElementIds.size}개 객체 기준으로 집계표를 필터링합니다.`, "success");
+
                 } else {
-                    // ▼▼▼ [수정] viewerStates를 사용하여 상태를 올바르게 업데이트합니다. ▼▼▼
+                    // 'BIM 원본데이터' 탭의 기존 로직은 그대로 유지됩니다.
                     const state = viewerStates["data-management"];
                     state.selectedElementIds.clear();
                     state.revitFilteredIds.clear();
@@ -214,7 +236,6 @@ function setupWebSocket() {
                         "clear-selection-filter-btn"
                     ).style.display = "inline-block";
 
-                    // ▼▼▼ [수정] renderDataTable 및 renderAssignedTagsTable 호출 시 올바른 인자를 전달합니다. ▼▼▼
                     renderDataTable(
                         "data-management-data-table-container",
                         "data-management"
@@ -226,6 +247,7 @@ function setupWebSocket() {
                     );
                 }
                 break;
+            }
         }
     };
 }
