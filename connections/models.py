@@ -146,7 +146,7 @@ class CostItem(models.Model):
     """최종 내역서를 구성하는 가장 작은 단위 항목"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='cost_items')
-    quantity_member = models.ForeignKey(QuantityMember, on_delete=models.SET_NULL, null=True, blank=True, related_name='cost_items')
+    quantity_member = models.ForeignKey(QuantityMember, on_delete=models.CASCADE, null=True, blank=True, related_name='cost_items')
     cost_code = models.ForeignKey(CostCode, on_delete=models.PROTECT, related_name='cost_items')
     quantity = models.FloatField(default=0.0)
     

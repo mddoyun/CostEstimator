@@ -724,6 +724,7 @@ def quantity_members_api(request, project_id, member_id=None):
 # ▼▼▼ [수정] 이 함수를 아래의 새 코드로 완전히 교체해주세요. ▼▼▼
 @require_http_methods(["POST"])
 def create_quantity_members_auto_view(request, project_id):
+    print("\n[DEBUG] --- '자동생성(분류기준)' 실행 시작 ---") #<-- 디버깅 로그 추가
     try:
         project = Project.objects.get(id=project_id)
         
@@ -738,6 +739,7 @@ def create_quantity_members_auto_view(request, project_id):
         updated_count = 0
         created_count = 0
 
+        print(f"[DEBUG] {elements.count()}개의 BIM 객체 처리 시작...") #<-- 디버깅 로그 추가
         for element in elements:
             element_tags = element.classification_tags.all()
             
@@ -775,12 +777,23 @@ def create_quantity_members_auto_view(request, project_id):
                 valid_member_ids.add(member.id)
         
         deletable_members = QuantityMember.objects.filter(project=project, raw_element__isnull=False).exclude(id__in=valid_member_ids)
+        
+        # ▼▼▼ [추가] 삭제될 부재가 있을 경우 로그를 출력하는 부분을 추가합니다. ▼▼▼
+        deletable_count = deletable_members.count()
+        if deletable_count > 0:
+            print(f"[DEBUG] 유효하지 않은 QuantityMember {deletable_count}개를 삭제합니다.")
+            print(f"  > 삭제 대상 ID (일부): {list(deletable_members.values_list('id', flat=True)[:5])}")
+        else:
+            print("[DEBUG] 유효하지 않아 삭제할 QuantityMember가 없습니다.")
+        # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
         deleted_count, _ = deletable_members.delete()
 
         message = (f'룰셋/개별 맵핑식을 적용하여 {created_count}개의 부재를 새로 생성하고, '
                    f'{updated_count}개를 업데이트했습니다. '
                    f'유효하지 않은 부재 {deleted_count}개를 삭제했습니다.')
-
+        
+        print(f"[DEBUG] --- '자동생성(분류기준)' 실행 완료 ---") #<-- 디버깅 로그 추가
         return JsonResponse({'status': 'success', 'message': message})
 
     except Project.DoesNotExist:
@@ -788,6 +801,7 @@ def create_quantity_members_auto_view(request, project_id):
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
+        print(f"[ERROR] 자동 생성 중 오류 발생: {str(e)}") #<-- 디버깅 로그 추가
         return JsonResponse({'status': 'error', 'message': f'자동 생성 중 오류 발생: {str(e)}', 'details': error_details}, status=500)
 # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
 
