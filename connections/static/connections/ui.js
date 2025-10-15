@@ -522,10 +522,12 @@ let activeToasts = 0;
 const MAX_ACTIVE_TOASTS = 3;
 
 function processToastQueue() {
+    // 1. 표시할 공간이 없거나, 대기열에 알림이 없으면 함수를 종료합니다.
     if (activeToasts >= MAX_ACTIVE_TOASTS || toastQueue.length === 0) {
         return;
     }
 
+    // 2. 대기열에서 다음 알림 데이터를 가져오고, 활성 알림 수를 1 증가시킵니다.
     const toastData = toastQueue.shift();
     activeToasts++;
 
@@ -535,17 +537,22 @@ function processToastQueue() {
     toast.textContent = toastData.message;
     container.appendChild(toast);
 
+    // 3. 잠시 후 'show' 클래스를 추가하여 화면에 나타나는 애니메이션을 실행합니다.
     setTimeout(() => {
         toast.classList.add('show');
     }, 100);
 
+    // 4. 지정된 시간(duration)이 지나면 알림을 사라지게 합니다.
     setTimeout(() => {
         toast.classList.remove('show');
-        toast.addEventListener('transitionend', () => {
-            toast.remove();
-            activeToasts--;
-            processToastQueue(); // 다음 대기열 처리
-        });
+
+        // 5. [핵심 수정] 'transitionend' 이벤트 대신 고정된 시간(500ms)을 기다립니다.
+        // 이 시간은 style.css의 .toast-message { transition: all 0.5s; } 와 일치해야 합니다.
+        setTimeout(() => {
+            toast.remove(); // DOM에서 알림 요소를 완전히 제거합니다.
+            activeToasts--; // 활성 알림 수를 1 감소시킵니다.
+            processToastQueue(); // 이제 공간이 생겼으므로, 대기열에 다음 알림이 있는지 확인하고 처리합니다.
+        }, 500); // CSS 애니메이션 지속 시간
     }, toastData.duration);
 }
 

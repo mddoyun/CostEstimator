@@ -11,7 +11,7 @@
     box-sizing: border-box;
 }
 body {
-    font-family: "Malgun Gothic", sans-serif;
+    font-family: 'Malgun Gothic', sans-serif;
     margin: 0;
     background-color: var(--background-color);
     color: #333;
@@ -201,7 +201,7 @@ button {
 button:hover {
     background-color: #e9e9e9;
 }
-input[type="text"],
+input[type='text'],
 select {
     padding: 8px;
     border-radius: 4px;
@@ -1983,7 +1983,7 @@ th input {
 }
 
 /* 모든 탭의 그룹핑 컨트롤 컨테이너 스타일 */
-div[id$="-grouping-controls"] {
+div[id$='-grouping-controls'] {
     display: flex; /* 자식 요소(그룹핑 레벨)를 가로로 정렬 */
     flex-wrap: nowrap; /* 줄바꿈 방지 */
     overflow-x: auto; /* 내용이 넘칠 경우 가로 스크롤바 표시 */
@@ -2083,4 +2083,10 @@ div[id$="-grouping-controls"] {
     font-weight: bold;
     color: var(--primary-color);
     border-bottom-color: var(--primary-color);
+}
+#project-selector {
+    width: 250px; /* 콤보박스의 너비를 250px로 고정합니다. 원하는 크기로 조절하세요. */
+    white-space: nowrap; /* 텍스트가 길어져도 줄바꿈되지 않도록 합니다. */
+    overflow: hidden; /* 너비를 넘어가는 내용은 숨깁니다. */
+    text-overflow: ellipsis; /* 숨겨진 텍스트를 말줄임표(...)로 표시합니다. */
 }
