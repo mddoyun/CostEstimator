@@ -83,7 +83,6 @@ def serialize_specific_elements(element_ids):
         print(f"Error serializing specific elements: {e}")
         return []
 
-
 class RevitConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.all_incoming_uids = set()
@@ -106,56 +105,87 @@ class RevitConsumer(AsyncWebsocketConsumer):
             print(f"❌ [{self.__class__.__name__}] 클라이언트가 '{self.group_name}' 그룹에서 나갑니다.")
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
-    # ▼▼▼ [핵심 수정] Revit/Blender에서 오는 메시지를 처리하는 receive 메소드 복원 ▼▼▼
     async def receive(self, text_data):
         data = json.loads(text_data)
         msg_type = data.get('type')
-        print(f"✉️  [{self.__class__.__name__}] 클라이언트로부터 메시지 수신: type='{msg_type}'")
+        payload = data.get('payload', {})
+        print(f"\n✉️  [{self.__class__.__name__}] 클라이언트로부터 메시지 수신: type='{msg_type}'")
 
         if msg_type == 'revit_selection_response':
             await self.channel_layer.group_send(
                 FrontendConsumer.frontend_group_name, 
-                {'type': 'broadcast_selection', 'unique_ids': data.get('payload', [])}
+                {'type': 'broadcast_selection', 'unique_ids': payload}
             )
         elif msg_type == 'fetch_progress_start':
+            print("[DEBUG] 'fetch_progress_start' 수신. 동기화 세션을 시작합니다.")
             self.all_incoming_uids.clear()
-            self.project_id_for_fetch = data.get('payload', {}).get('project_id')
+            
+            # ▼▼▼ [수정] payload에서 project_id를 가져오는 대신, 이미 저장된 값을 확인합니다. ▼▼▼
+            print(f"  - 현재 세션의 프로젝트 ID: {self.project_id_for_fetch}")
+            if not self.project_id_for_fetch:
+                print("[CRITICAL ERROR] 'fetch_progress_start' 시점에 프로젝트 ID가 설정되지 않았습니다! 동기화가 실패할 수 있습니다.")
+            # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+
+            print(f"  - 전체 객체 수: {payload.get('total_elements')}")
             await self.channel_layer.group_send(
                 FrontendConsumer.frontend_group_name,
                 {"type": "broadcast_progress", "data": data}
             )
         elif msg_type == 'fetch_progress_update':
-            payload = data.get('payload', {})
-            project_id = payload.get('project_id')
+            print(f"[DEBUG] 'fetch_progress_update' 수신. 처리된 객체: {payload.get('processed_count')}")
+            
+            # ▼▼▼ [수정] payload의 project_id 대신 self에 저장된 project_id를 사용합니다. ▼▼▼
+            project_id = self.project_id_for_fetch
+            # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+            
             elements_data = [json.loads(s) for s in payload.get('elements', [])]
-            for item in elements_data:
-                if item and 'UniqueId' in item:
-                    self.all_incoming_uids.add(item.get('UniqueId'))
+            
+            chunk_uids = {item['UniqueId'] for item in elements_data if item and 'UniqueId' in item}
+            self.all_incoming_uids.update(chunk_uids)
+            print(f"  - 이번 청크의 UniqueId {len(chunk_uids)}개 추가. 현재까지 총 {len(self.all_incoming_uids)}개 수신.")
+
             await self.channel_layer.group_send(
                 FrontendConsumer.frontend_group_name,
                 {"type": "broadcast_progress", "data": data}
             )
             if project_id and elements_data:
                 await asyncio.shield(self.sync_chunk_of_elements(project_id, elements_data))
+        
         elif msg_type == 'fetch_progress_complete':
+            print("[DEBUG] 'fetch_progress_complete' 수신. 동기화를 마무리하고 삭제 작업을 시작합니다.")
             if self.project_id_for_fetch:
                 await self.cleanup_old_elements(self.project_id_for_fetch, self.all_incoming_uids)
+            else:
+                print("[WARNING] 'project_id_for_fetch'가 설정되지 않아 삭제 작업을 건너뜁니다.")
+            
             await self.channel_layer.group_send(
                 FrontendConsumer.frontend_group_name,
                 {"type": "broadcast_progress", "data": data}
             )
+        else:
+            print(f"[WARNING] 처리되지 않은 메시지 유형입니다: {msg_type}")
 
     async def send_command(self, event):
         command_data = event['command_data']
+        
+        # ▼▼▼ [추가] 데이터 가져오기 명령일 경우, project_id를 미리 저장합니다. ▼▼▼
+        if command_data.get('command') == 'fetch_all_elements_chunked':
+            project_id = command_data.get('project_id')
+            self.project_id_for_fetch = project_id
+            print(f"🚀 [{self.__class__.__name__}] 데이터 가져오기 세션 시작. Project ID '{project_id}'를 저장합니다.")
+        # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+        
         print(f"➡️  [{self.__class__.__name__}] '{self.group_name}' 그룹의 클라이언트로 명령을 보냅니다: {command_data.get('command')}")
         await self.send(text_data=json.dumps(command_data))
 
     @database_sync_to_async
     def sync_chunk_of_elements(self, project_id, parsed_data):
+        print(f"  [DB Sync] 청크 동기화 시작: {len(parsed_data)}개 객체")
         try:
             project = Project.objects.get(id=project_id)
             uids_in_chunk = [item['UniqueId'] for item in parsed_data if item and 'UniqueId' in item]
             existing_elements_map = {el.element_unique_id: el for el in project.raw_elements.filter(element_unique_id__in=uids_in_chunk)}
+            
             to_update, to_create = [], []
             for item in parsed_data:
                 if not item or 'UniqueId' not in item: continue
@@ -166,20 +196,42 @@ class RevitConsumer(AsyncWebsocketConsumer):
                     to_update.append(elem)
                 else:
                     to_create.append(RawElement(project=project, element_unique_id=uid, raw_data=item))
-            if to_update: RawElement.objects.bulk_update(to_update, ['raw_data'])
-            if to_create: RawElement.objects.bulk_create(to_create, ignore_conflicts=True)
+            
+            if to_update: 
+                RawElement.objects.bulk_update(to_update, ['raw_data'])
+                print(f"    - {len(to_update)}개 객체 정보 업데이트 완료.")
+            if to_create: 
+                RawElement.objects.bulk_create(to_create, ignore_conflicts=True)
+                print(f"    - {len(to_create)}개 객체 새로 생성 완료.")
+
         except Exception as e:
-            print(f"Error in sync_chunk_of_elements: {e}")
+            print(f"[ERROR] sync_chunk_of_elements DB 작업 중 오류 발생: {e}")
 
     @database_sync_to_async
     def cleanup_old_elements(self, project_id, incoming_uids):
+        print(f"  [DB Cleanup] 삭제 작업 시작 (Project ID: {project_id})")
         try:
             project = Project.objects.get(id=project_id)
-            to_delete_uids = set(project.raw_elements.values_list('element_unique_id', flat=True)) - set(incoming_uids)
+            
+            db_uids_qs = project.raw_elements.values_list('element_unique_id', flat=True)
+            db_uids = set(db_uids_qs)
+            print(f"    - 현재 DB에 존재하는 UniqueId 수: {len(db_uids)}")
+
+            incoming_uids_set = set(incoming_uids)
+            print(f"    - 이번 동기화에서 받은 UniqueId 수: {len(incoming_uids_set)}")
+
+            to_delete_uids = db_uids - incoming_uids_set
+            print(f"    - 삭제 대상 UniqueId 수: {len(to_delete_uids)}")
+            
             if to_delete_uids:
-                project.raw_elements.filter(element_unique_id__in=to_delete_uids).delete()
+                print(f"    - 삭제 대상 ID (최대 10개 표시): {list(to_delete_uids)[:10]}")
+                deleted_count, _ = project.raw_elements.filter(element_unique_id__in=to_delete_uids).delete()
+                print(f"    - DB에서 {deleted_count}개의 오래된 RawElement 객체를 성공적으로 삭제했습니다.")
+            else:
+                print("    - 삭제할 객체가 없습니다. 모든 데이터가 최신 상태입니다.")
+
         except Exception as e:
-            print(f"Error in cleanup_old_elements: {e}")
+            print(f"[ERROR] cleanup_old_elements DB 작업 중 오류 발생: {e}")
 
 class FrontendConsumer(AsyncWebsocketConsumer):
     frontend_group_name = 'frontend_group'
