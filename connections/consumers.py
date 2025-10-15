@@ -3,7 +3,7 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.db.models import F
-from .models import Project, RawElement, QuantityClassificationTag
+from .models import Project, RawElement, QuantityClassificationTag, QuantityMember
 import asyncio
 
 # --- 데이터 직렬화 헬퍼 함수들 ---
@@ -154,7 +154,7 @@ class RevitConsumer(AsyncWebsocketConsumer):
         elif msg_type == 'fetch_progress_complete':
             print("[DEBUG] 'fetch_progress_complete' 수신. 동기화를 마무리하고 삭제 작업을 시작합니다.")
             if self.project_id_for_fetch:
-                await self.cleanup_old_elements(self.project_id_for_fetch, self.all_incoming_uids)
+                await cleanup_old_elements(self.project_id_for_fetch, self.all_incoming_uids)
             else:
                 print("[WARNING] 'project_id_for_fetch'가 설정되지 않아 삭제 작업을 건너뜁니다.")
             
@@ -207,31 +207,47 @@ class RevitConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             print(f"[ERROR] sync_chunk_of_elements DB 작업 중 오류 발생: {e}")
 
-    @database_sync_to_async
-    def cleanup_old_elements(self, project_id, incoming_uids):
-        print(f"  [DB Cleanup] 삭제 작업 시작 (Project ID: {project_id})")
-        try:
-            project = Project.objects.get(id=project_id)
-            
-            db_uids_qs = project.raw_elements.values_list('element_unique_id', flat=True)
-            db_uids = set(db_uids_qs)
-            print(f"    - 현재 DB에 존재하는 UniqueId 수: {len(db_uids)}")
+@database_sync_to_async
+def cleanup_old_elements(project_id, incoming_uids):
+    print(f"  [DB Cleanup] 삭제 작업 시작 (Project ID: {project_id})")
+    try:
+        project = Project.objects.get(id=project_id)
 
-            incoming_uids_set = set(incoming_uids)
-            print(f"    - 이번 동기화에서 받은 UniqueId 수: {len(incoming_uids_set)}")
+        db_uids_qs = project.raw_elements.values_list('element_unique_id', flat=True)
+        db_uids = set(db_uids_qs)
+        print(f"    - 현재 DB에 존재하는 UniqueId 수: {len(db_uids)}")
 
-            to_delete_uids = db_uids - incoming_uids_set
-            print(f"    - 삭제 대상 UniqueId 수: {len(to_delete_uids)}")
-            
-            if to_delete_uids:
-                print(f"    - 삭제 대상 ID (최대 10개 표시): {list(to_delete_uids)[:10]}")
-                deleted_count, _ = project.raw_elements.filter(element_unique_id__in=to_delete_uids).delete()
-                print(f"    - DB에서 {deleted_count}개의 오래된 RawElement 객체를 성공적으로 삭제했습니다.")
-            else:
-                print("    - 삭제할 객체가 없습니다. 모든 데이터가 최신 상태입니다.")
+        incoming_uids_set = set(incoming_uids)
+        print(f"    - 이번 동기화에서 받은 UniqueId 수: {len(incoming_uids_set)}")
 
-        except Exception as e:
-            print(f"[ERROR] cleanup_old_elements DB 작업 중 오류 발생: {e}")
+        to_delete_uids = db_uids - incoming_uids_set
+        print(f"    - 삭제 대상 UniqueId 수: {len(to_delete_uids)}")
+
+        if to_delete_uids:
+            print(f"    - 삭제 대상 ID (최대 10개 표시): {list(to_delete_uids)[:10]}")
+
+            # ▼▼▼ [추가] RawElement를 삭제하기 전에, 연관된 QuantityMember를 먼저 삭제하는 로직입니다. ▼▼▼
+            print(f"    - [QuantityMember Cleanup] 삭제될 RawElement와 연관된 수량산출부재를 먼저 삭제합니다.")
+
+            # raw_element 필드가 null이 아닌(즉, BIM 객체와 연계된) 수량산출부재 중에서
+            # 삭제될 RawElement의 unique_id를 가진 부재들을 찾아 삭제합니다.
+            deletable_members = QuantityMember.objects.filter(
+                project=project,
+                raw_element__element_unique_id__in=to_delete_uids
+            )
+
+            member_deleted_count, _ = deletable_members.delete()
+            print(f"    - [QuantityMember Cleanup] {member_deleted_count}개의 연관된 수량산출부재를 삭제했습니다.")
+            # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
+            deleted_count, _ = project.raw_elements.filter(element_unique_id__in=to_delete_uids).delete()
+            print(f"    - DB에서 {deleted_count}개의 오래된 RawElement 객체를 성공적으로 삭제했습니다.")
+        else:
+            print("    - 삭제할 객체가 없습니다. 모든 데이터가 최신 상태입니다.")
+
+    except Exception as e:
+        print(f"[ERROR] cleanup_old_elements DB 작업 중 오류 발생: {e}")
+
 
 class FrontendConsumer(AsyncWebsocketConsumer):
     frontend_group_name = 'frontend_group'
