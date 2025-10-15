@@ -98,4 +98,7 @@ urlpatterns = [
     path('api/rules/space-assignment/<uuid:project_id>/export/', views.export_space_assignment_rules, name='export_space_assignment_rules'),
     path('api/rules/space-assignment/<uuid:project_id>/import/', views.import_space_assignment_rules, name='import_space_assignment_rules'),
    
+    path('export-project/<uuid:project_id>/', views.export_project, name='export_project'),
+    path('import-project/', views.import_project, name='import_project'),
+
 ]

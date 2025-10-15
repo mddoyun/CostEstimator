@@ -2618,3 +2618,236 @@ def import_space_classifications(request, project_id):
     except Exception as e:
         import traceback
         return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}', 'details': traceback.format_exc()}, status=400)
+# connections/views.py 파일 맨 아래에 추가
+
+import datetime
+from django.db import transaction
+from django.core import serializers
+
+# ▼▼▼ [추가] 이 함수 블록 전체를 파일 맨 아래에 추가해주세요. ▼▼▼
+
+@require_http_methods(["GET"])
+def export_project(request, project_id):
+    """
+    프로젝트와 관련된 모든 데이터를 직렬화하여 단일 JSON 파일로 내보냅니다.
+    """
+    print(f"\n[DEBUG] --- 프로젝트 내보내기 시작 (Project ID: {project_id}) ---")
+    try:
+        project = Project.objects.get(id=project_id)
+        
+        # 직렬화할 모델과 쿼리셋을 정의합니다.
+        models_to_serialize = {
+            'Project': Project.objects.filter(id=project_id),
+            'QuantityClassificationTag': QuantityClassificationTag.objects.filter(project=project),
+            'CostCode': CostCode.objects.filter(project=project),
+            'MemberMark': MemberMark.objects.filter(project=project),
+            'RawElement': RawElement.objects.filter(project=project),
+            'SpaceClassification': SpaceClassification.objects.filter(project=project),
+            'ClassificationRule': ClassificationRule.objects.filter(project=project),
+            'PropertyMappingRule': PropertyMappingRule.objects.filter(project=project),
+            'CostCodeRule': CostCodeRule.objects.filter(project=project),
+            'MemberMarkAssignmentRule': MemberMarkAssignmentRule.objects.filter(project=project),
+            'CostCodeAssignmentRule': CostCodeAssignmentRule.objects.filter(project=project),
+            'SpaceClassificationRule': SpaceClassificationRule.objects.filter(project=project),
+            'SpaceAssignmentRule': SpaceAssignmentRule.objects.filter(project=project),
+            'QuantityMember': QuantityMember.objects.filter(project=project),
+            'CostItem': CostItem.objects.filter(project=project),
+        }
+
+        export_data = {}
+        
+        # 각 모델의 데이터를 직렬화합니다.
+        for name, qs in models_to_serialize.items():
+            print(f"[DEBUG] '{name}' 모델 데이터 직렬화 중... ({qs.count()}개)")
+            # 'python' 포맷으로 직렬화하여 나중에 JSON으로 쉽게 변환할 수 있도록 합니다.
+            export_data[name] = serializers.serialize('python', qs)
+
+        # ManyToMany 관계 데이터를 수동으로 추출합니다.
+        print("[DEBUG] ManyToMany 관계 데이터 추출 중...")
+        export_data['M2M_RawElement_classification_tags'] = list(RawElement.classification_tags.through.objects.filter(rawelement__project=project).values('rawelement_id', 'quantityclassificationtag_id'))
+        export_data['M2M_RawElement_space_classifications'] = list(RawElement.space_classifications.through.objects.filter(rawelement__project=project).values('rawelement_id', 'spaceclassification_id'))
+        export_data['M2M_QuantityMember_cost_codes'] = list(QuantityMember.cost_codes.through.objects.filter(quantitymember__project=project).values('quantitymember_id', 'costcode_id'))
+        export_data['M2M_QuantityMember_space_classifications'] = list(QuantityMember.space_classifications.through.objects.filter(quantitymember__project=project).values('quantitymember_id', 'spaceclassification_id'))
+        
+        # JSON 응답 생성
+        response = HttpResponse(
+            json.dumps(export_data, indent=2, cls=serializers.json.DjangoJSONEncoder),
+            content_type='application/json'
+        )
+        
+        # 파일 이름 설정
+        filename = f"{project.name}_{datetime.date.today()}.json"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        print(f"[DEBUG] --- 프로젝트 내보내기 완료: {filename} ---")
+        return response
+
+    except Project.DoesNotExist:
+        print(f"[ERROR] 내보낼 프로젝트를 찾을 수 없습니다 (ID: {project_id}).")
+        return JsonResponse({'status': 'error', 'message': 'Project not found.'}, status=404)
+    except Exception as e:
+        print(f"[ERROR] 프로젝트 내보내기 중 예외 발생: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+@transaction.atomic
+def import_project(request):
+    """
+    업로드된 JSON 파일을 분석하여 새로운 프로젝트와 관련 데이터를 생성합니다.
+    - 기존 ID 대신 새로운 UUID를 생성하고, 관계를 재설정합니다.
+    - 전체 프로세스는 트랜잭션으로 처리됩니다.
+    """
+    print("\n[DEBUG] --- 프로젝트 가져오기 시작 ---")
+    if not request.FILES.get('project_file'):
+        return JsonResponse({'status': 'error', 'message': '프로젝트 파일이 필요합니다.'}, status=400)
+
+    try:
+        project_file = request.FILES['project_file']
+        import_data = json.load(project_file)
+
+        # 이전 ID와 새로 생성된 객체를 매핑하기 위한 딕셔너리
+        pk_map = {}
+
+        # 1. 프로젝트 생성
+        print("[DEBUG] 1. 프로젝트 생성 중...")
+        project_data = import_data.get('Project', [])[0]['fields']
+        old_project_pk = import_data.get('Project', [])[0]['pk']
+        new_project_name = f"{project_data['name']} (Imported {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')})"
+        new_project = Project.objects.create(name=new_project_name, description=project_data.get('description', ''))
+        pk_map[old_project_pk] = new_project
+        print(f"[DEBUG]   - 새 프로젝트 '{new_project_name}' 생성 완료.")
+
+        # 2. ForeignKey가 없는 단순 모델부터 순차적으로 생성
+        simple_models = ['QuantityClassificationTag', 'CostCode', 'MemberMark']
+        print(f"[DEBUG] 2. 단순 모델({', '.join(simple_models)}) 데이터 가져오기 중...")
+        for model_name in simple_models:
+            for data in import_data.get(model_name, []):
+                old_pk = data['pk']
+                fields = data['fields']
+                fields['project'] = new_project
+                ModelClass = globals()[model_name]
+                new_obj = ModelClass.objects.create(**fields)
+                pk_map[old_pk] = new_obj
+        print(f"[DEBUG]   - 단순 모델 생성 완료.")
+
+        # 3. RawElement 생성
+        print("[DEBUG] 3. RawElement 데이터 가져오기 중...")
+        for data in import_data.get('RawElement', []):
+            old_pk = data['pk']
+            fields = data['fields']
+            fields['project'] = new_project
+            new_obj = RawElement.objects.create(**fields)
+            pk_map[old_pk] = new_obj
+        print(f"[DEBUG]   - RawElement 생성 완료.")
+
+        # 4. SpaceClassification 생성 (부모 관계 때문에 2단계로 처리)
+        print("[DEBUG] 4. SpaceClassification 데이터 가져오기 중...")
+        space_parent_map = {}
+        for data in import_data.get('SpaceClassification', []):
+            old_pk = data['pk']
+            fields = data['fields']
+            fields['project'] = new_project
+            
+            # source_element FK 변환
+            if fields.get('source_element'):
+                fields['source_element'] = pk_map.get(fields['source_element'])
+
+            old_parent_pk = fields.pop('parent', None)
+            new_obj = SpaceClassification.objects.create(**fields)
+            pk_map[old_pk] = new_obj
+            if old_parent_pk:
+                space_parent_map[new_obj.id] = old_parent_pk
+
+        for space_id, old_parent_pk in space_parent_map.items():
+            parent_obj = pk_map.get(old_parent_pk)
+            if parent_obj:
+                SpaceClassification.objects.filter(id=space_id).update(parent=parent_obj)
+        print(f"[DEBUG]   - SpaceClassification 생성 및 부모 관계 설정 완료.")
+
+        # 5. 모든 Rule 모델 생성
+        rule_models = [
+            'ClassificationRule', 'PropertyMappingRule', 'CostCodeRule', 
+            'MemberMarkAssignmentRule', 'CostCodeAssignmentRule', 
+            'SpaceClassificationRule', 'SpaceAssignmentRule'
+        ]
+        print(f"[DEBUG] 5. 룰셋 모델({', '.join(rule_models)}) 데이터 가져오기 중...")
+        for model_name in rule_models:
+            for data in import_data.get(model_name, []):
+                old_pk = data['pk']
+                fields = data['fields']
+                fields['project'] = new_project
+                
+                # 각 룰셋의 ForeignKey 필드를 새로운 객체로 교체
+                for fk_field in ['target_tag', 'target_cost_code']:
+                    if fk_field in fields:
+                        fields[fk_field] = pk_map.get(fields[fk_field])
+
+                ModelClass = globals()[model_name]
+                new_obj = ModelClass.objects.create(**fields)
+                pk_map[old_pk] = new_obj
+        print(f"[DEBUG]   - 룰셋 모델 생성 완료.")
+
+        # 6. QuantityMember 생성
+        print("[DEBUG] 6. QuantityMember 데이터 가져오기 중...")
+        for data in import_data.get('QuantityMember', []):
+            old_pk = data['pk']
+            fields = data['fields']
+            fields['project'] = new_project
+            for fk_field in ['raw_element', 'classification_tag', 'member_mark']:
+                if fields.get(fk_field):
+                    fields[fk_field] = pk_map.get(fields[fk_field])
+            new_obj = QuantityMember.objects.create(**fields)
+            pk_map[old_pk] = new_obj
+        print(f"[DEBUG]   - QuantityMember 생성 완료.")
+
+        # 7. CostItem 생성
+        print("[DEBUG] 7. CostItem 데이터 가져오기 중...")
+        for data in import_data.get('CostItem', []):
+            old_pk = data['pk']
+            fields = data['fields']
+            fields['project'] = new_project
+            for fk_field in ['quantity_member', 'cost_code']:
+                 if fields.get(fk_field):
+                    fields[fk_field] = pk_map.get(fields[fk_field])
+            new_obj = CostItem.objects.create(**fields)
+            pk_map[old_pk] = new_obj
+        print(f"[DEBUG]   - CostItem 생성 완료.")
+
+        # 8. ManyToMany 관계 복원
+        print("[DEBUG] 8. ManyToMany 관계 복원 중...")
+        m2m_relations = {
+            'M2M_RawElement_classification_tags': (RawElement, 'classification_tags', 'rawelement_id', 'quantityclassificationtag_id'),
+            'M2M_RawElement_space_classifications': (RawElement, 'space_classifications', 'rawelement_id', 'spaceclassification_id'),
+            'M2M_QuantityMember_cost_codes': (QuantityMember, 'cost_codes', 'quantitymember_id', 'costcode_id'),
+            'M2M_QuantityMember_space_classifications': (QuantityMember, 'space_classifications', 'quantitymember_id', 'spaceclassification_id'),
+        }
+
+        for key, (Model, field_name, from_col, to_col) in m2m_relations.items():
+            print(f"[DEBUG]   - '{key}' 관계 복원 중...")
+            relations_to_add = {}
+            for rel in import_data.get(key, []):
+                from_obj = pk_map.get(rel[from_col])
+                to_obj = pk_map.get(rel[to_col])
+                if from_obj and to_obj:
+                    if from_obj not in relations_to_add:
+                        relations_to_add[from_obj] = []
+                    relations_to_add[from_obj].append(to_obj)
+            
+            for from_obj, to_objs in relations_to_add.items():
+                getattr(from_obj, field_name).add(*to_objs)
+        print(f"[DEBUG]   - ManyToMany 관계 복원 완료.")
+        
+        print(f"[DEBUG] --- 프로젝트 가져오기 성공: '{new_project_name}' ---")
+        return JsonResponse({'status': 'success', 'message': '프로젝트를 성공적으로 가져왔습니다.'})
+
+    except Exception as e:
+        print(f"[ERROR] 프로젝트 가져오기 중 예외 발생: {e}")
+        import traceback
+        print(traceback.format_exc())
+        transaction.set_rollback(True) # 오류 발생 시 트랜잭션 롤백
+        return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+
+# ▲▲▲ [추가] 여기까지 입니다. ▲▲▲

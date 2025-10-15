@@ -17,6 +17,12 @@
             accept=".csv"
             style="display: none"
         />
+        <input
+            type="file"
+            id="project-import-input"
+            accept=".json"
+            style="display: none"
+        />
 
         <div class="app-container">
             <header class="app-header">
@@ -34,6 +40,11 @@
                         </option>
                         {% endfor %}
                     </select>
+
+                    <button id="project-export-btn" style="margin-left: 10px">
+                        프로젝트 내보내기
+                    </button>
+                    <button id="project-import-btn">프로젝트 가져오기</button>
                     <input
                         type="text"
                         id="new-project-name"
