@@ -12,7 +12,9 @@ from django.db.models import F, Sum, Count
 from functools import reduce
 import operator
 from .consumers import RevitConsumer, FrontendConsumer, serialize_specific_elements
-
+from django.db import transaction
+from django.core import serializers
+import datetime
 
 from .models import (
     Project,
@@ -2696,8 +2698,8 @@ def export_project(request, project_id):
 @transaction.atomic
 def import_project(request):
     """
-    업로드된 JSON 파일을 분석하여 새로운 프로젝트와 관련 데이터를 생성합니다.
-    - 기존 ID 대신 새로운 UUID를 생성하고, 관계를 재설정합니다.
+    [수정됨] 업로드된 JSON 파일을 분석하여 새로운 프로젝트와 관련 데이터를 생성합니다.
+    - Many-to-Many 관계를 안전하게 처리하기 위해 .set() 메소드를 사용합니다.
     - 전체 프로세스는 트랜잭션으로 처리됩니다.
     """
     print("\n[DEBUG] --- 프로젝트 가져오기 시작 ---")
@@ -2733,34 +2735,54 @@ def import_project(request):
                 pk_map[old_pk] = new_obj
         print(f"[DEBUG]   - 단순 모델 생성 완료.")
 
-        # 3. RawElement 생성
+        # 3. RawElement 생성 (M2M 필드 처리 포함)
         print("[DEBUG] 3. RawElement 데이터 가져오기 중...")
+        raw_element_m2m_data = []
         for data in import_data.get('RawElement', []):
             old_pk = data['pk']
             fields = data['fields']
             fields['project'] = new_project
+            
+            # M2M 필드 데이터를 분리하고 나중에 처리하기 위해 저장합니다.
+            m2m_fields = {}
+            if 'classification_tags' in fields:
+                m2m_fields['classification_tags'] = fields.pop('classification_tags')
+            if 'space_classifications' in fields:
+                m2m_fields['space_classifications'] = fields.pop('space_classifications')
+
             new_obj = RawElement.objects.create(**fields)
             pk_map[old_pk] = new_obj
-        print(f"[DEBUG]   - RawElement 생성 완료.")
+            raw_element_m2m_data.append({'new_obj': new_obj, 'm2m_fields': m2m_fields})
+        print(f"[DEBUG]   - RawElement 객체 생성 완료.")
 
-        # 4. SpaceClassification 생성 (부모 관계 때문에 2단계로 처리)
+        # 4. SpaceClassification 생성 (부모 및 M2M 관계 때문에 여러 단계로 처리)
         print("[DEBUG] 4. SpaceClassification 데이터 가져오기 중...")
         space_parent_map = {}
+        space_m2m_data = []
         for data in import_data.get('SpaceClassification', []):
             old_pk = data['pk']
             fields = data['fields']
             fields['project'] = new_project
             
-            # source_element FK 변환
             if fields.get('source_element'):
                 fields['source_element'] = pk_map.get(fields['source_element'])
 
             old_parent_pk = fields.pop('parent', None)
+            
+            # M2M 필드(mapped_elements) 분리
+            m2m_fields = {}
+            if 'mapped_elements' in fields:
+                m2m_fields['mapped_elements'] = fields.pop('mapped_elements')
+
             new_obj = SpaceClassification.objects.create(**fields)
             pk_map[old_pk] = new_obj
+            
             if old_parent_pk:
                 space_parent_map[new_obj.id] = old_parent_pk
+            if m2m_fields:
+                space_m2m_data.append({'new_obj': new_obj, 'm2m_fields': m2m_fields})
 
+        # SpaceClassification 부모 관계 설정
         for space_id, old_parent_pk in space_parent_map.items():
             parent_obj = pk_map.get(old_parent_pk)
             if parent_obj:
@@ -2780,9 +2802,8 @@ def import_project(request):
                 fields = data['fields']
                 fields['project'] = new_project
                 
-                # 각 룰셋의 ForeignKey 필드를 새로운 객체로 교체
                 for fk_field in ['target_tag', 'target_cost_code']:
-                    if fk_field in fields:
+                    if fk_field in fields and fields[fk_field]:
                         fields[fk_field] = pk_map.get(fields[fk_field])
 
                 ModelClass = globals()[model_name]
@@ -2790,8 +2811,9 @@ def import_project(request):
                 pk_map[old_pk] = new_obj
         print(f"[DEBUG]   - 룰셋 모델 생성 완료.")
 
-        # 6. QuantityMember 생성
+        # 6. QuantityMember 생성 (M2M 필드 처리 포함)
         print("[DEBUG] 6. QuantityMember 데이터 가져오기 중...")
+        quantity_member_m2m_data = []
         for data in import_data.get('QuantityMember', []):
             old_pk = data['pk']
             fields = data['fields']
@@ -2799,9 +2821,17 @@ def import_project(request):
             for fk_field in ['raw_element', 'classification_tag', 'member_mark']:
                 if fields.get(fk_field):
                     fields[fk_field] = pk_map.get(fields[fk_field])
+            
+            m2m_fields = {}
+            if 'cost_codes' in fields:
+                m2m_fields['cost_codes'] = fields.pop('cost_codes')
+            if 'space_classifications' in fields:
+                m2m_fields['space_classifications'] = fields.pop('space_classifications')
+
             new_obj = QuantityMember.objects.create(**fields)
             pk_map[old_pk] = new_obj
-        print(f"[DEBUG]   - QuantityMember 생성 완료.")
+            quantity_member_m2m_data.append({'new_obj': new_obj, 'm2m_fields': m2m_fields})
+        print(f"[DEBUG]   - QuantityMember 객체 생성 완료.")
 
         # 7. CostItem 생성
         print("[DEBUG] 7. CostItem 데이터 가져오기 중...")
@@ -2816,29 +2846,34 @@ def import_project(request):
             pk_map[old_pk] = new_obj
         print(f"[DEBUG]   - CostItem 생성 완료.")
 
-        # 8. ManyToMany 관계 복원
+        # 8. ManyToMany 관계 복원 (분리했던 데이터 사용)
         print("[DEBUG] 8. ManyToMany 관계 복원 중...")
-        m2m_relations = {
-            'M2M_RawElement_classification_tags': (RawElement, 'classification_tags', 'rawelement_id', 'quantityclassificationtag_id'),
-            'M2M_RawElement_space_classifications': (RawElement, 'space_classifications', 'rawelement_id', 'spaceclassification_id'),
-            'M2M_QuantityMember_cost_codes': (QuantityMember, 'cost_codes', 'quantitymember_id', 'costcode_id'),
-            'M2M_QuantityMember_space_classifications': (QuantityMember, 'space_classifications', 'quantitymember_id', 'spaceclassification_id'),
-        }
+        # RawElement M2M
+        for item in raw_element_m2m_data:
+            if 'classification_tags' in item['m2m_fields']:
+                tag_pks = [pk_map[tag_pk].pk for tag_pk in item['m2m_fields']['classification_tags'] if tag_pk in pk_map]
+                item['new_obj'].classification_tags.set(tag_pks)
+            if 'space_classifications' in item['m2m_fields']:
+                space_pks = [pk_map[space_pk].pk for space_pk in item['m2m_fields']['space_classifications'] if space_pk in pk_map]
+                item['new_obj'].space_classifications.set(space_pks)
+        print("    - RawElement M2M 관계 복원 완료.")
 
-        for key, (Model, field_name, from_col, to_col) in m2m_relations.items():
-            print(f"[DEBUG]   - '{key}' 관계 복원 중...")
-            relations_to_add = {}
-            for rel in import_data.get(key, []):
-                from_obj = pk_map.get(rel[from_col])
-                to_obj = pk_map.get(rel[to_col])
-                if from_obj and to_obj:
-                    if from_obj not in relations_to_add:
-                        relations_to_add[from_obj] = []
-                    relations_to_add[from_obj].append(to_obj)
-            
-            for from_obj, to_objs in relations_to_add.items():
-                getattr(from_obj, field_name).add(*to_objs)
-        print(f"[DEBUG]   - ManyToMany 관계 복원 완료.")
+        # SpaceClassification M2M (mapped_elements)
+        for item in space_m2m_data:
+            if 'mapped_elements' in item['m2m_fields']:
+                element_pks = [pk_map[el_pk].pk for el_pk in item['m2m_fields']['mapped_elements'] if el_pk in pk_map]
+                item['new_obj'].mapped_elements.set(element_pks)
+        print("    - SpaceClassification M2M 관계 복원 완료.")
+
+        # QuantityMember M2M
+        for item in quantity_member_m2m_data:
+            if 'cost_codes' in item['m2m_fields']:
+                cost_code_pks = [pk_map[cc_pk].pk for cc_pk in item['m2m_fields']['cost_codes'] if cc_pk in pk_map]
+                item['new_obj'].cost_codes.set(cost_code_pks)
+            if 'space_classifications' in item['m2m_fields']:
+                space_pks = [pk_map[space_pk].pk for space_pk in item['m2m_fields']['space_classifications'] if space_pk in pk_map]
+                item['new_obj'].space_classifications.set(space_pks)
+        print("    - QuantityMember M2M 관계 복원 완료.")
         
         print(f"[DEBUG] --- 프로젝트 가져오기 성공: '{new_project_name}' ---")
         return JsonResponse({'status': 'success', 'message': '프로젝트를 성공적으로 가져왔습니다.'})
@@ -2847,7 +2882,5 @@ def import_project(request):
         print(f"[ERROR] 프로젝트 가져오기 중 예외 발생: {e}")
         import traceback
         print(traceback.format_exc())
-        transaction.set_rollback(True) # 오류 발생 시 트랜잭션 롤백
+        transaction.set_rollback(True)
         return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
-
-# ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
