@@ -1,31 +1,31 @@
 // connections/static/connections/ui.js
 
 function getValueForItem(item, field) {
-    if (!item || !field) return "";
-    if (field === "classification_tags")
+    if (!item || !field) return '';
+    if (field === 'classification_tags')
         return Array.isArray(item.classification_tags)
-            ? item.classification_tags.join(", ")
-            : "";
+            ? item.classification_tags.join(', ')
+            : '';
     const raw_data = item.raw_data || {};
-    if (field in item && field !== "raw_data") return item[field] ?? "";
-    if (field.startsWith("TypeParameters.")) {
+    if (field in item && field !== 'raw_data') return item[field] ?? '';
+    if (field.startsWith('TypeParameters.')) {
         const subKey = field.substring(15);
         return raw_data.TypeParameters
-            ? raw_data.TypeParameters[subKey] ?? ""
-            : "";
+            ? raw_data.TypeParameters[subKey] ?? ''
+            : '';
     }
     if (raw_data.Parameters && field in raw_data.Parameters)
-        return raw_data.Parameters[field] ?? "";
-    if (field in raw_data) return raw_data[field] ?? "";
-    return "";
+        return raw_data.Parameters[field] ?? '';
+    if (field in raw_data) return raw_data[field] ?? '';
+    return '';
 }
 
 const lowerValueCache = new Map(); // key: `${item.id}::${field}` -> value: string
 
 function getLowerValueForItem(item, field) {
-    const key = `${item?.id ?? ""}::${field}`;
+    const key = `${item?.id ?? ''}::${field}`;
     if (lowerValueCache.has(key)) return lowerValueCache.get(key);
-    const v = (getValueForItem(item, field) ?? "").toString().toLowerCase();
+    const v = (getValueForItem(item, field) ?? '').toString().toLowerCase();
     lowerValueCache.set(key, v);
     return v;
 }
@@ -51,22 +51,22 @@ function populateFieldSelection() {
             )
         ).map((cb) => cb.value);
 
-    const dmCheckedFields = getCheckedValues("#data-management");
-    const smCheckedFields = getCheckedValues("#space-management");
+    const dmCheckedFields = getCheckedValues('#data-management');
+    const smCheckedFields = getCheckedValues('#space-management');
 
     // 2. 기존 로직: 컨테이너 탐색 및 키 계산 (이 부분은 동일합니다)
-    const dmSystemContainer = document.getElementById("system-field-container");
-    const dmRevitContainer = document.getElementById("revit-field-container");
+    const dmSystemContainer = document.getElementById('system-field-container');
+    const dmRevitContainer = document.getElementById('revit-field-container');
     const smSystemContainer = document.getElementById(
-        "sm-system-field-container"
+        'sm-system-field-container'
     );
     const smRevitContainer = document.getElementById(
-        "sm-revit-field-container"
+        'sm-revit-field-container'
     );
 
     if (allRevitData.length === 0) return;
 
-    const systemKeys = ["id", "element_unique_id", "classification_tags"];
+    const systemKeys = ['id', 'element_unique_id', 'classification_tags'];
     const revitKeysSet = new Set();
     allRevitData.forEach((item) => {
         const raw = item.raw_data;
@@ -78,7 +78,7 @@ function populateFieldSelection() {
                     revitKeysSet.add(`TypeParameters.${k}`)
                 );
             Object.keys(raw).forEach((k) => {
-                if (k !== "Parameters" && k !== "TypeParameters")
+                if (k !== 'Parameters' && k !== 'TypeParameters')
                     revitKeysSet.add(k);
             });
         }
@@ -93,13 +93,13 @@ function populateFieldSelection() {
                 (k) =>
                     `<label><input type="checkbox" class="field-checkbox" value="${k}"> ${k}</label>`
             )
-            .join("");
+            .join('');
         revContainer.innerHTML = sortedRevitKeys
             .map(
                 (k) =>
                     `<label><input type="checkbox" class="field-checkbox" value="${k}"> ${k}</label>`
             )
-            .join("");
+            .join('');
     };
 
     fillContainers(dmSystemContainer, dmRevitContainer);
@@ -118,17 +118,17 @@ function populateFieldSelection() {
         });
     };
 
-    restoreCheckedState("#data-management", dmCheckedFields);
-    restoreCheckedState("#space-management", smCheckedFields);
+    restoreCheckedState('#data-management', dmCheckedFields);
+    restoreCheckedState('#space-management', smCheckedFields);
 
     // 5. 기존 로직: 모든 그룹핑 드롭다운 메뉴를 업데이트합니다. (이 부분은 동일합니다)
     const allKeysSorted = [...systemKeys, ...sortedRevitKeys].sort();
-    const allGroupBySelects = document.querySelectorAll(".group-by-select");
+    const allGroupBySelects = document.querySelectorAll('.group-by-select');
     let optionsHtml =
         '<option value="">-- 필드 선택 --</option>' +
         allKeysSorted
             .map((key) => `<option value="${key}">${key}</option>`)
-            .join("");
+            .join('');
     allGroupBySelects.forEach((select) => {
         const selectedValue = select.value;
         select.innerHTML = optionsHtml;
@@ -143,8 +143,8 @@ function addGroupingLevel(contextPrefix) {
     if (!container) return;
 
     const newIndex = container.children.length + 1;
-    const newLevelDiv = document.createElement("div");
-    newLevelDiv.className = "group-level";
+    const newLevelDiv = document.createElement('div');
+    newLevelDiv.className = 'group-level';
     newLevelDiv.innerHTML = `
         <label>${newIndex}차:</label>
         <select class="group-by-select"></select>
@@ -155,8 +155,8 @@ function addGroupingLevel(contextPrefix) {
     populateFieldSelection();
 
     newLevelDiv
-        .querySelector(".remove-group-level-btn")
-        .addEventListener("click", function () {
+        .querySelector('.remove-group-level-btn')
+        .addEventListener('click', function () {
             this.parentElement.remove();
             renderDataTable(
                 `${contextPrefix}-data-table-container`,
@@ -170,7 +170,7 @@ function renderDataTable(containerId, contextPrefix) {
     if (!tableContainer) return;
 
     if (allRevitData.length === 0) {
-        tableContainer.innerHTML = "표시할 데이터가 없습니다.";
+        tableContainer.innerHTML = '표시할 데이터가 없습니다.';
         return;
     }
 
@@ -178,22 +178,22 @@ function renderDataTable(containerId, contextPrefix) {
     if (!state) return;
 
     const fieldCheckboxSelector =
-        contextPrefix === "data-management"
-            ? "#fields .field-checkbox:checked"
-            : "#sm-fields .field-checkbox:checked";
+        contextPrefix === 'data-management'
+            ? '#fields .field-checkbox:checked'
+            : '#sm-fields .field-checkbox:checked';
 
     const selectedFields = Array.from(
         document.querySelectorAll(fieldCheckboxSelector)
     ).map((cb) => cb.value);
 
     if (selectedFields.length === 0) {
-        tableContainer.innerHTML = "표시할 필드를 하나 이상 선택하세요.";
+        tableContainer.innerHTML = '표시할 필드를 하나 이상 선택하세요.';
         return;
     }
 
-    if (state.activeView === "raw-data-view") {
+    if (state.activeView === 'raw-data-view') {
         renderRawDataTable(containerId, selectedFields, state);
-    } else if (state.activeView === "classification-view") {
+    } else if (state.activeView === 'classification-view') {
         renderClassificationTable(containerId, selectedFields, state);
     }
 }
@@ -212,33 +212,33 @@ function renderRawDataTable(containerId, selectedFields, state) {
 
     // 그룹핑 필드 수집
     const groupingControlsContainer = tableContainer
-        .closest(".table-area")
-        ?.querySelector(".table-controls");
+        .closest('.table-area')
+        ?.querySelector('.table-controls');
     const groupBySelects = groupingControlsContainer
-        ? groupingControlsContainer.querySelectorAll(".group-by-select")
+        ? groupingControlsContainer.querySelectorAll('.group-by-select')
         : [];
     const currentGroupByFields = Array.from(groupBySelects)
         .map((s) => s.value)
         .filter(Boolean);
 
     // 기존처럼 전체 문자열을 만들지 말고, DOM을 점진적으로 구성
-    tableContainer.innerHTML = "";
-    const table = document.createElement("table");
-    const thead = document.createElement("thead");
-    const tr = document.createElement("tr");
+    tableContainer.innerHTML = '';
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const tr = document.createElement('tr');
 
     // 머리글 + 필터 입력 상자
     selectedFields.forEach((field) => {
-        const th = document.createElement("th");
-        const label = document.createElement("div");
+        const th = document.createElement('th');
+        const label = document.createElement('div');
         label.textContent = field;
 
-        const input = document.createElement("input");
-        input.type = "text";
-        input.className = "column-filter";
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'column-filter';
         input.dataset.field = field;
-        input.value = state.columnFilters[field] || "";
-        input.placeholder = "필터...";
+        input.value = state.columnFilters[field] || '';
+        input.placeholder = '필터...';
 
         th.appendChild(label);
         th.appendChild(input);
@@ -247,7 +247,7 @@ function renderRawDataTable(containerId, selectedFields, state) {
     thead.appendChild(tr);
     table.appendChild(thead);
 
-    const tbody = document.createElement("tbody");
+    const tbody = document.createElement('tbody');
     table.appendChild(tbody);
     tableContainer.appendChild(table);
 
@@ -260,14 +260,14 @@ function renderRawDataTable(containerId, selectedFields, state) {
             const frag = document.createDocumentFragment();
             for (let c = 0; c < BATCH && i < filteredData.length; c++, i++) {
                 const item = filteredData[i];
-                const row = document.createElement("tr");
+                const row = document.createElement('tr');
                 row.dataset.dbId = item.id;
                 if (state.selectedElementIds.has(item.id))
-                    row.classList.add("selected-row");
-                row.style.cursor = "pointer";
+                    row.classList.add('selected-row');
+                row.style.cursor = 'pointer';
 
                 selectedFields.forEach((field) => {
-                    const td = document.createElement("td");
+                    const td = document.createElement('td');
                     td.textContent = getValueForItem(item, field);
                     frag.appendChild(td); // <- 실수 방지: td는 row에 붙여야 함
                     row.appendChild(td);
@@ -290,7 +290,7 @@ function renderRawDataTable(containerId, selectedFields, state) {
         const field = currentGroupByFields[level];
         const map = {};
         for (const it of items) {
-            const key = getValueForItem(it, field) || "(값 없음)";
+            const key = getValueForItem(it, field) || '(값 없음)';
             (map[key] ??= []).push(it);
         }
         const result = {};
@@ -307,16 +307,16 @@ function renderRawDataTable(containerId, selectedFields, state) {
     const tasks = []; // 렌더 작업 큐 (헤더/행 생성 단위)
 
     function enqueueGroup(node, level, parentPath) {
-        if (node["__leaf__"]) {
-            for (const item of node["__leaf__"]) {
+        if (node['__leaf__']) {
+            for (const item of node['__leaf__']) {
                 tasks.push(() => {
-                    const row = document.createElement("tr");
+                    const row = document.createElement('tr');
                     row.dataset.dbId = item.id;
                     if (state.selectedElementIds.has(item.id))
-                        row.classList.add("selected-row");
-                    row.style.cursor = "pointer";
+                        row.classList.add('selected-row');
+                    row.style.cursor = 'pointer';
                     selectedFields.forEach((field) => {
-                        const td = document.createElement("td");
+                        const td = document.createElement('td');
                         td.textContent = getValueForItem(item, field);
                         row.appendChild(td);
                     });
@@ -333,17 +333,17 @@ function renderRawDataTable(containerId, selectedFields, state) {
 
             tasks.push(() => {
                 const indentPixels = level * 20;
-                const headerRow = document.createElement("tr");
+                const headerRow = document.createElement('tr');
                 headerRow.className = `group-header group-level-${level}`;
                 headerRow.dataset.groupPath = currentPath;
 
-                const td = document.createElement("td");
+                const td = document.createElement('td');
                 td.colSpan = selectedFields.length;
                 td.style.paddingLeft = `${indentPixels}px`;
 
-                const icon = document.createElement("span");
-                icon.className = "toggle-icon";
-                icon.textContent = isCollapsed ? "▶" : "▼";
+                const icon = document.createElement('span');
+                icon.className = 'toggle-icon';
+                icon.textContent = isCollapsed ? '▶' : '▼';
 
                 td.appendChild(icon);
                 td.appendChild(
@@ -357,7 +357,7 @@ function renderRawDataTable(containerId, selectedFields, state) {
         });
     }
 
-    enqueueGroup(root, 0, "");
+    enqueueGroup(root, 0, '');
 
     // 프레임 분할로 작업 수행
     const STEP = 800; // 한 프레임에 처리할 작업 수 (환경/데이터에 맞춰 조절)
@@ -380,10 +380,10 @@ function renderClassificationTable(containerId, selectedFields, state) {
         : allRevitData;
 
     const groupingControlsContainer = tableContainer
-        .closest(".table-area")
-        ?.querySelector(".table-controls");
+        .closest('.table-area')
+        ?.querySelector('.table-controls');
     const groupBySelects = groupingControlsContainer
-        ? groupingControlsContainer.querySelectorAll(".group-by-select")
+        ? groupingControlsContainer.querySelectorAll('.group-by-select')
         : [];
     const currentGroupByFields = Array.from(groupBySelects)
         .map((s) => s.value)
@@ -398,24 +398,24 @@ function renderClassificationTable(containerId, selectedFields, state) {
                 dataByTag[tag].push(item);
             });
         } else {
-            if (!dataByTag["(분류 없음)"]) dataByTag["(분류 없음)"] = [];
-            dataByTag["(분류 없음)"].push(item);
+            if (!dataByTag['(분류 없음)']) dataByTag['(분류 없음)'] = [];
+            dataByTag['(분류 없음)'].push(item);
         }
     });
 
-    let tableHtml = "<table><thead><tr>";
+    let tableHtml = '<table><thead><tr>';
     selectedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            state.columnFilters[field] || ""
+            state.columnFilters[field] || ''
         }" placeholder="필터..."></th>`;
     });
-    tableHtml += "</tr></thead><tbody>";
+    tableHtml += '</tr></thead><tbody>';
 
     function renderSubGroup(items, level, parentPath) {
         if (level >= currentGroupByFields.length || items.length === 0) {
             items.forEach((item) => {
                 tableHtml += `<tr data-db-id="${item.id}" class="${
-                    state.selectedElementIds.has(item.id) ? "selected-row" : ""
+                    state.selectedElementIds.has(item.id) ? 'selected-row' : ''
                 }" style="cursor: pointer;">`;
                 selectedFields.forEach(
                     (field) =>
@@ -424,14 +424,14 @@ function renderClassificationTable(containerId, selectedFields, state) {
                             field
                         )}</td>`)
                 );
-                tableHtml += "</tr>";
+                tableHtml += '</tr>';
             });
             return;
         }
 
         const groupField = currentGroupByFields[level];
         const grouped = items.reduce((acc, item) => {
-            const key = getValueForItem(item, groupField) || "(값 없음)";
+            const key = getValueForItem(item, groupField) || '(값 없음)';
             (acc[key] = acc[key] || []).push(item);
             return acc;
         }, {});
@@ -450,7 +450,7 @@ function renderClassificationTable(containerId, selectedFields, state) {
                                 selectedFields.length
                             }" style="padding-left: ${indentPixels}px;">
                                 <span class="toggle-icon">${
-                                    isCollapsed ? "▶" : "▼"
+                                    isCollapsed ? '▶' : '▼'
                                 }</span>
                                 ${groupField}: ${key} (${grouped[key].length}개)
                             </td>
@@ -477,7 +477,7 @@ function renderClassificationTable(containerId, selectedFields, state) {
             tableHtml += `<tr class="group-header group-level-0" data-group-path="${groupPath}">
                         <td colspan="${selectedFields.length}">
                             <span class="toggle-icon">${
-                                isCollapsed ? "▶" : "▼"
+                                isCollapsed ? '▶' : '▼'
                             }</span>
                             분류: ${tag} (${items.length}개)
                         </td>
@@ -488,13 +488,13 @@ function renderClassificationTable(containerId, selectedFields, state) {
             }
         });
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     tableContainer.innerHTML = tableHtml;
 }
 
 function updateTagLists(tags) {
-    const tagListDiv = document.getElementById("tag-list");
-    const tagAssignSelect = document.getElementById("tag-assign-select");
+    const tagListDiv = document.getElementById('tag-list');
+    const tagAssignSelect = document.getElementById('tag-assign-select');
     tagListDiv.innerHTML = tags
         .map(
             (tag) => `
@@ -507,7 +507,7 @@ function updateTagLists(tags) {
         </div>
     `
         )
-        .join("");
+        .join('');
     if (tagAssignSelect) {
         let optionsHtml = '<option value="">-- 적용할 분류 선택 --</option>';
         tags.forEach((tag) => {
@@ -517,36 +517,58 @@ function updateTagLists(tags) {
     }
 }
 
-function showToast(message, type = "info", duration = 3000) {
-    const container = document.getElementById("toast-container");
-    const toast = document.createElement("div");
-    toast.className = `toast-message ${type}`;
-    toast.textContent = message;
+const toastQueue = [];
+let activeToasts = 0;
+const MAX_ACTIVE_TOASTS = 3;
+
+function processToastQueue() {
+    if (activeToasts >= MAX_ACTIVE_TOASTS || toastQueue.length === 0) {
+        return;
+    }
+
+    const toastData = toastQueue.shift();
+    activeToasts++;
+
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast-message ${toastData.type}`;
+    toast.textContent = toastData.message;
     container.appendChild(toast);
+
     setTimeout(() => {
-        toast.classList.add("show");
+        toast.classList.add('show');
     }, 100);
+
     setTimeout(() => {
-        toast.classList.remove("show");
-        toast.addEventListener("transitionend", () => toast.remove());
-    }, duration);
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => {
+            toast.remove();
+            activeToasts--;
+            processToastQueue(); // 다음 대기열 처리
+        });
+    }, toastData.duration);
+}
+
+function showToast(message, type = 'info', duration = 3000) {
+    toastQueue.push({ message, type, duration });
+    processToastQueue();
 }
 
 function renderClassificationRulesetTable(rules, editingRuleId = null) {
     const container = document.querySelector(
-        "#classification-ruleset .ruleset-table-container"
+        '#classification-ruleset .ruleset-table-container'
     );
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하고 규칙을 추가하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하고 규칙을 추가하세요.</p>';
         return;
     }
 
     const tagOptions = Array.from(
-        document.querySelectorAll("#tag-assign-select option")
+        document.querySelectorAll('#tag-assign-select option')
     )
         .filter((opt) => opt.value)
         .map((opt) => `<option value="${opt.value}">${opt.text}</option>`)
-        .join("");
+        .join('');
 
     let tableHtml = `
         <table class="ruleset-table">
@@ -608,7 +630,7 @@ function renderClassificationRulesetTable(rules, editingRuleId = null) {
     });
 
     // 새 규칙 추가 행 (editingRuleId가 'new'일 경우)
-    if (editingRuleId === "new") {
+    if (editingRuleId === 'new') {
         tableHtml += `
             <tr class="rule-edit-row" data-rule-id="new">
                 <td><input type="number" class="rule-priority-input" value="0"></td>
@@ -623,16 +645,16 @@ function renderClassificationRulesetTable(rules, editingRuleId = null) {
         `;
     }
 
-    if (rules.length === 0 && editingRuleId !== "new") {
+    if (rules.length === 0 && editingRuleId !== 'new') {
         tableHtml +=
             '<tr><td colspan="5">정의된 규칙이 없습니다. 새 규칙을 추가하세요.</td></tr>';
     }
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 
     // 편집 모드일 때, select 요소의 현재 값을 설정
-    if (editingRuleId && editingRuleId !== "new") {
+    if (editingRuleId && editingRuleId !== 'new') {
         const rule = rules.find((r) => r.id === editingRuleId);
         if (rule) {
             const selectElement = container.querySelector(
@@ -649,54 +671,54 @@ function renderClassificationRulesetTable(rules, editingRuleId = null) {
  * @param {String|null} editingMemberId - 현재 편집 중인 부재의 ID
  */
 function renderRawQmTable(members, editingMemberId = null) {
-    const container = document.getElementById("qm-table-container");
+    const container = document.getElementById('qm-table-container');
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
 
     const getQmValue = (item, field) => {
-        if (!field) return "";
+        if (!field) return '';
 
-        if (field.startsWith("BIM원본.")) {
+        if (field.startsWith('BIM원본.')) {
             const key = field.substring(6);
             if (item.raw_element_id) {
                 const rawElement = allRevitData.find(
                     (el) => el.id === item.raw_element_id
                 );
-                return rawElement ? getValueForItem(rawElement, key) : "";
+                return rawElement ? getValueForItem(rawElement, key) : '';
             }
-            return "";
+            return '';
         }
 
-        if (field.startsWith("일람부호.")) {
+        if (field.startsWith('일람부호.')) {
             const key = field.substring(5);
             if (item.member_mark_id) {
                 const mark = loadedMemberMarks.find(
                     (m) => m.id === item.member_mark_id
                 );
                 if (mark) {
-                    if (key === "Mark") {
+                    if (key === 'Mark') {
                         return mark.mark;
                     }
-                    return mark.properties?.[key] ?? "";
+                    return mark.properties?.[key] ?? '';
                 }
             }
-            return "";
+            return '';
         }
 
-        if (field === "mapping_expression") {
+        if (field === 'mapping_expression') {
             const value = item[field];
             if (
                 value &&
-                typeof value === "object" &&
+                typeof value === 'object' &&
                 Object.keys(value).length > 0
             ) {
                 return JSON.stringify(value);
             }
-            return "";
+            return '';
         }
-        return item[field] ?? "";
+        return item[field] ?? '';
     };
 
     const filteredMembers = members.filter((member) =>
@@ -713,22 +735,22 @@ function renderRawQmTable(members, editingMemberId = null) {
     );
 
     currentQmGroupByFields = Array.from(
-        document.querySelectorAll("#qm-grouping-controls .qm-group-by-select")
+        document.querySelectorAll('#qm-grouping-controls .qm-group-by-select')
     )
         .map((s) => s.value)
         .filter(Boolean);
 
     const sortedFields = [
-        "name",
-        "classification_tag_name",
-        "mapping_expression",
-        "raw_element_id",
+        'name',
+        'classification_tag_name',
+        'mapping_expression',
+        'raw_element_id',
     ];
 
-    let tableHtml = "<table><thead><tr>";
+    let tableHtml = '<table><thead><tr>';
     sortedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            qmColumnFilters[field] || ""
+            qmColumnFilters[field] || ''
         }" placeholder="필터..."></th>`;
     });
     tableHtml += `<th>작업</th></tr></thead><tbody>`;
@@ -742,16 +764,16 @@ function renderRawQmTable(members, editingMemberId = null) {
                             (opt) =>
                                 `<option value="${opt.id}" ${
                                     opt.id == m.classification_tag_id
-                                        ? "selected"
-                                        : ""
+                                        ? 'selected'
+                                        : ''
                                 }>${opt.name}</option>`
                         )
-                        .join("");
+                        .join('');
 
                     tableHtml += `
                         <tr class="qm-edit-row" data-id="${m.id}">
                             <td><input type="text" class="qm-name-input" value="${
-                                m.name || ""
+                                m.name || ''
                             }"></td>
                             <td><select class="qm-tag-select"><option value="">-- 분류 없음 --</option>${tagOptions}</select></td>
                             <td>
@@ -766,7 +788,7 @@ function renderRawQmTable(members, editingMemberId = null) {
                                 <div style="margin-bottom: 5px;">
                                     <small style="font-weight: bold;">개별 일람부호 룰:</small>
                                     <input type="text" class="qm-mark-expr-input" value="${
-                                        m.member_mark_expression || ""
+                                        m.member_mark_expression || ''
                                     }" placeholder="'C' + {층}">
                                 </div>
                                 <div>
@@ -778,7 +800,7 @@ function renderRawQmTable(members, editingMemberId = null) {
                                     )}</textarea>
                                 </div>
                             </td>
-                            <td>${getQmValue(m, "raw_element_id")}</td>
+                            <td>${getQmValue(m, 'raw_element_id')}</td>
                             <td style="vertical-align: middle; text-align: center;">
                                 <button class="save-qm-btn" data-id="${
                                     m.id
@@ -792,14 +814,14 @@ function renderRawQmTable(members, editingMemberId = null) {
                 } else {
                     tableHtml += `
                         <tr data-id="${m.id}" class="${
-                        selectedQmIds.has(m.id.toString()) ? "selected-row" : ""
+                        selectedQmIds.has(m.id.toString()) ? 'selected-row' : ''
                     }" style="cursor: pointer;">
                             ${sortedFields
                                 .map(
                                     (field) =>
                                         `<td>${getQmValue(m, field)}</td>`
                                 )
-                                .join("")}
+                                .join('')}
                             <td>
                                 <button class="edit-qm-btn" data-id="${
                                     m.id
@@ -816,7 +838,7 @@ function renderRawQmTable(members, editingMemberId = null) {
 
         const groupField = currentQmGroupByFields[level];
         const grouped = items.reduce((acc, item) => {
-            const key = getQmValue(item, groupField) || "(값 없음)";
+            const key = getQmValue(item, groupField) || '(값 없음)';
             (acc[key] = acc[key] || []).push(item);
             return acc;
         }, {});
@@ -834,7 +856,7 @@ function renderRawQmTable(members, editingMemberId = null) {
                                 sortedFields.length + 1
                             }" style="padding-left: ${indentPixels}px;">
                                 <span class="toggle-icon">${
-                                    isCollapsed ? "▶" : "▼"
+                                    isCollapsed ? '▶' : '▼'
                                 }</span>
                                 ${groupField}: ${key} (${grouped[key].length}개)
                             </td>
@@ -850,10 +872,10 @@ function renderRawQmTable(members, editingMemberId = null) {
             sortedFields.length + 1
         }">표시할 데이터가 없습니다.</td></tr>`;
     } else {
-        renderGroup(filteredMembers, 0, "");
+        renderGroup(filteredMembers, 0, '');
     }
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
@@ -862,34 +884,34 @@ function renderRawQmTable(members, editingMemberId = null) {
  * @param {Array} members - 렌더링할 전체 수량산출부재 데이터
  */
 function renderCostCodeViewTable(members) {
-    const container = document.getElementById("qm-table-container");
+    const container = document.getElementById('qm-table-container');
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
 
     // getQmValue 함수 (renderRawQmTable과 동일)
     const getQmValue = (item, field) => {
-        if (!field) return "";
-        if (field.startsWith("BIM원본.")) {
+        if (!field) return '';
+        if (field.startsWith('BIM원본.')) {
             const key = field.substring(6);
             const rawElement = item.raw_element_id
                 ? allRevitData.find((el) => el.id === item.raw_element_id)
                 : null;
-            return rawElement ? getValueForItem(rawElement, key) : "";
+            return rawElement ? getValueForItem(rawElement, key) : '';
         }
-        if (field.startsWith("일람부호.")) {
+        if (field.startsWith('일람부호.')) {
             const key = field.substring(5);
             const mark = item.member_mark_id
                 ? loadedMemberMarks.find((m) => m.id === item.member_mark_id)
                 : null;
             if (mark)
-                return key === "Mark"
+                return key === 'Mark'
                     ? mark.mark
-                    : mark.properties?.[key] ?? "";
-            return "";
+                    : mark.properties?.[key] ?? '';
+            return '';
         }
-        return item[field] ?? "";
+        return item[field] ?? '';
     };
 
     const dataByCostCode = {};
@@ -905,50 +927,50 @@ function renderCostCodeViewTable(members) {
                 dataByCostCode[codeName].push(member);
             });
         } else {
-            if (!dataByCostCode["(공사코드 없음)"])
-                dataByCostCode["(공사코드 없음)"] = [];
-            dataByCostCode["(공사코드 없음)"].push(member);
+            if (!dataByCostCode['(공사코드 없음)'])
+                dataByCostCode['(공사코드 없음)'] = [];
+            dataByCostCode['(공사코드 없음)'].push(member);
         }
     });
 
     currentQmGroupByFields = Array.from(
-        document.querySelectorAll("#qm-grouping-controls .qm-group-by-select")
+        document.querySelectorAll('#qm-grouping-controls .qm-group-by-select')
     )
         .map((s) => s.value)
         .filter(Boolean);
     const displayedFields = [
-        "name",
-        "classification_tag_name",
-        "raw_element_id",
+        'name',
+        'classification_tag_name',
+        'raw_element_id',
     ]; // 공사코드 뷰에서는 공사코드 정보가 그룹 헤더에 있으므로 테이블에서는 제외
 
-    let tableHtml = "<table><thead><tr>";
+    let tableHtml = '<table><thead><tr>';
     displayedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            qmColumnFilters[field] || ""
+            qmColumnFilters[field] || ''
         }" placeholder="필터..."></th>`;
     });
-    tableHtml += "</tr></thead><tbody>";
+    tableHtml += '</tr></thead><tbody>';
 
     // 재귀적으로 하위 그룹을 렌더링하는 함수 (renderClassificationTable과 유사)
     function renderSubGroup(items, level, parentPath) {
         if (level >= currentQmGroupByFields.length || items.length === 0) {
             items.forEach((item) => {
                 tableHtml += `<tr data-id="${item.id}" class="${
-                    selectedQmIds.has(item.id.toString()) ? "selected-row" : ""
+                    selectedQmIds.has(item.id.toString()) ? 'selected-row' : ''
                 }" style="cursor: pointer;">`;
                 displayedFields.forEach(
                     (field) =>
                         (tableHtml += `<td>${getQmValue(item, field)}</td>`)
                 );
-                tableHtml += "</tr>";
+                tableHtml += '</tr>';
             });
             return;
         }
 
         const groupField = currentQmGroupByFields[level];
         const grouped = items.reduce((acc, item) => {
-            const key = getQmValue(item, groupField) || "(값 없음)";
+            const key = getQmValue(item, groupField) || '(값 없음)';
             (acc[key] = acc[key] || []).push(item);
             return acc;
         }, {});
@@ -967,7 +989,7 @@ function renderCostCodeViewTable(members) {
                                 displayedFields.length
                             }" style="padding-left: ${indentPixels}px;">
                                 <span class="toggle-icon">${
-                                    isCollapsed ? "▶" : "▼"
+                                    isCollapsed ? '▶' : '▼'
                                 }</span>
                                 ${groupField}: ${key} (${grouped[key].length}개)
                             </td>
@@ -1000,7 +1022,7 @@ function renderCostCodeViewTable(members) {
             tableHtml += `<tr class="group-header group-level-0" data-group-path="${groupPath}">
                         <td colspan="${displayedFields.length}">
                             <span class="toggle-icon">${
-                                isCollapsed ? "▶" : "▼"
+                                isCollapsed ? '▶' : '▼'
                             }</span>
                             공사코드: ${codeName} (${items.length}개)
                         </td>
@@ -1011,7 +1033,7 @@ function renderCostCodeViewTable(members) {
             }
         });
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
@@ -1022,9 +1044,9 @@ function renderCostCodeViewTable(members) {
 function renderActiveQmView(editingMemberId = null) {
     // const editingId = editingMemberId || document.querySelector('#qm-table-container .qm-edit-row')?.dataset.id;
 
-    if (activeQmView === "quantity-member-view") {
+    if (activeQmView === 'quantity-member-view') {
         renderRawQmTable(loadedQuantityMembers, editingMemberId);
-    } else if (activeQmView === "cost-code-view") {
+    } else if (activeQmView === 'cost-code-view') {
         // 공사코드 뷰에서는 인라인 편집을 지원하지 않으므로 editingId를 무시합니다.
         renderCostCodeViewTable(loadedQuantityMembers);
     }
@@ -1042,7 +1064,7 @@ function toggleQmGroup(groupPath) {
 function populateQmFieldSelection(members) {
     if (members.length === 0) return;
 
-    const fieldKeys = new Set(["name", "classification_tag_name"]);
+    const fieldKeys = new Set(['name', 'classification_tag_name']);
 
     const membersToScan = members.slice(0, 50);
     membersToScan.forEach((member) => {
@@ -1052,7 +1074,7 @@ function populateQmFieldSelection(members) {
             );
             if (mark) {
                 // '일람부호.Mark'를 그룹핑 옵션에 추가
-                fieldKeys.add("일람부호.Mark");
+                fieldKeys.add('일람부호.Mark');
                 if (mark.properties) {
                     Object.keys(mark.properties).forEach((key) =>
                         fieldKeys.add(`일람부호.${key}`)
@@ -1078,9 +1100,9 @@ function populateQmFieldSelection(members) {
                     );
                 Object.keys(rawData).forEach((k) => {
                     if (
-                        k !== "Parameters" &&
-                        k !== "TypeParameters" &&
-                        typeof rawData[k] !== "object"
+                        k !== 'Parameters' &&
+                        k !== 'TypeParameters' &&
+                        typeof rawData[k] !== 'object'
                     ) {
                         fieldKeys.add(`BIM원본.${k}`);
                     }
@@ -1090,12 +1112,12 @@ function populateQmFieldSelection(members) {
     });
 
     const sortedKeys = Array.from(fieldKeys).sort();
-    const groupBySelects = document.querySelectorAll(".qm-group-by-select");
+    const groupBySelects = document.querySelectorAll('.qm-group-by-select');
     let optionsHtml =
         '<option value="">-- 그룹핑 기준 선택 --</option>' +
         sortedKeys
             .map((key) => `<option value="${key}">${key}</option>`)
-            .join("");
+            .join('');
 
     groupBySelects.forEach((select) => {
         const selectedValue = select.value;
@@ -1109,13 +1131,13 @@ function populateQmFieldSelection(members) {
  * @param {String|null} editingMemberId - 현재 편집 중인 부재의 ID
  */
 function renderQmPropertiesTable(editingMemberId = null) {
-    const container = document.getElementById("qm-properties-container");
-    const actionsContainer = document.getElementById("qm-properties-actions");
-    actionsContainer.innerHTML = ""; // 액션 버튼 초기화
+    const container = document.getElementById('qm-properties-container');
+    const actionsContainer = document.getElementById('qm-properties-actions');
+    actionsContainer.innerHTML = ''; // 액션 버튼 초기화
 
     if (selectedQmIds.size !== 1) {
         container.innerHTML =
-            "속성을 보려면 위 테이블에서 부재를 하나만 선택하세요.";
+            '속성을 보려면 위 테이블에서 부재를 하나만 선택하세요.';
         return;
     }
 
@@ -1125,7 +1147,7 @@ function renderQmPropertiesTable(editingMemberId = null) {
     );
 
     if (!member) {
-        container.innerHTML = "선택된 부재 정보를 찾을 수 없습니다.";
+        container.innerHTML = '선택된 부재 정보를 찾을 수 없습니다.';
         return;
     }
 
@@ -1138,7 +1160,7 @@ function renderQmPropertiesTable(editingMemberId = null) {
                 <tr>
                     <th>속성 (Property)</th>
                     <th>값 (Value)</th>
-                    ${isEditMode ? "<th>작업</th>" : ""}
+                    ${isEditMode ? '<th>작업</th>' : ''}
                 </tr>
             </thead>
             <tbody>
@@ -1171,7 +1193,7 @@ function renderQmPropertiesTable(editingMemberId = null) {
             });
     }
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 
     // 편집 모드일 때만 '속성 추가' 버튼을 표시
@@ -1187,40 +1209,40 @@ function renderQmPropertiesTable(editingMemberId = null) {
  * @param {String|null} editingItemId - 현재 편집 중인 항목의 ID
  */
 function renderCostItemsTable(items, editingItemId = null) {
-    const container = document.getElementById("ci-table-container");
+    const container = document.getElementById('ci-table-container');
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
 
     // [핵심 수정] 복합적인 필드 이름(예: '부재속성.면적')에 대한 값을 찾는 로직
     const getCiValue = (item, field) => {
-        if (!field) return "";
+        if (!field) return '';
 
-        if (field.startsWith("부재속성.")) {
+        if (field.startsWith('부재속성.')) {
             const key = field.substring(5);
-            return item.quantity_member_properties?.[key] ?? "";
+            return item.quantity_member_properties?.[key] ?? '';
         }
-        if (field.startsWith("일람부호.")) {
+        if (field.startsWith('일람부호.')) {
             const key = field.substring(5);
-            return item.member_mark_properties?.[key] ?? "";
+            return item.member_mark_properties?.[key] ?? '';
         }
-        if (field.startsWith("BIM원본.")) {
+        if (field.startsWith('BIM원본.')) {
             // ▼▼▼ 이 숫자를 5에서 6으로 변경합니다. ▼▼▼
             const key = field.substring(6);
-            return item.raw_element_properties?.[key] ?? "";
+            return item.raw_element_properties?.[key] ?? '';
         }
 
         // 기존 필드 처리
-        if (field === "quantity_mapping_expression") {
+        if (field === 'quantity_mapping_expression') {
             const value = item[field];
             return value &&
-                typeof value === "object" &&
+                typeof value === 'object' &&
                 Object.keys(value).length > 0
                 ? JSON.stringify(value)
-                : "";
+                : '';
         }
-        return item[field] ?? "";
+        return item[field] ?? '';
     };
 
     const filteredItems = items.filter((item) =>
@@ -1237,22 +1259,22 @@ function renderCostItemsTable(items, editingItemId = null) {
     );
 
     currentCiGroupByFields = Array.from(
-        document.querySelectorAll("#ci-grouping-controls .ci-group-by-select")
+        document.querySelectorAll('#ci-grouping-controls .ci-group-by-select')
     )
         .map((s) => s.value)
         .filter(Boolean);
     const sortedFields = [
-        "cost_code_name",
-        "quantity",
-        "quantity_mapping_expression",
-        "quantity_member_id",
-        "description",
+        'cost_code_name',
+        'quantity',
+        'quantity_mapping_expression',
+        'quantity_member_id',
+        'description',
     ];
 
-    let tableHtml = "<table><thead><tr>";
+    let tableHtml = '<table><thead><tr>';
     sortedFields.forEach((field) => {
         tableHtml += `<th>${field}<br><input type="text" class="column-filter" data-field="${field}" value="${
-            ciColumnFilters[field] || ""
+            ciColumnFilters[field] || ''
         }" placeholder="필터..."></th>`;
     });
     tableHtml += `<th>작업</th></tr></thead><tbody>`;
@@ -1263,7 +1285,7 @@ function renderCostItemsTable(items, editingItemId = null) {
                 if (item.id === editingItemId) {
                     tableHtml += `
                         <tr class="ci-edit-row" data-id="${item.id}">
-                            <td>${getCiValue(item, "cost_code_name")}</td>
+                            <td>${getCiValue(item, 'cost_code_name')}</td>
                             <td><input type="number" step="any" class="ci-quantity-input" value="${
                                 item.quantity
                             }"></td>
@@ -1272,9 +1294,9 @@ function renderCostItemsTable(items, editingItemId = null) {
                                 null,
                                 2
                             )}</textarea></td>
-                            <td>${getCiValue(item, "quantity_member_id")}</td>
+                            <td>${getCiValue(item, 'quantity_member_id')}</td>
                             <td><input type="text" class="ci-description-input" value="${
-                                item.description || ""
+                                item.description || ''
                             }"></td>
                             <td>
                                 <button class="save-ci-btn" data-id="${
@@ -1289,15 +1311,15 @@ function renderCostItemsTable(items, editingItemId = null) {
                     tableHtml += `
                         <tr data-id="${item.id}" class="${
                         selectedCiIds.has(item.id.toString())
-                            ? "selected-row"
-                            : ""
+                            ? 'selected-row'
+                            : ''
                     }" style="cursor: pointer;">
                             ${sortedFields
                                 .map(
                                     (field) =>
                                         `<td>${getCiValue(item, field)}</td>`
                                 )
-                                .join("")}
+                                .join('')}
                             <td>
                                 <button class="edit-ci-btn" data-id="${
                                     item.id
@@ -1314,7 +1336,7 @@ function renderCostItemsTable(items, editingItemId = null) {
 
         const groupField = currentCiGroupByFields[level];
         const grouped = groupItems.reduce((acc, item) => {
-            const key = getCiValue(item, groupField) || "(값 없음)";
+            const key = getCiValue(item, groupField) || '(값 없음)';
             (acc[key] = acc[key] || []).push(item);
             return acc;
         }, {});
@@ -1331,7 +1353,7 @@ function renderCostItemsTable(items, editingItemId = null) {
                                 sortedFields.length + 1
                             }" style="padding-left: ${indentPixels}px;">
                                 <span class="toggle-icon">${
-                                    isCollapsed ? "▶" : "▼"
+                                    isCollapsed ? '▶' : '▼'
                                 }</span>
                                 ${groupField}: ${key} (${grouped[key].length}개)
                             </td>
@@ -1347,10 +1369,10 @@ function renderCostItemsTable(items, editingItemId = null) {
             sortedFields.length + 1
         }">표시할 데이터가 없습니다.</td></tr>`;
     } else {
-        renderGroup(filteredItems, 0, "");
+        renderGroup(filteredItems, 0, '');
     }
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 /**
@@ -1362,8 +1384,8 @@ function populateCiFieldSelection(items) {
 
     const fieldKeys = new Set([
         // CostItem 자체의 기본 필드
-        "cost_code_name",
-        "quantity_member_id",
+        'cost_code_name',
+        'quantity_member_id',
     ]);
 
     // 데이터 일부만 순회하여 모든 가능한 키를 수집합니다. (성능 최적화)
@@ -1390,12 +1412,12 @@ function populateCiFieldSelection(items) {
     });
 
     const sortedKeys = Array.from(fieldKeys).sort();
-    const groupBySelects = document.querySelectorAll(".ci-group-by-select");
+    const groupBySelects = document.querySelectorAll('.ci-group-by-select');
     let optionsHtml =
         '<option value="">-- 그룹핑 기준 선택 --</option>' +
         sortedKeys
             .map((key) => `<option value="${key}">${key}</option>`)
-            .join("");
+            .join('');
 
     groupBySelects.forEach((select) => {
         const selectedValue = select.value; // 기존 선택값 유지
@@ -1408,10 +1430,10 @@ function populateCiFieldSelection(items) {
 // ▼▼▼ [추가] 공사코드 룰셋 테이블 렌더링 함수 ▼▼▼
 function renderCostCodeRulesetTable(rules, editId = null) {
     const container = document.getElementById(
-        "costcode-ruleset-table-container"
+        'costcode-ruleset-table-container'
     );
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
 
@@ -1420,7 +1442,7 @@ function renderCostCodeRulesetTable(rules, editId = null) {
             (opt) =>
                 `<option value="${opt.id}">${opt.code} - ${opt.name}</option>`
         )
-        .join("");
+        .join('');
 
     let tableHtml = `<table class="ruleset-table"><thead>
         <tr>
@@ -1441,7 +1463,7 @@ function renderCostCodeRulesetTable(rules, editId = null) {
                         rule.priority || 0
                     }"></td>
                     <td><input type="text" class="rule-name-input" value="${
-                        rule.name || ""
+                        rule.name || ''
                     }" placeholder="규칙 이름"></td>
                     <td><select class="rule-cost-code-select">${costCodeOptions}</select></td>
                     <td><textarea class="rule-conditions-input" placeholder='[{"parameter": "분류", "operator": "contains", "value": "벽"}]'>${JSON.stringify(
@@ -1464,7 +1486,7 @@ function renderCostCodeRulesetTable(rules, editId = null) {
             <tr data-rule-id="${rule.id}">
                 <td>${rule.priority}</td>
                 <td><strong>${rule.name}</strong><br><small>${
-            rule.description || ""
+            rule.description || ''
         }</small></td>
                 <td>${rule.target_cost_code_name}</td>
                 <td><pre>${JSON.stringify(rule.conditions, null, 2)}</pre></td>
@@ -1483,17 +1505,17 @@ function renderCostCodeRulesetTable(rules, editId = null) {
     rules.forEach((rule) => {
         tableHtml += renderRow(rule);
     });
-    if (editId === "new") {
-        tableHtml += renderRow({ id: "new" });
+    if (editId === 'new') {
+        tableHtml += renderRow({ id: 'new' });
     }
-    if (rules.length === 0 && editId !== "new") {
+    if (rules.length === 0 && editId !== 'new') {
         tableHtml +=
             '<tr><td colspan="6">정의된 규칙이 없습니다. 새 규칙을 추가하세요.</td></tr>';
     }
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 
-    if (editId && editId !== "new") {
+    if (editId && editId !== 'new') {
         const rule = rules.find((r) => r.id === editId);
         if (rule)
             container.querySelector(
@@ -1508,24 +1530,24 @@ function renderCostCodeRulesetTable(rules, editId = null) {
 function renderCiLinkedMemberPropertiesTable() {
     // 1. HTML 요소들의 핸들을 가져옵니다.
     const headerContainer = document.getElementById(
-        "ci-linked-member-info-header"
+        'ci-linked-member-info-header'
     );
     const memberPropsContainer = document.getElementById(
-        "ci-linked-member-properties-container"
+        'ci-linked-member-properties-container'
     );
     const markPropsContainer = document.getElementById(
-        "ci-linked-mark-properties-container"
+        'ci-linked-mark-properties-container'
     );
     const rawElementPropsContainer = document.getElementById(
-        "ci-linked-raw-element-properties-container"
+        'ci-linked-raw-element-properties-container'
     );
 
     // 모든 컨테이너 초기화
     headerContainer.innerHTML =
-        "<p>산출항목을 선택하면 연관된 부재의 정보가 여기에 표시됩니다.</p>";
-    memberPropsContainer.innerHTML = "";
-    markPropsContainer.innerHTML = "";
-    rawElementPropsContainer.innerHTML = "";
+        '<p>산출항목을 선택하면 연관된 부재의 정보가 여기에 표시됩니다.</p>';
+    memberPropsContainer.innerHTML = '';
+    markPropsContainer.innerHTML = '';
+    rawElementPropsContainer.innerHTML = '';
 
     // 2. 항목이 하나만 선택되었는지 확인합니다.
     if (selectedCiIds.size !== 1) {
@@ -1540,7 +1562,7 @@ function renderCiLinkedMemberPropertiesTable() {
     // 3. 선택된 CostItem 객체와 QuantityMember ID가 있는지 확인합니다.
     if (!costItem || !costItem.quantity_member_id) {
         headerContainer.innerHTML =
-            "<p>선택된 항목에 연관된 수량산출부재가 없습니다.</p>";
+            '<p>선택된 항목에 연관된 수량산출부재가 없습니다.</p>';
         return;
     }
 
@@ -1550,18 +1572,18 @@ function renderCiLinkedMemberPropertiesTable() {
     );
     if (!member) {
         headerContainer.innerHTML =
-            "<p>연관된 부재 정보를 찾을 수 없습니다.</p>";
+            '<p>연관된 부재 정보를 찾을 수 없습니다.</p>';
         return;
     }
 
     // 5. 찾은 부재의 이름과 분류를 소제목(header) 영역에 렌더링합니다.
     headerContainer.innerHTML = `
-        <h4>${member.name || "이름 없는 부재"}</h4>
-        <small>${member.classification_tag_name || "미지정 분류"}</small>
+        <h4>${member.name || '이름 없는 부재'}</h4>
+        <small>${member.classification_tag_name || '미지정 분류'}</small>
     `;
 
     // 6. 부재의 속성을 첫 번째 컨테이너에 테이블 형태로 렌더링합니다.
-    memberPropsContainer.innerHTML = "<h5>부재 속성</h5>";
+    memberPropsContainer.innerHTML = '<h5>부재 속성</h5>';
     const memberProperties = member.properties || {};
     let memberTableHtml = `<table class="properties-table"><thead><tr><th>속성</th><th>값</th></tr></thead><tbody>`;
     if (Object.keys(memberProperties).length === 0) {
@@ -1574,7 +1596,7 @@ function renderCiLinkedMemberPropertiesTable() {
                 memberTableHtml += `<tr><td>${key}</td><td>${memberProperties[key]}</td></tr>`;
             });
     }
-    memberTableHtml += "</tbody></table>";
+    memberTableHtml += '</tbody></table>';
     memberPropsContainer.innerHTML += memberTableHtml;
 
     // ▼▼▼ [핵심 수정] 7번 로직 전체를 아래와 같이 변경합니다. ▼▼▼
@@ -1596,15 +1618,15 @@ function renderCiLinkedMemberPropertiesTable() {
                         markTableHtml += `<tr><td>${key}</td><td>${markProperties[key]}</td></tr>`;
                     });
             }
-            markTableHtml += "</tbody></table>";
+            markTableHtml += '</tbody></table>';
             markPropsContainer.innerHTML += markTableHtml;
         } else {
             markPropsContainer.innerHTML =
-                "<h5>일람부호 속성</h5><p>연결된 일람부호 정보를 찾을 수 없습니다.</p>";
+                '<h5>일람부호 속성</h5><p>연결된 일람부호 정보를 찾을 수 없습니다.</p>';
         }
     } else {
         markPropsContainer.innerHTML =
-            "<h5>일람부호 속성</h5><p>연계된 일람부호가 없습니다.</p>";
+            '<h5>일람부호 속성</h5><p>연계된 일람부호가 없습니다.</p>';
     }
     // ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
 
@@ -1614,7 +1636,7 @@ function renderCiLinkedMemberPropertiesTable() {
         const rawElement = allRevitData.find((el) => el.id === rawElementId);
         if (rawElement && rawElement.raw_data) {
             rawElementPropsContainer.innerHTML = `<h5>BIM 원본 데이터 (${
-                rawElement.raw_data.Name || "이름 없음"
+                rawElement.raw_data.Name || '이름 없음'
             })</h5>`;
             const rawData = rawElement.raw_data;
             let rawTableHtml = `<table class="properties-table"><thead><tr><th>속성</th><th>값</th></tr></thead><tbody>`;
@@ -1633,31 +1655,31 @@ function renderCiLinkedMemberPropertiesTable() {
                 .sort()
                 .forEach((key) => {
                     let value;
-                    if (key.startsWith("Parameters.")) {
+                    if (key.startsWith('Parameters.')) {
                         value = rawData.Parameters[key.substring(11)];
-                    } else if (key.startsWith("TypeParameters.")) {
+                    } else if (key.startsWith('TypeParameters.')) {
                         value = rawData.TypeParameters[key.substring(15)];
                     } else if (
-                        key !== "Parameters" &&
-                        key !== "TypeParameters"
+                        key !== 'Parameters' &&
+                        key !== 'TypeParameters'
                     ) {
                         value = rawData[key];
                     }
 
-                    if (typeof value !== "object") {
+                    if (typeof value !== 'object') {
                         rawTableHtml += `<tr><td>${key}</td><td>${value}</td></tr>`;
                     }
                 });
 
-            rawTableHtml += "</tbody></table>";
+            rawTableHtml += '</tbody></table>';
             rawElementPropsContainer.innerHTML += rawTableHtml;
         } else {
             rawElementPropsContainer.innerHTML =
-                "<h5>BIM 원본 데이터</h5><p>연결된 원본 BIM 객체 정보를 찾을 수 없습니다.</p>";
+                '<h5>BIM 원본 데이터</h5><p>연결된 원본 BIM 객체 정보를 찾을 수 없습니다.</p>';
         }
     } else {
         rawElementPropsContainer.innerHTML =
-            "<h5>BIM 원본 데이터</h5><p>연계된 원본 BIM 객체가 없습니다. (수동 생성된 부재)</p>";
+            '<h5>BIM 원본 데이터</h5><p>연계된 원본 BIM 객체가 없습니다. (수동 생성된 부재)</p>';
     }
 }
 
@@ -1666,11 +1688,11 @@ function renderCiLinkedMemberPropertiesTable() {
  */
 function renderQmMemberMarkDetails() {
     const container = document.getElementById(
-        "qm-member-mark-details-container"
+        'qm-member-mark-details-container'
     );
 
     if (selectedQmIds.size !== 1) {
-        container.innerHTML = "부재를 하나만 선택하세요.";
+        container.innerHTML = '부재를 하나만 선택하세요.';
         return;
     }
 
@@ -1678,13 +1700,13 @@ function renderQmMemberMarkDetails() {
     const member = loadedQuantityMembers.find((m) => m.id === selectedId);
 
     if (!member || !member.member_mark_id) {
-        container.innerHTML = "할당된 일람부호가 없습니다.";
+        container.innerHTML = '할당된 일람부호가 없습니다.';
         return;
     }
 
     const mark = loadedMemberMarks.find((m) => m.id === member.member_mark_id);
     if (!mark) {
-        container.innerHTML = "<p>일람부호 정보를 찾을 수 없습니다.</p>";
+        container.innerHTML = '<p>일람부호 정보를 찾을 수 없습니다.</p>';
         return;
     }
 
@@ -1701,7 +1723,7 @@ function renderQmMemberMarkDetails() {
                 tableHtml += `<tr><td>${key}</td><td>${markProperties[key]}</td></tr>`;
             });
     }
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
 
     container.innerHTML = propertiesHtml + tableHtml;
 }
@@ -1711,12 +1733,12 @@ function renderQmMemberMarkDetails() {
  */
 function renderQmLinkedRawElementPropertiesTable() {
     const container = document.getElementById(
-        "qm-linked-raw-element-properties-container"
+        'qm-linked-raw-element-properties-container'
     );
 
     if (selectedQmIds.size !== 1) {
         container.innerHTML =
-            "<p>부재를 하나만 선택하면 원본 데이터가 표시됩니다.</p>";
+            '<p>부재를 하나만 선택하면 원본 데이터가 표시됩니다.</p>';
         return;
     }
 
@@ -1725,7 +1747,7 @@ function renderQmLinkedRawElementPropertiesTable() {
 
     if (!member || !member.raw_element_id) {
         container.innerHTML =
-            "<p>연관된 BIM 원본 객체가 없습니다. (수동 생성된 부재)</p>";
+            '<p>연관된 BIM 원본 객체가 없습니다. (수동 생성된 부재)</p>';
         return;
     }
 
@@ -1734,13 +1756,13 @@ function renderQmLinkedRawElementPropertiesTable() {
     );
     if (!rawElement || !rawElement.raw_data) {
         container.innerHTML =
-            "<p>연결된 원본 BIM 객체 정보를 찾을 수 없습니다.</p>";
+            '<p>연결된 원본 BIM 객체 정보를 찾을 수 없습니다.</p>';
         return;
     }
 
     const rawData = rawElement.raw_data;
-    let headerHtml = `<h5>${rawData.Name || "이름 없음"} (${
-        rawData.Category || ""
+    let headerHtml = `<h5>${rawData.Name || '이름 없음'} (${
+        rawData.Category || ''
     })</h5>`;
     let tableHtml = `<table class="properties-table"><thead><tr><th>속성</th><th>값</th></tr></thead><tbody>`;
 
@@ -1758,20 +1780,20 @@ function renderQmLinkedRawElementPropertiesTable() {
         .sort()
         .forEach((key) => {
             let value;
-            if (key.startsWith("Parameters.")) {
+            if (key.startsWith('Parameters.')) {
                 value = rawData.Parameters[key.substring(11)];
-            } else if (key.startsWith("TypeParameters.")) {
+            } else if (key.startsWith('TypeParameters.')) {
                 value = rawData.TypeParameters[key.substring(15)];
-            } else if (key !== "Parameters" && key !== "TypeParameters") {
+            } else if (key !== 'Parameters' && key !== 'TypeParameters') {
                 value = rawData[key];
             }
 
-            if (value !== undefined && typeof value !== "object") {
+            if (value !== undefined && typeof value !== 'object') {
                 tableHtml += `<tr><td>${key}</td><td>${value}</td></tr>`;
             }
         });
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = headerHtml + tableHtml;
 }
 
@@ -1782,7 +1804,7 @@ function renderQmLinkedRawElementPropertiesTable() {
  */
 function renderMemberMarkAssignmentRulesetTable(rules, editId = null) {
     const container = document.getElementById(
-        "member-mark-assignment-ruleset-table-container"
+        'member-mark-assignment-ruleset-table-container'
     );
     let tableHtml = `<table class="ruleset-table"><thead>
         <tr>
@@ -1801,7 +1823,7 @@ function renderMemberMarkAssignmentRulesetTable(rules, editId = null) {
                     rule.priority || 0
                 }"></td>
                 <td><input type="text" class="rule-name-input" value="${
-                    rule.name || ""
+                    rule.name || ''
                 }" placeholder="규칙 이름"></td>
                 <td><textarea class="rule-conditions-input" placeholder='[{"parameter": "분류", "operator": "contains", "value": "기둥"}]'>${JSON.stringify(
                     rule.conditions || [],
@@ -1809,7 +1831,7 @@ function renderMemberMarkAssignmentRulesetTable(rules, editId = null) {
                     2
                 )}</textarea></td>
                 <td><input type="text" class="rule-expression-input" value="${
-                    rule.mark_expression || ""
+                    rule.mark_expression || ''
                 }" placeholder="'C' + {층}"></td>
                 <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
             </tr>`;
@@ -1826,11 +1848,11 @@ function renderMemberMarkAssignmentRulesetTable(rules, editId = null) {
     rules.forEach((rule) => {
         tableHtml += renderRow(rule);
     });
-    if (editId === "new") tableHtml += renderRow({ id: "new" });
-    if (rules.length === 0 && editId !== "new")
+    if (editId === 'new') tableHtml += renderRow({ id: 'new' });
+    if (rules.length === 0 && editId !== 'new')
         tableHtml += '<tr><td colspan="5">정의된 규칙이 없습니다.</td></tr>';
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
@@ -1839,7 +1861,7 @@ function renderMemberMarkAssignmentRulesetTable(rules, editId = null) {
  */
 function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
     const container = document.getElementById(
-        "cost-code-assignment-ruleset-table-container"
+        'cost-code-assignment-ruleset-table-container'
     );
     let tableHtml = `<table class="ruleset-table"><thead>
         <tr>
@@ -1858,7 +1880,7 @@ function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
                     rule.priority || 0
                 }"></td>
                 <td><input type="text" class="rule-name-input" value="${
-                    rule.name || ""
+                    rule.name || ''
                 }" placeholder="규칙 이름"></td>
                 <td><textarea class="rule-conditions-input" placeholder='[{"parameter": "분류", "operator": "contains", "value": "벽"}]'>${JSON.stringify(
                     rule.conditions || [],
@@ -1889,11 +1911,11 @@ function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
     rules.forEach((rule) => {
         tableHtml += renderRow(rule);
     });
-    if (editId === "new") tableHtml += renderRow({ id: "new" });
-    if (rules.length === 0 && editId !== "new")
+    if (editId === 'new') tableHtml += renderRow({ id: 'new' });
+    if (rules.length === 0 && editId !== 'new')
         tableHtml += '<tr><td colspan="5">정의된 규칙이 없습니다.</td></tr>';
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
@@ -1904,7 +1926,7 @@ function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
  * @param {Object} summaryData - 전체 합계 데이터
  */
 function renderBoqTable(reportData, summaryData) {
-    const container = document.getElementById("boq-table-container");
+    const container = document.getElementById('boq-table-container');
 
     if (!reportData || reportData.length === 0) {
         container.innerHTML =
@@ -1915,17 +1937,17 @@ function renderBoqTable(reportData, summaryData) {
     if (currentBoqColumns.length === 0) {
         boqColumnAliases = {};
         const selectedDisplayFields = Array.from(
-            document.querySelectorAll(".boq-display-field-cb:checked")
+            document.querySelectorAll('.boq-display-field-cb:checked')
         ).map((cb) => ({
-            id: cb.value.replace(/__/g, "_"),
+            id: cb.value.replace(/__/g, '_'),
             label: cb.parentElement.textContent.trim(),
             isDynamic: true,
         }));
 
         currentBoqColumns = [
-            { id: "name", label: "구분", isDynamic: false },
-            { id: "quantity", label: "수량", isDynamic: false },
-            { id: "count", label: "항목 수", isDynamic: false },
+            { id: 'name', label: '구분', isDynamic: false },
+            { id: 'quantity', label: '수량', isDynamic: false },
+            { id: 'count', label: '항목 수', isDynamic: false },
             ...selectedDisplayFields,
         ];
     }
@@ -1948,24 +1970,24 @@ function renderBoqTable(reportData, summaryData) {
     // 재귀적으로 그룹 행을 렌더링하는 내부 함수
     function renderGroupNode(node) {
         const indent = node.level * 25;
-        let rowTds = "";
+        let rowTds = '';
         currentBoqColumns.forEach((column) => {
-            let cellValue = "";
+            let cellValue = '';
             switch (column.id) {
-                case "name":
+                case 'name':
                     cellValue = `<td style="padding-left: ${indent + 10}px;">${
                         node.name
                     }</td>`;
                     break;
-                case "quantity":
+                case 'quantity':
                     cellValue = `<td>${node.quantity.toFixed(4)}</td>`;
                     break;
-                case "count":
+                case 'count':
                     cellValue = `<td>${node.count}</td>`;
                     break;
                 default:
                     cellValue = `<td>${
-                        node.display_values[column.id] || ""
+                        node.display_values[column.id] || ''
                     }</td>`;
                     break;
             }
@@ -1984,21 +2006,21 @@ function renderBoqTable(reportData, summaryData) {
 
     reportData.forEach(renderGroupNode);
 
-    let footerTds = "";
+    let footerTds = '';
     currentBoqColumns.forEach((column) => {
-        let cellValue = "";
+        let cellValue = '';
         switch (column.id) {
-            case "name":
-                cellValue = "<td>총계</td>";
+            case 'name':
+                cellValue = '<td>총계</td>';
                 break;
-            case "quantity":
-                cellValue = "<td></td>";
+            case 'quantity':
+                cellValue = '<td></td>';
                 break;
-            case "count":
+            case 'count':
                 cellValue = `<td>${summaryData.total_count}</td>`;
                 break;
             default:
-                cellValue = "<td></td>";
+                cellValue = '<td></td>';
                 break;
         }
         footerTds += cellValue;
@@ -2025,16 +2047,16 @@ function renderBoqTable(reportData, summaryData) {
  * @param {Array} fields - 서버에서 받은 표시 가능한 필드 목록
  */
 function renderBoqDisplayFieldControls(fields) {
-    const container = document.getElementById("boq-display-fields-container");
+    const container = document.getElementById('boq-display-fields-container');
     if (!fields || fields.length === 0) {
         container.innerHTML =
-            "<small>표시할 필드를 불러올 수 없습니다.</small>";
+            '<small>표시할 필드를 불러올 수 없습니다.</small>';
         return;
     }
 
     // '수량'과 '항목 수'는 기본 표시 항목이므로 체크박스 목록에서는 제외합니다.
     const creatableFields = fields.filter(
-        (f) => f.value !== "quantity" && f.value !== "count"
+        (f) => f.value !== 'quantity' && f.value !== 'count'
     );
 
     container.innerHTML = creatableFields
@@ -2046,7 +2068,7 @@ function renderBoqDisplayFieldControls(fields) {
         </label>
     `
         )
-        .join("");
+        .join('');
 }
 
 // connections/static/connections/ui.js
@@ -2058,16 +2080,16 @@ function renderBoqDisplayFieldControls(fields) {
  * @param {Array} fields - 서버에서 받은 표시 가능한 필드 목록
  */
 function renderBoqDisplayFieldControls(fields) {
-    const container = document.getElementById("boq-display-fields-container");
+    const container = document.getElementById('boq-display-fields-container');
     if (!fields || fields.length === 0) {
         container.innerHTML =
-            "<small>표시할 필드를 불러올 수 없습니다.</small>";
+            '<small>표시할 필드를 불러올 수 없습니다.</small>';
         return;
     }
 
     // '수량'과 '항목 수'는 기본 표시 항목이므로 체크박스 목록에서는 제외합니다.
     const creatableFields = fields.filter(
-        (f) => f.value !== "quantity" && f.value !== "count"
+        (f) => f.value !== 'quantity' && f.value !== 'count'
     );
 
     container.innerHTML = creatableFields
@@ -2079,7 +2101,7 @@ function renderBoqDisplayFieldControls(fields) {
         </label>
     `
         )
-        .join("");
+        .join('');
 }
 /**
  * [수정됨] 현재 활성화된 탭 컨텍스트에 따라 올바른 위치에 BIM 속성 테이블을 렌더링합니다.
@@ -2088,9 +2110,9 @@ function renderBoqDisplayFieldControls(fields) {
 function renderBimPropertiesTable(contextPrefix) {
     // 1. [핵심 수정] contextPrefix에 따라 올바른 컨테이너 ID를 선택합니다.
     const containerId =
-        contextPrefix === "space-management"
-            ? "sm-selected-bim-properties-container"
-            : "selected-bim-properties-container";
+        contextPrefix === 'space-management'
+            ? 'sm-selected-bim-properties-container'
+            : 'selected-bim-properties-container';
     const container = document.getElementById(containerId);
 
     const state = viewerStates[contextPrefix];
@@ -2100,7 +2122,7 @@ function renderBimPropertiesTable(contextPrefix) {
     // 2. 이하 로직은 기존과 동일합니다.
     if (state.selectedElementIds.size !== 1) {
         container.innerHTML =
-            "<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>";
+            '<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>';
         return;
     }
 
@@ -2109,34 +2131,34 @@ function renderBimPropertiesTable(contextPrefix) {
 
     if (!selectedItem || !selectedItem.raw_data) {
         container.innerHTML =
-            "<p>선택된 항목의 BIM 원본 데이터를 찾을 수 없습니다.</p>";
+            '<p>선택된 항목의 BIM 원본 데이터를 찾을 수 없습니다.</p>';
         return;
     }
 
     const properties = [];
     const rawData = selectedItem.raw_data;
     for (const key in rawData) {
-        if (key === "Parameters" && typeof rawData[key] === "object") {
+        if (key === 'Parameters' && typeof rawData[key] === 'object') {
             for (const paramKey in rawData[key]) {
                 properties.push({
                     key: paramKey,
                     value: rawData[key][paramKey],
-                    source: "Parameters",
+                    source: 'Parameters',
                 });
             }
         } else if (
-            key === "TypeParameters" &&
-            typeof rawData[key] === "object"
+            key === 'TypeParameters' &&
+            typeof rawData[key] === 'object'
         ) {
             for (const paramKey in rawData[key]) {
                 properties.push({
                     key: paramKey,
                     value: rawData[key][paramKey],
-                    source: "TypeParameters",
+                    source: 'TypeParameters',
                 });
             }
-        } else if (typeof rawData[key] !== "object") {
-            properties.push({ key: key, value: rawData[key], source: "Root" });
+        } else if (typeof rawData[key] !== 'object') {
+            properties.push({ key: key, value: rawData[key], source: 'Root' });
         }
     }
     properties.sort((a, b) => a.key.localeCompare(b.key));
@@ -2149,18 +2171,18 @@ function renderBimPropertiesTable(contextPrefix) {
             tableHtml += `<tr><td>${prop.key}</td><td>${prop.value}</td></tr>`;
         });
     }
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
 function renderAssignedTagsTable(contextPrefix) {
-    const listContainer = document.getElementById("selected-tags-list");
+    const listContainer = document.getElementById('selected-tags-list');
     const state = viewerStates[contextPrefix];
 
     if (!listContainer || !state) return;
 
     if (state.selectedElementIds.size === 0) {
-        listContainer.innerHTML = "항목을 선택하세요.";
+        listContainer.innerHTML = '항목을 선택하세요.';
         return;
     }
 
@@ -2174,27 +2196,27 @@ function renderAssignedTagsTable(contextPrefix) {
     });
 
     if (assignedTags.size === 0) {
-        listContainer.innerHTML = "할당된 분류가 없습니다.";
+        listContainer.innerHTML = '할당된 분류가 없습니다.';
         return;
     }
 
     listContainer.innerHTML = Array.from(assignedTags)
         .sort()
         .map((tag) => `<div>${tag}</div>`)
-        .join("");
+        .join('');
 }
 /**
  * [수정] '선택항목 분류' 탭의 내용을 렌더링하는 범용 함수
  * @param {string} contextPrefix
  */
 function renderAssignedTagsTable(contextPrefix) {
-    const listContainer = document.getElementById("selected-tags-list");
+    const listContainer = document.getElementById('selected-tags-list');
     const state = viewerStates[contextPrefix];
 
     if (!listContainer || !state) return;
 
     if (state.selectedElementIds.size === 0) {
-        listContainer.innerHTML = "항목을 선택하세요.";
+        listContainer.innerHTML = '항목을 선택하세요.';
         return;
     }
 
@@ -2208,23 +2230,23 @@ function renderAssignedTagsTable(contextPrefix) {
     });
 
     if (assignedTags.size === 0) {
-        listContainer.innerHTML = "할당된 분류가 없습니다.";
+        listContainer.innerHTML = '할당된 분류가 없습니다.';
         return;
     }
 
     listContainer.innerHTML = Array.from(assignedTags)
         .sort()
         .map((tag) => `<div>${tag}</div>`)
-        .join("");
+        .join('');
 }
 /**
  * 서버에서 받은 공간분류 데이터를 위계적인 HTML 트리로 렌더링합니다.
  * @param {Array} spaces - 프로젝트의 모든 공간분류 데이터 배열
  */
 function renderSpaceClassificationTree(spaces) {
-    const container = document.getElementById("space-tree-container");
+    const container = document.getElementById('space-tree-container');
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
     if (spaces.length === 0) {
@@ -2248,15 +2270,15 @@ function renderSpaceClassificationTree(spaces) {
     });
 
     function buildTreeHtml(nodes) {
-        if (nodes.length === 0) return "";
-        let html = "<ul>";
+        if (nodes.length === 0) return '';
+        let html = '<ul>';
         nodes.forEach((node) => {
             const count = node.mapped_elements_count || 0;
             // ▼▼▼ [핵심 수정] span 태그에 view-assigned-btn 클래스를 추가합니다. ▼▼▼
             const countBadge =
                 count > 0
                     ? `<span class="element-count-badge view-assigned-btn" title="할당된 객체 보기">${count}</span>`
-                    : "";
+                    : '';
 
             html += `
                 <li data-id="${node.id}" data-name="${node.name}">
@@ -2276,7 +2298,7 @@ function renderSpaceClassificationTree(spaces) {
                 </li>
             `;
         });
-        html += "</ul>";
+        html += '</ul>';
         return html;
     }
 
@@ -2288,9 +2310,9 @@ function renderSpaceClassificationTree(spaces) {
  * @param {string} spaceName - 현재 공간의 이름
  */
 function renderAssignedElementsModal(elements, spaceName) {
-    const title = document.getElementById("assigned-elements-modal-title");
+    const title = document.getElementById('assigned-elements-modal-title');
     const container = document.getElementById(
-        "assigned-elements-table-container"
+        'assigned-elements-table-container'
     );
 
     title.textContent = `'${spaceName}'에 할당된 BIM 객체 (${elements.length}개)`;
@@ -2315,7 +2337,7 @@ function renderAssignedElementsModal(elements, spaceName) {
     // 각 객체별로 속성을 나열합니다.
     elements.forEach((item) => {
         const elementName =
-            getValueForItem(item, "Name") || `객체 (ID: ${item.id})`;
+            getValueForItem(item, 'Name') || `객체 (ID: ${item.id})`;
 
         // 각 객체를 구분하기 위한 헤더 행을 추가합니다.
         tableHtml += `
@@ -2327,7 +2349,7 @@ function renderAssignedElementsModal(elements, spaceName) {
 
         // 해당 객체의 모든 속성을 수집합니다.
         const properties = [];
-        const systemKeys = ["id", "element_unique_id", "classification_tags"];
+        const systemKeys = ['id', 'element_unique_id', 'classification_tags'];
         const revitKeysSet = new Set();
         const raw = item.raw_data;
 
@@ -2339,7 +2361,7 @@ function renderAssignedElementsModal(elements, spaceName) {
                     revitKeysSet.add(`TypeParameters.${k}`)
                 );
             Object.keys(raw).forEach((k) => {
-                if (k !== "Parameters" && k !== "TypeParameters")
+                if (k !== 'Parameters' && k !== 'TypeParameters')
                     revitKeysSet.add(k);
             });
         }
@@ -2350,7 +2372,7 @@ function renderAssignedElementsModal(elements, spaceName) {
         allKeys.forEach((key) => {
             const value = getValueForItem(item, key);
             // 값이 있는 속성만 표시합니다.
-            if (value !== "" && value !== null && value !== undefined) {
+            if (value !== '' && value !== null && value !== undefined) {
                 tableHtml += `
                     <tr>
                         <td></td> 
@@ -2362,7 +2384,7 @@ function renderAssignedElementsModal(elements, spaceName) {
         });
     });
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
@@ -2373,7 +2395,7 @@ function renderAssignedElementsModal(elements, spaceName) {
  */
 function renderSpaceClassificationRulesetTable(rules, editId = null) {
     const container = document.getElementById(
-        "space-classification-ruleset-table-container"
+        'space-classification-ruleset-table-container'
     );
 
     let tableHtml = `<table class="ruleset-table">
@@ -2397,7 +2419,7 @@ function renderSpaceClassificationRulesetTable(rules, editId = null) {
                     rule.level_depth || 0
                 }"></td>
                 <td><input type="text" class="rule-level-name-input" value="${
-                    rule.level_name || ""
+                    rule.level_name || ''
                 }" placeholder="예: Building"></td>
                 <td><textarea class="rule-bim-filter-input" placeholder='{"parameter": "IfcEntityType", "value": "IfcBuilding"}' rows="3">${JSON.stringify(
                     rule.bim_object_filter || {},
@@ -2405,13 +2427,13 @@ function renderSpaceClassificationRulesetTable(rules, editId = null) {
                     2
                 )}</textarea></td>
                 <td><input type="text" class="rule-name-source-input" value="${
-                    rule.name_source_param || ""
+                    rule.name_source_param || ''
                 }" placeholder="예: Name"></td>
                 <td><input type="text" class="rule-parent-join-input" value="${
-                    rule.parent_join_param || ""
+                    rule.parent_join_param || ''
                 }" placeholder="예: GlobalId"></td>
                 <td><input type="text" class="rule-child-join-input" value="${
-                    rule.child_join_param || ""
+                    rule.child_join_param || ''
                 }" placeholder="예: SiteGlobalId"></td>
                 <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
             </tr>`;
@@ -2437,29 +2459,29 @@ function renderSpaceClassificationRulesetTable(rules, editId = null) {
         tableHtml += renderRow(rule);
     });
 
-    if (editId === "new") {
+    if (editId === 'new') {
         const newLevel =
             rules.length > 0
                 ? Math.max(...rules.map((r) => r.level_depth)) + 1
                 : 0;
-        tableHtml += renderRow({ id: "new", level_depth: newLevel });
+        tableHtml += renderRow({ id: 'new', level_depth: newLevel });
     }
 
-    if (rules.length === 0 && editId !== "new") {
+    if (rules.length === 0 && editId !== 'new') {
         tableHtml += '<tr><td colspan="7">정의된 규칙이 없습니다.</td></tr>';
     }
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
 
 // ▼▼▼ [추가] 공간분류 할당 룰셋 테이블 렌더링 함수 ▼▼▼
 function renderSpaceAssignmentRulesetTable(rules, editId = null) {
     const container = document.getElementById(
-        "space-assignment-ruleset-table-container"
+        'space-assignment-ruleset-table-container'
     );
     if (!currentProjectId) {
-        container.innerHTML = "<p>프로젝트를 선택하세요.</p>";
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
         return;
     }
 
@@ -2481,7 +2503,7 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
                     rule.priority || 0
                 }"></td>
                 <td><input type="text" class="rule-name-input" value="${
-                    rule.name || ""
+                    rule.name || ''
                 }" placeholder="규칙 이름"></td>
                 <td><textarea class="rule-member-filter-input" placeholder="(선택사항) 부재 필터링 조건 입력">${JSON.stringify(
                     rule.member_filter_conditions || [],
@@ -2489,10 +2511,10 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
                     2
                 )}</textarea></td>
                 <td><input type="text" class="rule-member-join-input" value="${
-                    rule.member_join_property || ""
+                    rule.member_join_property || ''
                 }" placeholder="예: BIM원본.참조 레벨"></td>
                 <td><input type="text" class="rule-space-join-input" value="${
-                    rule.space_join_property || ""
+                    rule.space_join_property || ''
                 }" placeholder="예: Name 또는 BIM원본.Name"></td>
                 <td><button class="save-rule-btn">저장</button> <button class="cancel-edit-btn">취소</button></td>
             </tr>`;
@@ -2514,10 +2536,10 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
     rules.forEach((rule) => {
         tableHtml += renderRow(rule);
     });
-    if (editId === "new") tableHtml += renderRow({ id: "new" });
-    if (rules.length === 0 && editId !== "new")
+    if (editId === 'new') tableHtml += renderRow({ id: 'new' });
+    if (rules.length === 0 && editId !== 'new')
         tableHtml += '<tr><td colspan="6">정의된 규칙이 없습니다.</td></tr>';
 
-    tableHtml += "</tbody></table>";
+    tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }

@@ -928,6 +928,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const batchAutoUpdateBtn = document.getElementById('batch-auto-update-btn');
+    if (batchAutoUpdateBtn) {
+        batchAutoUpdateBtn.addEventListener('click', runBatchAutoUpdate);
+    }
+
     //DOMContentLoaded 끝
 });
 
@@ -1620,13 +1625,16 @@ async function loadClassificationRules() {
         showToast(error.message, 'error');
     }
 }
-async function applyClassificationRules() {
+async function applyClassificationRules(skipConfirmation = false) {
+    // [변경] 파라미터 추가
     if (!currentProjectId) {
         showToast('먼저 프로젝트를 선택하세요.', 'error');
         return;
     }
 
+    // [변경] skipConfirmation이 false일 때만 확인 창을 띄우도록 수정
     if (
+        !skipConfirmation &&
         !confirm(
             '정의된 모든 분류 할당 룰셋을 전체 객체에 적용하시겠습니까?\n기존에 할당된 분류는 유지되며, 규칙에 맞는 새로운 분류가 추가됩니다.'
         )
@@ -1661,7 +1669,6 @@ async function applyClassificationRules() {
             result.message
         );
 
-        // ▼▼▼ [핵심 수정] Revit 데이터 재요청 대신, 서버 DB로부터 최신 데이터 다시 가져오기 ▼▼▼
         console.log(
             '[DEBUG] Revit/Blender 재호출 없이, 서버에 최신 객체 데이터 재요청을 보냅니다.'
         );
@@ -1678,7 +1685,6 @@ async function applyClassificationRules() {
             );
             showToast('웹소켓 연결 오류. 페이지를 새로고침해주세요.', 'error');
         }
-        // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
     } catch (error) {
         console.error('[ERROR] 룰셋 적용 중 오류 발생:', error);
         showToast(error.message, 'error');
@@ -2059,13 +2065,16 @@ async function createManualQuantityMember() {
 // main.js 파일 가장 하단에 추가
 
 // ▼▼▼ [추가] 수량산출부재 자동 생성 관련 함수 ▼▼▼
-async function createAutoQuantityMembers() {
+async function createAutoQuantityMembers(skipConfirmation = false) {
+    // [변경] 파라미터 추가
     if (!currentProjectId) {
         showToast('먼저 프로젝트를 선택하세요.', 'error');
         return;
     }
 
+    // [변경] skipConfirmation이 false일 때만 확인 창을 띄우도록 수정
     if (
+        !skipConfirmation &&
         !confirm(
             '정말로 모든 수량산출부재를 자동으로 다시 생성하시겠습니까?\n이 작업은 기존에 있던 모든 수량산출부재를 삭제하고, 현재의 수량산출분류를 기준으로 새로 생성합니다.'
         )
@@ -3159,17 +3168,22 @@ async function createManualCostItem() {
 }
 // ▲▲▲ [교체] 여기까지 입니다. ▲▲▲
 
-async function createAutoCostItems() {
+async function createAutoCostItems(skipConfirmation = false) {
+    // [변경] 파라미터 추가
     if (!currentProjectId) {
         showToast('먼저 프로젝트를 선택하세요.', 'error');
         return;
     }
+
+    // [변경] skipConfirmation이 false일 때만 확인 창을 띄우도록 수정
     if (
+        !skipConfirmation &&
         !confirm(
             '정말로 모든 산출항목을 자동으로 다시 생성하시겠습니까?\n이 작업은 기존 자동생성된 항목을 삭제하고, 현재의 공사코드 룰셋 기준으로 새로 생성합니다.'
         )
-    )
+    ) {
         return;
+    }
 
     showToast('산출항목을 자동으로 생성하고 있습니다...', 'info', 5000);
     try {
@@ -3800,17 +3814,22 @@ async function handleCostCodeAssignmentRuleActions(event) {
 }
 // 기존의 applyAssignmentRules 함수를 찾아서 아래 코드로 전체를 교체해주세요.
 
-async function applyAssignmentRules() {
+async function applyAssignmentRules(skipConfirmation = false) {
+    // [변경] 파라미터 추가
     if (!currentProjectId) {
         showToast('프로젝트를 선택하세요.', 'error');
         return;
     }
+
+    // [변경] skipConfirmation이 false일 때만 확인 창을 띄우도록 수정
     if (
+        !skipConfirmation &&
         !confirm(
             '정의된 모든 할당 룰셋(일람부호, 공사코드)을 전체 부재에 적용하시겠습니까?\n이 작업은 기존 할당 정보를 덮어쓰거나 추가할 수 있습니다.'
         )
-    )
+    ) {
         return;
+    }
 
     showToast('룰셋을 적용하고 있습니다. 잠시만 기다려주세요...', 'info', 5000);
     try {
@@ -3826,18 +3845,10 @@ async function applyAssignmentRules() {
 
         showToast(result.message, 'success');
 
-        // [핵심 수정]
-        // 1. 룰셋 적용으로 인해 새로 생성될 수 있는 공사코드와 일람부호 목록을 다시 불러옵니다.
-        //    이렇게 해야 프론트엔드가 최신 목록을 가지게 됩니다.
         await loadCostCodes();
         await loadMemberMarks();
-
-        // 2. 변경된 수량산출부재 목록을 다시 불러옵니다.
-        //    (이 함수는 내부적으로 왼쪽의 메인 테이블을 다시 그립니다)
         await loadQuantityMembers();
 
-        // 3. 마지막으로, 업데이트된 모든 데이터를 기반으로 오른쪽 상세 정보 패널들을 명시적으로 다시 렌더링합니다.
-        //    이렇게 해야 선택된 부재의 최신 할당 정보를 즉시 확인할 수 있습니다.
         renderQmCostCodesList();
         renderQmMemberMarkDetails();
     } catch (error) {
@@ -4541,10 +4552,14 @@ function handleBoqClearFilter() {
     // 4. 사용자에게 알림을 표시합니다.
     showToast('Revit 선택 필터를 해제하고 전체 집계표를 표시합니다.', 'info');
 }
-
-function resetBoqColumnsAndRegenerate() {
+function resetBoqColumnsAndRegenerate(skipConfirmation = false) {
     console.log("[DEBUG] '열 순서/이름 초기화' 버튼 클릭됨");
-    if (!confirm('테이블의 열 순서와 이름을 기본값으로 초기화하시겠습니까?')) {
+
+    // skipConfirmation이 false일 때만 확인 창을 띄웁니다.
+    if (
+        !skipConfirmation &&
+        !confirm('테이블의 열 순서와 이름을 기본값으로 초기화하시겠습니까?')
+    ) {
         console.log('[DEBUG] 초기화 취소됨.');
         return;
     }
@@ -5740,4 +5755,104 @@ function exportBoqReportToExcel() {
     console.log("[DEBUG] 'Excel 내보내기' 버튼 클릭됨 (현재 미구현).");
     showToast('Excel 내보내기 기능은 현재 준비 중입니다.', 'info');
     // TODO: SheetJS 등의 라이브러리를 사용하여 실제 Excel 내보내기 기능 구현
+}
+
+/**
+ * 6단계의 자동화 프로세스를 순차적으로 실행하는 '일괄 자동 업데이트' 함수입니다.
+ */
+async function runBatchAutoUpdate() {
+    if (!currentProjectId) {
+        showToast('먼저 프로젝트를 선택하세요.', 'error');
+        return;
+    }
+
+    if (
+        !confirm(
+            '정말로 모든 자동화 프로세스를 순차적으로 실행하시겠습니까?\n이 작업은 시간이 다소 소요될 수 있습니다.'
+        )
+    ) {
+        return;
+    }
+
+    console.log('[DEBUG] --- 일괄 자동 업데이트 시작 ---');
+
+    // Promise를 사용하여 데이터 가져오기 완료를 기다리는 로직
+    const waitForDataFetch = () =>
+        new Promise((resolve, reject) => {
+            // 완료 또는 실패 시 호출될 리스너 함수
+            const listener = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'revit_data_complete') {
+                    frontendSocket.removeEventListener('message', listener); // 리스너 정리
+                    console.log(
+                        '[DEBUG] (1/6) 데이터 가져오기 완료 신호 수신.'
+                    );
+                    resolve();
+                }
+            };
+
+            // websocket 메시지 리스너 추가
+            frontendSocket.addEventListener('message', listener);
+
+            // 데이터 가져오기 시작
+            console.log('[DEBUG] (1/6) BIM 원본데이터 가져오기 시작...');
+            showToast('1/6: BIM 원본데이터를 가져옵니다...', 'info');
+            fetchDataFromClient();
+
+            // 타임아웃 설정 (예: 5분)
+            setTimeout(() => {
+                frontendSocket.removeEventListener('message', listener);
+                reject(new Error('데이터 가져오기 시간 초과.'));
+            }, 300000);
+        });
+
+    try {
+        // 1. 데이터 가져오기 (완료될 때까지 대기)
+        await waitForDataFetch();
+        showToast('✅ (1/6) 데이터 가져오기 완료.', 'success');
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // 다음 단계 전 잠시 대기
+
+        // 2. 룰셋 일괄적용 (확인창 없이 실행)
+        console.log('[DEBUG] (2/6) 분류 할당 룰셋 적용 시작...');
+        showToast('2/6: 분류 할당 룰셋을 적용합니다...', 'info');
+        await applyClassificationRules(true); // skipConfirmation = true
+        showToast('✅ (2/6) 분류 할당 룰셋 적용 완료.', 'success');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // 3. 수량산출부재 자동 생성 (확인창 없이 실행)
+        console.log('[DEBUG] (3/6) 수량산출부재 자동 생성 시작...');
+        showToast('3/6: 수량산출부재를 자동 생성합니다...', 'info');
+        await createAutoQuantityMembers(true); // skipConfirmation = true
+        showToast('✅ (3/6) 수량산출부재 자동 생성 완료.', 'success');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // 4. 할당 룰셋 일괄 적용 (확인창 없이 실행)
+        console.log('[DEBUG] (4/6) 할당 룰셋 일괄 적용 시작...');
+        showToast(
+            '4/6: 할당 룰셋(일람부호, 공사코드)을 일괄 적용합니다...',
+            'info'
+        );
+        await applyAssignmentRules(true); // skipConfirmation = true
+        showToast('✅ (4/6) 할당 룰셋 일괄 적용 완료.', 'success');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // 5. 산출항목 자동 생성 (확인창 없이 실행)
+        console.log('[DEBUG] (5/6) 산출항목 자동 생성 시작...');
+        showToast('5/6: 산출항목을 자동 생성합니다...', 'info');
+        await createAutoCostItems(true); // skipConfirmation = true
+        showToast('✅ (5/6) 산출항목 자동 생성 완료.', 'success');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // 6. 집계 탭 열 순서/이름 초기화
+        console.log('[DEBUG] (6/6) 집계 탭 열 상태 초기화 시작...');
+        showToast('6/6: 집계 탭의 열 상태를 초기화합니다...', 'info');
+        resetBoqColumnsAndRegenerate(true); // 확인 창 없이 실행
+        showToast('✅ (6/6) 집계 탭 열 상태 초기화 완료.', 'success');
+
+        showToast('🎉 모든 자동화 프로세스가 완료되었습니다.', 'success', 5000);
+        console.log('[DEBUG] --- 일괄 자동 업데이트 성공적으로 완료 ---');
+    } catch (error) {
+        console.error('[ERROR] 일괄 자동 업데이트 중 오류 발생:', error);
+        showToast(`오류 발생: ${error.message}`, 'error', 5000);
+    }
 }

@@ -1755,6 +1755,9 @@ def get_boq_grouping_fields_api(request, project_id):
 @require_http_methods(["GET"])
 def generate_boq_report_api(request, project_id):
     """(개선된 버전) 사용자가 요청한 모든 종류의 그룹핑/표시 기준에 따라 CostItem을 집계합니다."""
+    # ▼▼▼ [추가] 함수 시작점에 디버깅용 print문을 추가합니다. ▼▼▼
+    print(f"\n[DEBUG] --- '집계표 생성(generate_boq_report_api)' API 요청 수신 (Project ID: {project_id}) ---")
+    
     group_by_fields = request.GET.getlist('group_by')
     display_by_fields = request.GET.getlist('display_by')
     raw_element_ids = request.GET.getlist('raw_element_ids') # Revit 필터링을 위한 ID 리스트
@@ -1878,9 +1881,11 @@ def generate_boq_report_api(request, project_id):
         'total_quantity': sum(item.get('quantity', 0) for item in items),
         'total_count': len(items)
     }
-
+    
+    # ▼▼▼ [추가] 함수 종료점에 디버깅용 print문을 추가합니다. ▼▼▼
+    print("[DEBUG] --- '집계표 생성' 완료. JSON 응답을 반환합니다. ---")
+    
     return JsonResponse({'report': report_data, 'summary': total_summary}, safe=False)
-
 
 
 # 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
