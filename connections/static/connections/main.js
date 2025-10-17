@@ -2,7 +2,19 @@
 let allRevitData = [];
 let currentProjectId = null;
 let currentMode = 'revit';
-let csrftoken;
+// ✅ ADD: CSRF 토큰 헬퍼 & 전역 상수
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2)
+        return decodeURIComponent(parts.pop().split(';').shift());
+    return null;
+}
+
+// 템플릿에 {% csrf_token %}이 이미 있으므로 우선 DOM에서, 없으면 쿠키에서
+let csrftoken =
+    document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+    getCookie('csrftoken');
 let activeTab = 'data-management';
 let loadedQuantityMembers = []; //
 let loadedPropertyMappingRules = []; //
@@ -64,7 +76,10 @@ const viewerStates = {
 
 // ▼▼▼ [교체] 기존 DOMContentLoaded 이벤트 리스너 전체를 아래 코드로 교체해주세요. ▼▼▼
 document.addEventListener('DOMContentLoaded', () => {
-    csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (tokenInput && tokenInput.value) {
+        csrftoken = tokenInput.value; // 전역 let 변수에 안전하게 갱신
+    }
     setupWebSocket();
     const projectSelector = document.getElementById('project-selector');
 
@@ -248,6 +263,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (qmAssignCostCodeBtn) {
         qmAssignCostCodeBtn.addEventListener('click', assignCostCodeToQm);
     }
+    const costCodesContainer = document.getElementById(
+        'cost-codes-table-container'
+    );
+    if (costCodesContainer)
+        costCodesContainer.addEventListener('click', handleCostCodeActions);
 
     // ▼▼▼ [추가] 이 코드 블록을 추가해주세요. ▼▼▼
     const qmAssignMemberMarkBtn = document.getElementById(
@@ -2460,17 +2480,23 @@ function renderCostCodesTable(codes, editId = null) {
                 <th>단위</th>
                 <th>카테고리</th>
                 <th>설명</th>
+                <!-- [ADD] 새 컬럼 2개 -->
+                <th>AI개략견적</th>
+                <th>상세견적</th>
                 <th>작업</th>
             </tr>
         </thead>
         <tbody></tbody>
     `;
+
     const tbody = table.querySelector('tbody');
 
+    // 개별 행 렌더
     const renderRow = (code) => {
         const isEditMode =
             editId &&
             (editId === 'new' ? code.id === 'new' : code.id === editId);
+
         const row = document.createElement('tr');
         row.dataset.codeId = code.id;
 
@@ -2482,32 +2508,42 @@ function renderCostCodesTable(codes, editId = null) {
                 }" placeholder="C-001"></td>
                 <td><input type="text" class="cost-name-input" value="${
                     code.name || ''
-                }" placeholder="필수 항목"></td>
+                }" placeholder="품명"></td>
                 <td><input type="text" class="cost-spec-input" value="${
                     code.spec || ''
-                }"></td>
+                }" placeholder="규격"></td>
                 <td><input type="text" class="cost-unit-input" value="${
                     code.unit || ''
-                }" placeholder="m2"></td>
+                }" placeholder="단위"></td>
                 <td><input type="text" class="cost-category-input" value="${
                     code.category || ''
-                }" placeholder="마감공사"></td>
+                }" placeholder="카테고리"></td>
                 <td><input type="text" class="cost-description-input" value="${
                     code.description || ''
-                }"></td>
+                }" placeholder="설명"></td>
+                <!-- [ADD] 편집모드 체크박스 2개 -->
+                <td><input type="checkbox" class="cost-ai-sd-input" ${
+                    code.ai_sd_enabled ? 'checked' : ''
+                }></td>
+                <td><input type="checkbox" class="cost-dd-input" ${
+                    code.dd_enabled ? 'checked' : ''
+                }></td>
                 <td>
                     <button class="save-cost-code-btn">💾 저장</button>
-                    <button class="cancel-cost-code-btn">❌ 취소</button>
+                    <button class="cancel-cost-code-btn">↩ 취소</button>
                 </td>
             `;
         } else {
             row.innerHTML = `
                 <td>${code.code}</td>
                 <td>${code.name}</td>
-                <td>${code.spec}</td>
-                <td>${code.unit}</td>
-                <td>${code.category}</td>
-                <td>${code.description}</td>
+                <td>${code.spec || ''}</td>
+                <td>${code.unit || ''}</td>
+                <td>${code.category || ''}</td>
+                <td>${code.description || ''}</td>
+                <!-- [ADD] 보기모드 표시 2개 -->
+                <td>${code.ai_sd_enabled ? '✅' : '—'}</td>
+                <td>${code.dd_enabled ? '✅' : '—'}</td>
                 <td>
                     <button class="edit-cost-code-btn">✏️ 수정</button>
                     <button class="delete-cost-code-btn">🗑️ 삭제</button>
@@ -2517,10 +2553,14 @@ function renderCostCodesTable(codes, editId = null) {
         return row;
     };
 
+    // 새 항목 편집행
     if (editId === 'new') {
-        tbody.appendChild(renderRow({ id: 'new' }));
+        tbody.appendChild(
+            renderRow({ id: 'new', ai_sd_enabled: false, dd_enabled: false })
+        );
     }
 
+    // 목록 행
     codes.forEach((code) => {
         tbody.appendChild(
             renderRow(
@@ -2531,92 +2571,6 @@ function renderCostCodesTable(codes, editId = null) {
 
     container.innerHTML = '';
     container.appendChild(table);
-}
-
-/**
- * 공사코드 테이블의 액션(저장, 수정, 취소, 삭제)을 처리합니다.
- * @param {Event} event
- */
-async function handleCostCodeActions(event) {
-    const target = event.target;
-    const actionRow = target.closest('tr');
-    if (!actionRow) return;
-
-    const codeId = actionRow.dataset.codeId;
-
-    // --- 수정 버튼 ---
-    if (target.classList.contains('edit-cost-code-btn')) {
-        if (
-            document.querySelector('#cost-codes-table-container .rule-edit-row')
-        ) {
-            showToast('이미 편집 중인 항목이 있습니다.', 'error');
-            return;
-        }
-        renderCostCodesTable(loadedCostCodes, codeId);
-    }
-    // --- 삭제 버튼 ---
-    else if (target.classList.contains('delete-cost-code-btn')) {
-        if (!confirm('이 공사코드를 정말 삭제하시겠습니까?')) return;
-        try {
-            const response = await fetch(
-                `/connections/api/cost-codes/${currentProjectId}/${codeId}/`,
-                {
-                    method: 'DELETE',
-                    headers: { 'X-CSRFToken': csrftoken },
-                }
-            );
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message);
-            showToast(result.message, 'success');
-            await loadCostCodes();
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
-    }
-    // --- 저장 버튼 ---
-    else if (target.classList.contains('save-cost-code-btn')) {
-        const codeData = {
-            code: actionRow.querySelector('.cost-code-input').value,
-            name: actionRow.querySelector('.cost-name-input').value,
-            spec: actionRow.querySelector('.cost-spec-input').value,
-            unit: actionRow.querySelector('.cost-unit-input').value,
-            category: actionRow.querySelector('.cost-category-input').value,
-            description: actionRow.querySelector('.cost-description-input')
-                .value,
-        };
-
-        if (!codeData.code || !codeData.name) {
-            showToast('코드와 품명은 반드시 입력해야 합니다.', 'error');
-            return;
-        }
-
-        const isNew = codeId === 'new';
-        const url = isNew
-            ? `/connections/api/cost-codes/${currentProjectId}/`
-            : `/connections/api/cost-codes/${currentProjectId}/${codeId}/`;
-        const method = isNew ? 'POST' : 'PUT';
-
-        try {
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                },
-                body: JSON.stringify(codeData),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message);
-            showToast(result.message, 'success');
-            await loadCostCodes();
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
-    }
-    // --- 취소 버튼 ---
-    else if (target.classList.contains('cancel-cost-code-btn')) {
-        renderCostCodesTable(loadedCostCodes);
-    }
 }
 
 // ▼▼▼ [추가] 파일의 맨 아래에 아래 함수들을 모두 추가해주세요. ▼▼▼
@@ -5591,10 +5545,7 @@ async function handleCsvFileSelect(event) {
         currentCsvImportUrl = null;
     }
 }
-/**
- * 공사코드 테이블의 액션(저장, 수정, 취소, 삭제)을 처리합니다.
- * @param {Event} event
- */
+// ✅ REPLACE: main.js - function handleCostCodeActions(...)
 async function handleCostCodeActions(event) {
     const target = event.target;
     const actionRow = target.closest('tr');
@@ -5612,6 +5563,7 @@ async function handleCostCodeActions(event) {
         }
         renderCostCodesTable(loadedCostCodes, codeId);
     }
+
     // --- 삭제 버튼 ---
     else if (target.classList.contains('delete-cost-code-btn')) {
         if (!confirm('이 공사코드를 정말 삭제하시겠습니까?')) return;
@@ -5620,7 +5572,8 @@ async function handleCostCodeActions(event) {
                 `/connections/api/cost-codes/${currentProjectId}/${codeId}/`,
                 {
                     method: 'DELETE',
-                    headers: { 'X-CSRFToken': csrftoken },
+                    headers: { 'X-CSRFToken': csrftoken }, // ✅ CSRF
+                    credentials: 'same-origin', // (안전) 쿠키 포함
                 }
             );
             const result = await response.json();
@@ -5631,6 +5584,7 @@ async function handleCostCodeActions(event) {
             showToast(error.message, 'error');
         }
     }
+
     // --- 저장 버튼 ---
     else if (target.classList.contains('save-cost-code-btn')) {
         const codeData = {
@@ -5641,6 +5595,10 @@ async function handleCostCodeActions(event) {
             category: actionRow.querySelector('.cost-category-input').value,
             description: actionRow.querySelector('.cost-description-input')
                 .value,
+            // ✅ 체크박스 2개 포함
+            ai_sd_enabled:
+                !!actionRow.querySelector('.cost-ai-sd-input')?.checked,
+            dd_enabled: !!actionRow.querySelector('.cost-dd-input')?.checked,
         };
 
         if (!codeData.code || !codeData.name) {
@@ -5656,11 +5614,12 @@ async function handleCostCodeActions(event) {
 
         try {
             const response = await fetch(url, {
-                method: method,
+                method,
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
+                    'X-CSRFToken': csrftoken, // ✅ CSRF
                 },
+                credentials: 'same-origin', // (안전) 쿠키 포함
                 body: JSON.stringify(codeData),
             });
             const result = await response.json();
@@ -5671,6 +5630,7 @@ async function handleCostCodeActions(event) {
             showToast(error.message, 'error');
         }
     }
+
     // --- 취소 버튼 ---
     else if (target.classList.contains('cancel-cost-code-btn')) {
         renderCostCodesTable(loadedCostCodes);

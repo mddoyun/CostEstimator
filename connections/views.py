@@ -409,6 +409,8 @@ def cost_codes_api(request, project_id, code_id=None):
             'unit': code.unit,
             'category': code.category,
             'description': code.description,
+            'ai_sd_enabled': code.ai_sd_enabled,
+            'dd_enabled': code.dd_enabled,
         } for code in codes]
         return JsonResponse(codes_data, safe=False)
 
@@ -417,7 +419,9 @@ def cost_codes_api(request, project_id, code_id=None):
         try:
             data = json.loads(request.body)
             project = Project.objects.get(id=project_id)
-            
+            ai_sd = bool(data.get('ai_sd_enabled', False))
+            dd    = bool(data.get('dd_enabled', False))
+            print(f"[COSTCODE/POST] project={project_id} payload={data} "f"=> ai_sd_enabled={ai_sd}, dd_enabled={dd}")
             # 필수 필드 확인
             if not data.get('code') or not data.get('name'):
                 return JsonResponse({'status': 'error', 'message': '코드와 품명은 필수 항목입니다.'}, status=400)
@@ -429,7 +433,10 @@ def cost_codes_api(request, project_id, code_id=None):
                 spec=data.get('spec', ''),
                 unit=data.get('unit', ''),
                 category=data.get('category', ''),
-                description=data.get('description', '')
+                description=data.get('description', ''),
+                # [ADD] 새 필드 저장
+                ai_sd_enabled=ai_sd,
+                dd_enabled=dd,
             )
             return JsonResponse({'status': 'success', 'message': '새 공사코드가 생성되었습니다.', 'code_id': str(new_code.id)})
         except Project.DoesNotExist:
@@ -451,6 +458,18 @@ def cost_codes_api(request, project_id, code_id=None):
             cost_code.unit = data.get('unit', cost_code.unit)
             cost_code.category = data.get('category', cost_code.category)
             cost_code.description = data.get('description', cost_code.description)
+                        
+            # [ADD] 새 불린 필드 적용 (키가 오면만 반영)
+            if 'ai_sd_enabled' in data:
+                cost_code.ai_sd_enabled = bool(data['ai_sd_enabled'])
+            if 'dd_enabled' in data:
+                cost_code.dd_enabled = bool(data['dd_enabled'])
+
+            # [ADD] 디버깅 로그
+            print(f"[COSTCODE/PUT] project={project_id} id={code_id} payload={data} "
+                f"=> ai_sd_enabled={cost_code.ai_sd_enabled}, dd_enabled={cost_code.dd_enabled}")
+
+
             cost_code.save()
 
             return JsonResponse({'status': 'success', 'message': '공사코드가 수정되었습니다.'})

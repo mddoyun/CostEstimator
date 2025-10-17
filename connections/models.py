@@ -44,7 +44,8 @@ class CostCode(models.Model):
     category = models.CharField(max_length=100, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    ai_sd_enabled = models.BooleanField(default=False)       # AI개략견적활용여부
+    dd_enabled    = models.BooleanField(default=False)       # 상세견적활용여부
     class Meta:
         unique_together = ('project', 'code')
         ordering = ['code']
