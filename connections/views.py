@@ -1750,8 +1750,6 @@ def get_boq_grouping_fields_api(request, project_id):
 
 # connections/views.py
 
-# 기존 generate_boq_report_api 함수를 찾아서 아래 코드로 완전히 교체하세요.
-
 @require_http_methods(["GET"])
 def generate_boq_report_api(request, project_id):
     """(개선된 버전) 사용자가 요청한 모든 종류의 그룹핑/표시 기준에 따라 CostItem을 집계합니다."""
@@ -1886,8 +1884,6 @@ def generate_boq_report_api(request, project_id):
     print("[DEBUG] --- '집계표 생성' 완료. JSON 응답을 반환합니다. ---")
     
     return JsonResponse({'report': report_data, 'summary': total_summary}, safe=False)
-
-
 # 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def space_classifications_api(request, project_id, sc_id=None):
