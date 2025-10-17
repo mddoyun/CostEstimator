@@ -318,28 +318,34 @@ def evaluate_conditions(data_dict, conditions):
             
         actual_v_str = str(actual_value or "")
 
-        if o == 'equals': return actual_v_str == str(v)
-        if o == 'not_equals': return actual_v_str != str(v)
-        if o == 'contains': return str(v) in actual_v_str
-        if o == 'not_contains': return str(v) not in actual_v_str
-        if o == 'starts_with': return actual_v_str.startswith(str(v))
-        if o == 'ends_with': return actual_v_str.endswith(str(v))
+        result = False # 결과 변수 초기화
+        if o == 'equals': result = (actual_v_str == str(v))
+        elif o == 'not_equals': result = (actual_v_str != str(v))
+        elif o == 'contains': result = (str(v) in actual_v_str)
+        elif o == 'not_contains': result = (str(v) not in actual_v_str)
+        elif o == 'starts_with': result = (actual_v_str.startswith(str(v)))
+        elif o == 'ends_with': result = (actual_v_str.endswith(str(v)))
         
         # 숫자 비교 연산자
-        if o in ['greater_than', 'less_than', 'greater_or_equal', 'less_or_equal']:
+        elif o in ['greater_than', 'less_than', 'greater_or_equal', 'less_or_equal']:
             if is_numeric(actual_value) and is_numeric(v):
                 actual_num, v_num = float(actual_value), float(v)
-                if o == 'greater_than': return actual_num > v_num
-                if o == 'less_than': return actual_num < v_num
-                if o == 'greater_or_equal': return actual_num >= v_num
-                if o == 'less_or_equal': return actual_num <= v_num
+                if o == 'greater_than': result = (actual_num > v_num)
+                elif o == 'less_than': result = (actual_num < v_num)
+                elif o == 'greater_or_equal': result = (actual_num >= v_num)
+                elif o == 'less_or_equal': result = (actual_num <= v_num)
         
         # 존재 여부 확인
-        if o == 'exists': return actual_value is not None
-        if o == 'not_exists': return actual_value is None
+        elif o == 'exists': result = (actual_value is not None)
+        elif o == 'not_exists': result = (actual_value is None)
+
+        # ▼▼▼ [디버깅 추가] 조건 평가 결과 출력 ▼▼▼
+        # print(f"    - 조건 평가: '{p}' ({o}) '{v}' | 실제값: '{actual_v_str}' -> 결과: {result}")
+        # ▲▲▲ 위 코드는 너무 많은 로그를 유발할 수 있으므로, 필요 시에만 주석을 해제하여 사용하세요.
+
+        return result
 
     return False
-
 
 @require_http_methods(["POST"])
 def apply_classification_rules_view(request, project_id):
@@ -357,14 +363,20 @@ def apply_classification_rules_view(request, project_id):
         
         project_tags = {tag.name: tag for tag in QuantityClassificationTag.objects.filter(project=project)}
         updated_count = 0
+        element_process_count = 0
 
         for element in elements:
+            element_process_count += 1
+            # print(f"\n[DEBUG] ({element_process_count}/{elements.count()}) 객체 처리 중: UniqueId = {element.element_unique_id}") # 상세 디버깅 필요시 주석 해제
+
             current_tag_names = {tag.name for tag in element.classification_tags.all()}
             
             tags_to_add = set()
             for rule in rules:
+                # print(f"  - 룰 검사: '{rule.description or rule.target_tag.name}' (Priority: {rule.priority})") # 상세 디버깅 필요시 주석 해제
                 if evaluate_conditions(element.raw_data, rule.conditions):
                     tags_to_add.add(rule.target_tag.name)
+                    print(f"  [HIT!] 객체 '{element.raw_data.get('Name', element.element_unique_id)}'가 룰 '{rule.description or rule.target_tag.name}'에 일치하여 '{rule.target_tag.name}' 태그가 추가됩니다.")
             
             if not tags_to_add.issubset(current_tag_names):
                 final_names = current_tag_names.union(tags_to_add)
@@ -380,8 +392,9 @@ def apply_classification_rules_view(request, project_id):
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         print(f"[ERROR] 룰셋 적용 중 예외 발생: {e}")
+        import traceback
+        print(traceback.format_exc())
         return JsonResponse({'status': 'error', 'message': f'오류 발생: {str(e)}'}, status=500)
-
 # ▼▼▼ [추가] 이 함수를 아래에 추가해주세요 ▼▼▼
 @require_http_methods(["GET", "POST", "DELETE", "PUT"])
 def cost_codes_api(request, project_id, code_id=None):
