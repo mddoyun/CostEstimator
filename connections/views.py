@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 import json
 import csv
 import re 
-from django.db.models import F, Sum, Count
+from django.db.models import F, Sum, Count, Q
 from functools import reduce
 import operator
 from .consumers import RevitConsumer, FrontendConsumer, serialize_specific_elements
@@ -1784,19 +1784,34 @@ def get_boq_grouping_fields_api(request, project_id):
 
 @require_http_methods(["GET"])
 def generate_boq_report_api(request, project_id):
-    """(개선된 버전) 사용자가 요청한 모든 종류의 그룹핑/표시 기준에 따라 CostItem을 집계합니다."""
-    # ▼▼▼ [추가] 함수 시작점에 디버깅용 print문을 추가합니다. ▼▼▼
+    """(개선된 버전 + 필터링 추가) 사용자가 요청한 모든 종류의 그룹핑/표시 기준 및 필터에 따라 CostItem을 집계합니다."""
+    # ▼▼▼ [수정] 함수 시작점에 디버깅 및 필터 파라미터 처리 추가 ▼▼▼
     print(f"\n[DEBUG] --- '집계표 생성(generate_boq_report_api)' API 요청 수신 (Project ID: {project_id}) ---")
-    
+    print(f"[DEBUG] Raw GET parameters: {request.GET}")
+
     group_by_fields = request.GET.getlist('group_by')
     display_by_fields = request.GET.getlist('display_by')
-    raw_element_ids = request.GET.getlist('raw_element_ids') # Revit 필터링을 위한 ID 리스트
+    raw_element_ids = request.GET.getlist('raw_element_ids')
+
+    # 필터 파라미터 가져오기 (기본값은 True, 문자열 'true'/'false'를 boolean으로 변환)
+    filter_ai = request.GET.get('filter_ai', 'true').lower() == 'true'
+    filter_dd = request.GET.get('filter_dd', 'true').lower() == 'true'
+
+    print(f"[DEBUG] Parsed Parameters:")
+    print(f"  - group_by: {group_by_fields}")
+    print(f"  - display_by: {display_by_fields}")
+    print(f"  - raw_element_ids: {raw_element_ids}")
+    print(f"  - filter_ai: {filter_ai}")
+    print(f"  - filter_dd: {filter_dd}")
+    # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
 
     if not group_by_fields:
+        print("[ERROR] 그룹핑 기준이 선택되지 않았습니다.")
         return JsonResponse({'status': 'error', 'message': '하나 이상의 그룹핑 기준을 선택해야 합니다.'}, status=400)
 
     # --- 1. 필드 유형 분리 (DB 직접 조회 필드 vs JSON 파싱 필드) ---
-    direct_fields = set(['id', 'quantity']) # id와 quantity는 항상 필요
+    # (이 부분은 변경 없음)
+    direct_fields = set(['id', 'quantity'])
     json_fields = set()
     all_requested_fields = set(group_by_fields + display_by_fields)
 
@@ -1808,25 +1823,50 @@ def generate_boq_report_api(request, project_id):
 
     # --- 2. DB에서 필요한 모든 데이터를 한 번에 조회 ---
     values_to_fetch = list(direct_fields)
-    # JSON 필드가 요청되면, 해당 JSON 전체를 가져옵니다.
     if any('__properties__' in f for f in json_fields):
         values_to_fetch.extend(['quantity_member__properties', 'quantity_member__member_mark__properties'])
     if any('__raw_data__' in f for f in json_fields):
         values_to_fetch.append('quantity_member__raw_element__raw_data')
 
-    # Revit 선택 필터링 적용
     items_qs = CostItem.objects.filter(project_id=project_id)
+    print(f"[DEBUG] 초기 CostItem QuerySet count: {items_qs.count()}")
+
+    # ▼▼▼ [추가] Revit 선택 필터링 적용 ▼▼▼
     if raw_element_ids:
         items_qs = items_qs.filter(quantity_member__raw_element_id__in=raw_element_ids)
+        print(f"[DEBUG] Revit ID 필터링 후 count: {items_qs.count()}")
+    # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
 
+    # ▼▼▼ [추가] AI / DD 필터링 로직 적용 ▼▼▼
+    if filter_ai and filter_dd:
+        # 둘 다 True면 OR 조건
+        items_qs = items_qs.filter(Q(cost_code__ai_sd_enabled=True) | Q(cost_code__dd_enabled=True))
+        print(f"[DEBUG] AI=True OR DD=True 필터링 후 count: {items_qs.count()}")
+    elif filter_ai:
+        # AI만 True
+        items_qs = items_qs.filter(cost_code__ai_sd_enabled=True)
+        print(f"[DEBUG] AI=True 필터링 후 count: {items_qs.count()}")
+    elif filter_dd:
+        # DD만 True
+        items_qs = items_qs.filter(cost_code__dd_enabled=True)
+        print(f"[DEBUG] DD=True 필터링 후 count: {items_qs.count()}")
+    else:
+        # 둘 다 False면 빈 쿼리셋 반환
+        items_qs = items_qs.none()
+        print(f"[DEBUG] AI=False AND DD=False 필터링 후 count: 0")
+    # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
+    # 최종적으로 필요한 값들만 조회
     items_from_db = items_qs.select_related(
         'cost_code', 'quantity_member__classification_tag',
         'quantity_member__member_mark', 'quantity_member__raw_element'
     ).values(*set(values_to_fetch))
-
+    print(f"[DEBUG] 최종 DB 조회할 데이터 count: {len(items_from_db)}") # values() 호출 후에는 count() 대신 len() 사용
 
     # --- 3. Python에서 JSON 필드 값 파싱 및 데이터 재가공 ---
+    # (get_value_from_path 함수 및 이후 로직은 변경 없음)
     def get_value_from_path(item, path):
+        # ... (기존 코드와 동일) ...
         if '__properties__' in path:
             parts = path.split('__properties__')
             base_path, key = parts[0], parts[1]
@@ -1836,31 +1876,30 @@ def generate_boq_report_api(request, project_id):
         if '__raw_data__' in path:
             raw_data_dict = item.get('quantity_member__raw_element__raw_data')
             if not isinstance(raw_data_dict, dict): return None
-            
-            # `...__raw_data__` 이후의 경로를 `__` 기준으로 분리
+
             key_path = path.split('__raw_data__')[1].strip('_').split('__')
-            
-            # reduce를 사용하여 중첩된 딕셔너리 값 탐색
+
             return reduce(lambda d, key: d.get(key, None) if isinstance(d, dict) else None, key_path, raw_data_dict)
-            
+
         return item.get(path)
 
     items = []
     for db_item in items_from_db:
         processed_item = {k: v for k, v in db_item.items()}
         for field in all_requested_fields:
-            # 모든 요청된 필드 값을 미리 계산하여 processed_item에 저장
             processed_item[field] = get_value_from_path(db_item, field)
         items.append(processed_item)
+    print(f"[DEBUG] 파싱 및 재가공 완료된 데이터 count: {len(items)}")
 
     # --- 4. 데이터 집계 로직 ---
+    # (이 부분은 변경 없음)
     root = {'name': 'Total', 'quantity': 0, 'count': 0, 'children': {}, 'display_values': {}, 'item_ids': []}
-    VARIOUS_VALUES_SENTINEL = object() # '<다양함>' 표시를 위한 특별 객체
+    VARIOUS_VALUES_SENTINEL = object()
 
     for item in items:
         root['item_ids'].append(item['id'])
         current_level = root
-        
+
         for i, field in enumerate(group_by_fields):
             key = item.get(field)
             key_str = str(key) if key is not None else '(값 없음)'
@@ -1870,13 +1909,12 @@ def generate_boq_report_api(request, project_id):
                     'name': key_str, 'quantity': 0, 'count': 0, 'level': i,
                     'children': {}, 'display_values': {}, 'item_ids': []
                 }
-            
+
             current_level = current_level['children'][key_str]
             current_level['quantity'] += item.get('quantity', 0)
             current_level['count'] += 1
             current_level['item_ids'].append(item['id'])
 
-            # 표시 필드 값 처리
             for display_field in display_by_fields:
                 current_value = item.get(display_field)
                 if display_field not in current_level['display_values']:
@@ -1886,20 +1924,20 @@ def generate_boq_report_api(request, project_id):
                     current_level['display_values'][display_field] = VARIOUS_VALUES_SENTINEL
 
     # --- 5. 최종 결과 포맷팅 (재귀 함수) ---
+    # (이 부분은 변경 없음)
     def format_to_list(node):
         children_list = []
         for key, child_node in sorted(node['children'].items()):
             final_display_values = {}
             for field in display_by_fields:
                 value = child_node['display_values'].get(field)
-                # 프론트엔드에서 사용하기 편하도록 키에서 __를 _로 변경
                 frontend_key = field.replace('__', '_')
                 final_display_values[frontend_key] = '<다양함>' if value is VARIOUS_VALUES_SENTINEL else (value if value is not None else '')
 
             child_list_item = {
                 'name': child_node['name'], 'quantity': child_node['quantity'],
                 'count': child_node['count'], 'level': child_node['level'],
-                'display_values': final_display_values, 
+                'display_values': final_display_values,
                 'children': format_to_list(child_node),
                 'item_ids': child_node['item_ids']
             }
@@ -1911,10 +1949,9 @@ def generate_boq_report_api(request, project_id):
         'total_quantity': sum(item.get('quantity', 0) for item in items),
         'total_count': len(items)
     }
-    
-    # ▼▼▼ [추가] 함수 종료점에 디버깅용 print문을 추가합니다. ▼▼▼
+
     print("[DEBUG] --- '집계표 생성' 완료. JSON 응답을 반환합니다. ---")
-    
+
     return JsonResponse({'report': report_data, 'summary': total_summary}, safe=False)
 # 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])

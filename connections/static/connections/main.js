@@ -119,6 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // 약간의 지연을 주어 다른 스크립트가 로드될 시간을 확보
         setTimeout(() => defaultPrimaryTab.click(), 100);
     }
+
+    const filterAiCheckbox = document.getElementById('boq-filter-ai');
+    const filterDdCheckbox = document.getElementById('boq-filter-dd');
+
+    if (filterAiCheckbox) {
+        filterAiCheckbox.addEventListener('change', generateBoqReport);
+    }
+    if (filterDdCheckbox) {
+        filterDdCheckbox.addEventListener('change', generateBoqReport);
+    }
     // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
     // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
 
@@ -3975,6 +3985,14 @@ async function generateBoqReport() {
         return;
     }
 
+    // ▼▼▼ [추가] 체크박스 상태 읽기 ▼▼▼
+    const filterAiChecked = document.getElementById('boq-filter-ai').checked;
+    const filterDdChecked = document.getElementById('boq-filter-dd').checked;
+    console.log(
+        `[DEBUG] 필터 상태 - AI: ${filterAiChecked}, DD: ${filterDdChecked}`
+    );
+    // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
     const params = new URLSearchParams();
     groupBySelects.forEach((select) => params.append('group_by', select.value));
     console.log('[DEBUG] 그룹핑 기준:', params.getAll('group_by'));
@@ -3985,7 +4003,11 @@ async function generateBoqReport() {
     displayByCheckboxes.forEach((cb) => params.append('display_by', cb.value));
     console.log('[DEBUG] 표시 필드:', params.getAll('display_by'));
 
-    // ▼▼▼ [핵심 수정] 필터링 ID가 있으면 API 요청 파라미터에 추가 ▼▼▼
+    // ▼▼▼ [추가] 체크박스 상태를 파라미터로 추가 ▼▼▼
+    params.append('filter_ai', filterAiChecked);
+    params.append('filter_dd', filterDdChecked);
+    // ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+
     if (boqFilteredRawElementIds.size > 0) {
         boqFilteredRawElementIds.forEach((id) =>
             params.append('raw_element_ids', id)
