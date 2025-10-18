@@ -15,6 +15,7 @@ from .consumers import RevitConsumer, FrontendConsumer, serialize_specific_eleme
 from django.db import transaction
 from django.core import serializers
 import datetime
+import decimal # <--- decimal 임포트 추가
 
 from .models import (
     Project,
@@ -32,6 +33,8 @@ from .models import (
     SpaceClassification,
     SpaceClassificationRule,
     SpaceAssignmentRule, # <--- 이 부분을 추가해주세요.
+    UnitPrice,
+    UnitPriceType,
 
 )
 # --- Project & Revit Data Views ---
@@ -2968,3 +2971,247 @@ def import_project(request):
         print(traceback.format_exc())
         transaction.set_rollback(True)
         return JsonResponse({'status': 'error', 'message': f'파일 처리 중 오류 발생: {e}'}, status=400)
+    
+
+
+# ▼▼▼ [수정] 단가 구분(UnitPriceType) API (Decimal 처리 불필요, 디버깅 추가) ▼▼▼
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+def unit_price_types_api(request, project_id, type_id=None):
+    """단가 구분(UnitPriceType) CRUD API"""
+    print(f"\n[DEBUG][UnitPriceType API] Request received: method={request.method}, project_id={project_id}, type_id={type_id}")
+
+    # --- GET: 목록 조회 ---
+    if request.method == 'GET':
+        try:
+            types = UnitPriceType.objects.filter(project_id=project_id)
+            data = [{'id': str(t.id), 'name': t.name, 'description': t.description} for t in types]
+            print(f"[DEBUG][UnitPriceType API] GET: Found {len(data)} types.")
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            print(f"[ERROR][UnitPriceType API] GET Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # --- POST: 새로 생성 ---
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            print(f"[DEBUG][UnitPriceType API] POST data: {data}")
+            project = Project.objects.get(id=project_id)
+            name = data.get('name')
+            if not name:
+                print("[ERROR][UnitPriceType API] POST Error: Name is required.")
+                return JsonResponse({'status': 'error', 'message': '단가 구분 이름은 필수입니다.'}, status=400)
+
+            unit_type, created = UnitPriceType.objects.get_or_create(
+                project=project, name=name,
+                defaults={'description': data.get('description', '')}
+            )
+            if created:
+                print(f"[DEBUG][UnitPriceType API] POST: Created new type '{name}' (ID: {unit_type.id})")
+                return JsonResponse({'status': 'success', 'message': '새 단가 구분이 생성되었습니다.', 'type': {'id': str(unit_type.id), 'name': unit_type.name, 'description': unit_type.description}})
+            else:
+                print(f"[WARN][UnitPriceType API] POST: Type '{name}' already exists.")
+                return JsonResponse({'status': 'error', 'message': '이미 동일한 이름의 단가 구분이 존재합니다.'}, status=409)
+        except Project.DoesNotExist:
+            print(f"[ERROR][UnitPriceType API] POST Error: Project '{project_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][UnitPriceType API] POST Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    # --- PUT: 수정 ---
+    elif request.method == 'PUT':
+        if not type_id: return JsonResponse({'status': 'error', 'message': '수정할 단가 구분 ID가 필요합니다.'}, status=400)
+        try:
+            data = json.loads(request.body)
+            print(f"[DEBUG][UnitPriceType API] PUT data for ID {type_id}: {data}")
+            unit_type = UnitPriceType.objects.get(id=type_id, project_id=project_id)
+            new_name = data.get('name')
+
+            if new_name and unit_type.name != new_name:
+                if UnitPriceType.objects.filter(project_id=project_id, name=new_name).exists():
+                    print(f"[ERROR][UnitPriceType API] PUT Error: Name '{new_name}' already in use.")
+                    return JsonResponse({'status': 'error', 'message': '이미 사용 중인 이름입니다.'}, status=409)
+                unit_type.name = new_name
+                print(f"[DEBUG][UnitPriceType API] PUT: Name updated to '{new_name}' for ID {type_id}.")
+
+            if 'description' in data:
+                unit_type.description = data['description']
+                print(f"[DEBUG][UnitPriceType API] PUT: Description updated for ID {type_id}.")
+
+            unit_type.save()
+            print(f"[DEBUG][UnitPriceType API] PUT: Type ID {type_id} saved successfully.")
+            return JsonResponse({'status': 'success', 'message': '단가 구분이 수정되었습니다.', 'type': {'id': str(unit_type.id), 'name': unit_type.name, 'description': unit_type.description}})
+        except UnitPriceType.DoesNotExist:
+            print(f"[ERROR][UnitPriceType API] PUT Error: Type ID '{type_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '해당 단가 구분을 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][UnitPriceType API] PUT Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    # --- DELETE: 삭제 ---
+    elif request.method == 'DELETE':
+        if not type_id: return JsonResponse({'status': 'error', 'message': '삭제할 단가 구분 ID가 필요합니다.'}, status=400)
+        try:
+            print(f"[DEBUG][UnitPriceType API] DELETE request for ID {type_id}")
+            unit_type = UnitPriceType.objects.get(id=type_id, project_id=project_id)
+            unit_type.delete()
+            print(f"[DEBUG][UnitPriceType API] DELETE: Type ID {type_id} deleted successfully.")
+            return JsonResponse({'status': 'success', 'message': '단가 구분이 삭제되었습니다.'})
+        except UnitPriceType.DoesNotExist:
+            print(f"[ERROR][UnitPriceType API] DELETE Error: Type ID '{type_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '해당 단가 구분을 찾을 수 없습니다.'}, status=404)
+        except models.ProtectedError:
+             print(f"[ERROR][UnitPriceType API] DELETE Error: Type ID '{type_id}' is protected (in use).")
+             return JsonResponse({'status': 'error', 'message': '이 단가 구분은 현재 사용 중이므로 삭제할 수 없습니다.'}, status=400)
+        except Exception as e:
+            print(f"[ERROR][UnitPriceType API] DELETE Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+
+# ▼▼▼ [수정] 공사코드별 단가(UnitPrice) API (Decimal 처리 및 디버깅 추가) ▼▼▼
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+def unit_prices_api(request, project_id, cost_code_id, price_id=None):
+    """특정 공사코드에 대한 단가(UnitPrice) CRUD API"""
+    print(f"\n[DEBUG][UnitPrice API] Request received: method={request.method}, project_id={project_id}, cost_code_id={cost_code_id}, price_id={price_id}")
+
+    # --- GET: 목록 조회 ---
+    if request.method == 'GET':
+        try:
+            prices = UnitPrice.objects.filter(project_id=project_id, cost_code_id=cost_code_id).select_related('unit_price_type')
+            # Decimal을 문자열로 변환하여 JSON 직렬화 오류 방지
+            data = [{
+                'id': str(p.id),
+                'unit_price_type_id': str(p.unit_price_type.id),
+                'unit_price_type_name': p.unit_price_type.name,
+                'material_cost': str(p.material_cost), # Decimal -> str
+                'labor_cost': str(p.labor_cost),       # Decimal -> str
+                'expense_cost': str(p.expense_cost),   # Decimal -> str
+                'total_cost': str(p.total_cost),       # Decimal -> str
+            } for p in prices]
+            print(f"[DEBUG][UnitPrice API] GET: Found {len(data)} prices for CostCode {cost_code_id}.")
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            print(f"[ERROR][UnitPrice API] GET Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # --- POST: 새로 생성 ---
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            print(f"[DEBUG][UnitPrice API] POST data for CostCode {cost_code_id}: {data}")
+            project = Project.objects.get(id=project_id)
+            cost_code = CostCode.objects.get(id=cost_code_id, project=project)
+            unit_price_type = UnitPriceType.objects.get(id=data.get('unit_price_type_id'), project=project)
+
+            # Decimal 변환 및 기본값 설정
+            m_cost = decimal.Decimal(data.get('material_cost', '0.0') or '0.0')
+            l_cost = decimal.Decimal(data.get('labor_cost', '0.0') or '0.0')
+            e_cost = decimal.Decimal(data.get('expense_cost', '0.0') or '0.0')
+            t_cost = decimal.Decimal(data.get('total_cost', '0.0') or '0.0') # 프론트에서 넘어온 total_cost도 받음
+
+            # unique_together 제약으로 get_or_create 사용
+            unit_price, created = UnitPrice.objects.get_or_create(
+                project=project, cost_code=cost_code, unit_price_type=unit_price_type,
+                defaults={'material_cost': m_cost, 'labor_cost': l_cost, 'expense_cost': e_cost, 'total_cost': t_cost}
+            )
+
+            if created:
+                # 모델의 save() 메서드가 호출되어 total_cost가 재계산될 수 있음
+                unit_price.refresh_from_db() # DB에 저장된 최종 값 다시 로드
+                print(f"[DEBUG][UnitPrice API] POST: Created new price for Type '{unit_price_type.name}' (ID: {unit_price.id})")
+                return JsonResponse({
+                    'status': 'success', 'message': '새 단가가 추가되었습니다.',
+                    'price': { # Decimal -> str 변환하여 응답
+                        'id': str(unit_price.id),
+                        'unit_price_type_id': str(unit_price.unit_price_type.id),
+                        'unit_price_type_name': unit_price.unit_price_type.name,
+                        'material_cost': str(unit_price.material_cost),
+                        'labor_cost': str(unit_price.labor_cost),
+                        'expense_cost': str(unit_price.expense_cost),
+                        'total_cost': str(unit_price.total_cost),
+                    }
+                })
+            else:
+                print(f"[WARN][UnitPrice API] POST: Price for Type '{unit_price_type.name}' already exists.")
+                return JsonResponse({'status': 'error', 'message': '해당 공사코드에 동일한 구분의 단가가 이미 존재합니다.'}, status=409)
+
+        except (Project.DoesNotExist, CostCode.DoesNotExist, UnitPriceType.DoesNotExist) as e:
+            print(f"[ERROR][UnitPrice API] POST Error: Related data not found - {e}")
+            return JsonResponse({'status': 'error', 'message': '관련 데이터를 찾을 수 없습니다.'}, status=404)
+        except (ValueError, decimal.InvalidOperation) as e:
+             print(f"[ERROR][UnitPrice API] POST Error: Invalid number format - {e}")
+             return JsonResponse({'status': 'error', 'message': '단가 값은 유효한 숫자로 입력해야 합니다.'}, status=400)
+        except Exception as e:
+            print(f"[ERROR][UnitPrice API] POST Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    # --- PUT: 수정 ---
+    elif request.method == 'PUT':
+        if not price_id: return JsonResponse({'status': 'error', 'message': '수정할 단가 ID가 필요합니다.'}, status=400)
+        try:
+            data = json.loads(request.body)
+            print(f"[DEBUG][UnitPrice API] PUT data for Price ID {price_id}: {data}")
+            unit_price = UnitPrice.objects.select_related('unit_price_type').get(id=price_id, project_id=project_id, cost_code_id=cost_code_id)
+
+            updated = False
+            # Decimal 변환 및 업데이트
+            if 'material_cost' in data:
+                new_val = decimal.Decimal(data['material_cost'] or '0.0')
+                if unit_price.material_cost != new_val: unit_price.material_cost = new_val; updated = True
+            if 'labor_cost' in data:
+                new_val = decimal.Decimal(data['labor_cost'] or '0.0')
+                if unit_price.labor_cost != new_val: unit_price.labor_cost = new_val; updated = True
+            if 'expense_cost' in data:
+                new_val = decimal.Decimal(data['expense_cost'] or '0.0')
+                if unit_price.expense_cost != new_val: unit_price.expense_cost = new_val; updated = True
+            if 'total_cost' in data: # 사용자가 합계를 직접 수정했을 경우 대비
+                new_val = decimal.Decimal(data['total_cost'] or '0.0')
+                # save() 메서드에서 최종 결정되므로 여기서는 일단 값만 설정
+                unit_price.total_cost = new_val; updated = True # 변경 여부만 체크
+
+            if updated:
+                unit_price.save() # 모델의 save() 메서드 호출
+                unit_price.refresh_from_db() # DB 최종 값 다시 로드
+                print(f"[DEBUG][UnitPrice API] PUT: Price ID {price_id} updated successfully.")
+                return JsonResponse({
+                    'status': 'success', 'message': '단가가 수정되었습니다.',
+                    'price': { # Decimal -> str 변환하여 응답
+                        'id': str(unit_price.id),
+                        'unit_price_type_id': str(unit_price.unit_price_type.id),
+                        'unit_price_type_name': unit_price.unit_price_type.name,
+                        'material_cost': str(unit_price.material_cost),
+                        'labor_cost': str(unit_price.labor_cost),
+                        'expense_cost': str(unit_price.expense_cost),
+                        'total_cost': str(unit_price.total_cost),
+                    }
+                })
+            else:
+                 print(f"[INFO][UnitPrice API] PUT: No changes detected for Price ID {price_id}.")
+                 return JsonResponse({'status': 'info', 'message': '변경된 내용이 없습니다.'})
+
+        except UnitPrice.DoesNotExist:
+            print(f"[ERROR][UnitPrice API] PUT Error: Price ID '{price_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '해당 단가를 찾을 수 없습니다.'}, status=404)
+        except (ValueError, decimal.InvalidOperation) as e:
+             print(f"[ERROR][UnitPrice API] PUT Error: Invalid number format - {e}")
+             return JsonResponse({'status': 'error', 'message': '단가 값은 유효한 숫자로 입력해야 합니다.'}, status=400)
+        except Exception as e:
+            print(f"[ERROR][UnitPrice API] PUT Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+    # --- DELETE: 삭제 ---
+    elif request.method == 'DELETE':
+        if not price_id: return JsonResponse({'status': 'error', 'message': '삭제할 단가 ID가 필요합니다.'}, status=400)
+        try:
+            print(f"[DEBUG][UnitPrice API] DELETE request for Price ID {price_id}")
+            unit_price = UnitPrice.objects.get(id=price_id, project_id=project_id, cost_code_id=cost_code_id)
+            unit_price.delete()
+            print(f"[DEBUG][UnitPrice API] DELETE: Price ID {price_id} deleted successfully.")
+            return JsonResponse({'status': 'success', 'message': '단가가 삭제되었습니다.'})
+        except UnitPrice.DoesNotExist:
+            print(f"[ERROR][UnitPrice API] DELETE Error: Price ID '{price_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '해당 단가를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][UnitPrice API] DELETE Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)

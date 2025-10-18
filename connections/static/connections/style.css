@@ -2090,3 +2090,173 @@ div[id$='-grouping-controls'] {
     overflow: hidden; /* 너비를 넘어가는 내용은 숨깁니다. */
     text-overflow: ellipsis; /* 숨겨진 텍스트를 말줄임표(...)로 표시합니다. */
 }
+#unit-price-management.tab-content.active {
+    display: flex;
+}
+
+.unit-price-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 20px;
+    padding: 20px;
+}
+
+/* 왼쪽 패널 (공사코드 목록) - 너비 1/3 */
+.unit-price-left-panel {
+    flex: 1; /* 비율 1 */
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    min-width: 300px; /* 최소 너비 */
+    overflow: hidden;
+}
+
+/* 오른쪽 패널 (구분 관리 + 단가 리스트) - 너비 2/3 */
+.unit-price-right-panel {
+    flex: 2; /* 비율 2 */
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+/* 오른쪽 패널의 상단, 하단 섹션 - 높이 50% */
+.unit-price-type-section,
+.unit-price-list-section {
+    flex: 1; /* 동일 비율로 높이 분할 */
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    min-height: 0; /* 내부 스크롤 위해 중요 */
+    overflow: hidden;
+}
+
+/* 패널 헤더 (변경 없음) */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.panel-header h3,
+.panel-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* 패널 컨텐츠 (변경 없음) */
+.panel-content {
+    flex-grow: 1;
+    overflow: auto;
+    padding: 0; /* 테이블 넣을 때 여백 제거 */
+    min-height: 0;
+}
+.panel-content p {
+    padding: 15px;
+} /* 테이블 없을 때 안내 메시지 여백 */
+
+/* 왼쪽 공사코드 목록 스타일 (변경 없음) */
+.cost-code-list-container .cost-code-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    font-size: 13px;
+}
+.cost-code-list-container .cost-code-item:hover {
+    background-color: #f5f5f5;
+}
+.cost-code-list-container .cost-code-item.selected {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: bold;
+}
+.cost-code-list-container .cost-code-item span {
+    display: inline-block;
+    margin-right: 10px;
+    white-space: nowrap;
+    vertical-align: middle;
+} /* vertical-align 추가 */
+.cost-code-list-container .item-code {
+    min-width: 80px;
+    font-weight: bold;
+}
+.cost-code-list-container .item-category {
+    min-width: 60px;
+    color: #555;
+    font-size: 12px;
+}
+.cost-code-list-container .item-name {
+    min-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+} /* 이름 길면 ... 처리 */
+.cost-code-list-container .item-spec {
+    min-width: 100px;
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+} /* 규격 길면 ... 처리 */
+.cost-code-list-container .item-unit {
+    min-width: 40px;
+    text-align: right;
+    color: #888;
+    font-size: 12px;
+}
+
+/* 오른쪽 테이블 스타일 (변경 없음, padding은 panel-content에서 제거했으므로 여기 유지) */
+.type-table-container table,
+.price-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.type-table-container th,
+.type-table-container td,
+.price-table-container th,
+.price-table-container td {
+    border: 1px solid var(--border-color);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: middle;
+}
+.type-table-container th,
+.price-table-container th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+} /* z-index 추가 */
+
+/* 편집 행 스타일 (변경 없음) */
+.editable-row input,
+.editable-row select {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+}
+.editable-row input[type='number'] {
+    text-align: right;
+}
+.editable-row button {
+    padding: 3px 6px;
+    font-size: 12px;
+    margin-right: 4px;
+}
+
+/* 단가 테이블 특정 열 정렬 (변경 없음) */
+.price-table-container td:nth-child(2), /* 재료비 */
+.price-table-container td:nth-child(3), /* 노무비 */
+.price-table-container td:nth-child(4), /* 경비 */
+.price-table-container td:nth-child(5) {
+    /* 합계 */
+    text-align: right;
+}

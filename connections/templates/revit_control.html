@@ -124,6 +124,12 @@
                     <button class="sub-nav-button" data-tab="space-management">
                         🏢 공간분류 관리
                     </button>
+                    <button
+                        class="sub-nav-button"
+                        data-tab="unit-price-management"
+                    >
+                        💲 단가 관리
+                    </button>
                 </nav>
                 <nav id="secondary-nav-takeoff" class="secondary-nav">
                     <button
@@ -1341,6 +1347,64 @@
                     <h2 style="margin: 20px">
                         상세 내역 작성(DD) 기능이 여기에 구현될 예정입니다.
                     </h2>
+                </div>
+
+                <div id="unit-price-management" class="tab-content">
+                    <div class="unit-price-container">
+                        <aside class="unit-price-left-panel">
+                            <div class="panel-header">
+                                <h3>공사코드 목록</h3>
+                                <input
+                                    type="text"
+                                    id="unit-price-cost-code-search"
+                                    placeholder="코드/품명 검색..."
+                                    style="width: 100%"
+                                />
+                            </div>
+                            <div
+                                id="unit-price-cost-code-list"
+                                class="panel-content cost-code-list-container"
+                            >
+                                <p>
+                                    프로젝트를 선택하면 공사코드가 표시됩니다.
+                                </p>
+                            </div>
+                        </aside>
+
+                        <main class="unit-price-right-panel">
+                            <section class="unit-price-type-section">
+                                <div class="panel-header">
+                                    <h4>단가 구분 관리</h4>
+                                    <button id="add-unit-price-type-btn">
+                                        새 구분 추가
+                                    </button>
+                                </div>
+                                <div
+                                    id="unit-price-type-table-container"
+                                    class="panel-content type-table-container"
+                                >
+                                    <p>단가 구분을 추가하세요.</p>
+                                </div>
+                            </section>
+
+                            <section class="unit-price-list-section">
+                                <div class="panel-header">
+                                    <h4 id="unit-price-list-header">
+                                        단가 리스트 (공사코드를 선택하세요)
+                                    </h4>
+                                    <button id="add-unit-price-btn" disabled>
+                                        새 단가 추가
+                                    </button>
+                                </div>
+                                <div
+                                    id="unit-price-table-container"
+                                    class="panel-content price-table-container"
+                                >
+                                    <p>왼쪽에서 공사코드를 선택하세요.</p>
+                                </div>
+                            </section>
+                        </main>
+                    </div>
                 </div>
             </div>
         </div>

@@ -101,4 +101,10 @@ urlpatterns = [
     path('export-project/<uuid:project_id>/', views.export_project, name='export_project'),
     path('import-project/', views.import_project, name='import_project'),
 
+
+    path('api/unit-price-types/<uuid:project_id>/', views.unit_price_types_api, name='unit_price_types_api'),
+    path('api/unit-price-types/<uuid:project_id>/<uuid:type_id>/', views.unit_price_types_api, name='unit_price_type_detail_api'),
+
+    path('api/unit-prices/<uuid:project_id>/<uuid:cost_code_id>/', views.unit_prices_api, name='unit_prices_api'),
+    path('api/unit-prices/<uuid:project_id>/<uuid:cost_code_id>/<uuid:price_id>/', views.unit_prices_api, name='unit_price_detail_api'),
 ]

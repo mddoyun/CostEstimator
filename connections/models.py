@@ -1,7 +1,7 @@
 # connections/models.py
 import uuid
 from django.db import models
-
+import decimal # <--- decimal 임포트 추가 (정확한 계산 위해)
 # -----------------------------------------------------------------------------
 # 1. 프로젝트 관리 모듈
 # -----------------------------------------------------------------------------
@@ -52,7 +52,84 @@ class CostCode(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+class UnitPriceType(models.Model):
+    """단가의 구분을 정의 (예: 표준단가, 조사단가, 시장단가 등)"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='unit_price_types')
+    name = models.CharField(max_length=100, help_text="단가 구분 이름 (예: 표준단가)")
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ('project', 'name')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+class UnitPrice(models.Model):
+    """개별 공사코드에 대한 특정 구분(Type)의 단가 정보"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='unit_prices')
+    cost_code = models.ForeignKey(CostCode, on_delete=models.CASCADE, related_name='unit_prices')
+    unit_price_type = models.ForeignKey(UnitPriceType, on_delete=models.PROTECT, related_name='unit_prices', help_text="단가 구분")
+
+    # ▼▼▼ [수정] DecimalField로 변경하여 정확도 향상 ▼▼▼
+    material_cost = models.DecimalField(max_digits=19, decimal_places=4, default=decimal.Decimal('0.0'), help_text="재료비 단가")
+    labor_cost = models.DecimalField(max_digits=19, decimal_places=4, default=decimal.Decimal('0.0'), help_text="노무비 단가")
+    expense_cost = models.DecimalField(max_digits=19, decimal_places=4, default=decimal.Decimal('0.0'), help_text="경비 단가")
+    total_cost = models.DecimalField(max_digits=19, decimal_places=4, default=decimal.Decimal('0.0'), help_text="합계 단가 (재료비+노무비+경비 또는 직접 입력)")
+    # ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # ▼▼▼ [추가] save 메서드 오버라이드 ▼▼▼
+    def save(self, *args, **kwargs):
+        print(f"[DEBUG][UnitPrice.save] Saving UnitPrice for CostCode '{self.cost_code.code}', Type '{self.unit_price_type.name}'")
+        print(f"[DEBUG][UnitPrice.save] Incoming values: M={self.material_cost}, L={self.labor_cost}, E={self.expense_cost}, T={self.total_cost}")
+
+        # Decimal 타입으로 변환 (입력이 float이나 문자열일 수 있으므로)
+        m_cost = decimal.Decimal(self.material_cost or '0.0')
+        l_cost = decimal.Decimal(self.labor_cost or '0.0')
+        e_cost = decimal.Decimal(self.expense_cost or '0.0')
+        t_cost = decimal.Decimal(self.total_cost or '0.0')
+
+        # 재료비, 노무비, 경비 중 하나라도 0보다 큰 값이 있으면 합계를 다시 계산하여 덮어쓴다.
+        if m_cost > 0 or l_cost > 0 or e_cost > 0:
+            calculated_total = m_cost + l_cost + e_cost
+            if self.total_cost != calculated_total:
+                 print(f"[DEBUG][UnitPrice.save] Recalculating total_cost: {calculated_total} (overwriting {self.total_cost})")
+                 self.total_cost = calculated_total
+            else:
+                 print("[DEBUG][UnitPrice.save] Component costs provided, total_cost matches calculated value.")
+        # 재료비, 노무비, 경비가 모두 0인데 합계가 0보다 크면, 사용자가 직접 입력한 것으로 간주하고 그 값을 유지한다.
+        elif t_cost > 0:
+            print("[DEBUG][UnitPrice.save] Component costs are zero, using directly provided total_cost.")
+            # 값을 이미 Decimal로 변환했으므로 별도 처리 불필요
+            self.material_cost = decimal.Decimal('0.0')
+            self.labor_cost = decimal.Decimal('0.0')
+            self.expense_cost = decimal.Decimal('0.0')
+        # 모든 값이 0이면 그냥 0으로 저장
+        else:
+             print("[DEBUG][UnitPrice.save] All costs are zero.")
+             self.material_cost = decimal.Decimal('0.0')
+             self.labor_cost = decimal.Decimal('0.0')
+             self.expense_cost = decimal.Decimal('0.0')
+             self.total_cost = decimal.Decimal('0.0')
+
+        print(f"[DEBUG][UnitPrice.save] Final values before super().save: M={self.material_cost}, L={self.labor_cost}, E={self.expense_cost}, T={self.total_cost}")
+        super().save(*args, **kwargs) # 부모의 save 메서드 호출하여 실제 저장
+    # ▲▲▲ [추가] 여기까지 입니다 ▲▲▲
+
+
+    class Meta:
+        unique_together = ('cost_code', 'unit_price_type')
+        ordering = ['cost_code__code', 'unit_price_type__name']
+
+    def __str__(self):
+        # total_cost 필드를 직접 사용하도록 변경
+        return f"{self.cost_code.code} - {self.unit_price_type.name}: {self.total_cost}"
 class MemberMark(models.Model):
     """부재일람부호 (예: C1, G1, B1 등)"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

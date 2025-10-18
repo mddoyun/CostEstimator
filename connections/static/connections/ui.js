@@ -2550,3 +2550,289 @@ function renderSpaceAssignmentRulesetTable(rules, editId = null) {
     tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
 }
+
+function renderCostCodeListForUnitPrice(costCodes) {
+    console.log('[DEBUG][Render] renderCostCodeListForUnitPrice - Start');
+    const container = document.getElementById('unit-price-cost-code-list');
+    const searchInput = document.getElementById('unit-price-cost-code-search');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+    if (!container) {
+        console.error(
+            '[ERROR][Render] Cost code list container #unit-price-cost-code-list not found.'
+        );
+        return;
+    }
+
+    let filteredCodes = costCodes || []; // Ensure costCodes is an array
+
+    if (searchTerm) {
+        filteredCodes = filteredCodes.filter(
+            (code) =>
+                (code.code && code.code.toLowerCase().includes(searchTerm)) ||
+                (code.name && code.name.toLowerCase().includes(searchTerm))
+        );
+        console.log(
+            `[DEBUG][Render] Applied search term '${searchTerm}', found ${filteredCodes.length} codes.`
+        );
+    }
+
+    if (filteredCodes.length === 0) {
+        container.innerHTML = `<p style="padding: 10px;">${
+            searchTerm ? '검색 결과가 없습니다.' : '표시할 공사코드가 없습니다.'
+        }</p>`;
+        console.log('[DEBUG][Render] No cost codes to display.');
+        return;
+    }
+
+    let listHtml = '';
+    filteredCodes.forEach((code) => {
+        const isSelected = code.id === selectedCostCodeIdForUnitPrice;
+        listHtml += `
+            <div class="cost-code-item ${
+                isSelected ? 'selected' : ''
+            }" data-id="${code.id}">
+                <span class="item-code" title="${code.code}">${code.code}</span>
+                <span class="item-category" title="${code.category || ''}">${
+            code.category || '-'
+        }</span>
+                <span class="item-name" title="${code.name}">${code.name}</span>
+                <span class="item-spec" title="${code.spec || ''}">${
+            code.spec || '-'
+        }</span>
+                <span class="item-unit">${code.unit || '-'}</span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = listHtml;
+    console.log(
+        `[DEBUG][Render] renderCostCodeListForUnitPrice - Rendered ${filteredCodes.length} items.`
+    );
+}
+
+function renderUnitPriceTypesTable(types, editId = null) {
+    console.log(
+        `[DEBUG][Render] renderUnitPriceTypesTable - Start (editId: ${editId})`
+    );
+    const container = document.getElementById(
+        'unit-price-type-table-container'
+    );
+    if (!container) {
+        console.error(
+            '[ERROR][Render] Unit price type table container #unit-price-type-table-container not found.'
+        );
+        return;
+    }
+
+    let tableHtml = `
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 35%;">구분 이름</th>
+                    <th style="width: 45%;">설명</th>
+                    <th style="width: 20%;">작업</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    const renderRow = (type) => {
+        const isEditMode = type.id === editId;
+        console.log(
+            `[DEBUG][Render] Rendering row for type ID: ${type.id}, Edit mode: ${isEditMode}`
+        );
+        if (isEditMode) {
+            return `
+                <tr class="editable-row" data-id="${type.id}">
+                    <td><input type="text" class="type-name-input" value="${
+                        type.name || ''
+                    }" placeholder="예: 표준단가"></td>
+                    <td><input type="text" class="type-description-input" value="${
+                        type.description || ''
+                    }" placeholder="선택 사항"></td>
+                    <td>
+                        <button class="save-type-btn" title="저장">💾</button>
+                        <button class="cancel-type-btn" title="취소">❌</button>
+                    </td>
+                </tr>`;
+        } else {
+            return `
+                <tr data-id="${type.id}">
+                    <td>${type.name}</td>
+                    <td>${type.description || ''}</td>
+                    <td>
+                        <button class="edit-type-btn" title="수정">✏️</button>
+                        <button class="delete-type-btn" title="삭제">🗑️</button>
+                    </td>
+                </tr>`;
+        }
+    };
+
+    let hasRows = false;
+    if (editId === 'new') {
+        tableHtml += renderRow({ id: 'new' });
+        hasRows = true;
+    }
+
+    (types || []).forEach((type) => {
+        // Ensure types is an array
+        // Avoid rendering the item being edited in view mode if editId is set
+        if (editId !== type.id) {
+            tableHtml += renderRow(type);
+            hasRows = true;
+        } else if (editId && editId !== 'new') {
+            // Render the item being edited in edit mode
+            tableHtml += renderRow(types.find((t) => t.id === editId));
+            hasRows = true;
+        }
+    });
+
+    if (!hasRows) {
+        tableHtml +=
+            '<tr><td colspan="3" style="text-align: center; padding: 15px;">정의된 단가 구분이 없습니다. "새 구분 추가" 버튼으로 시작하세요.</td></tr>';
+        console.log('[DEBUG][Render] No unit price types to display.');
+    }
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log('[DEBUG][Render] renderUnitPriceTypesTable - End');
+}
+function renderUnitPricesTable(prices, editId = null) {
+    console.log(
+        `[DEBUG][Render] renderUnitPricesTable - Start (editId: ${editId})`
+    );
+    const container = document.getElementById('unit-price-table-container');
+    if (!container) {
+        console.error(
+            '[ERROR][Render] Unit price table container #unit-price-table-container not found.'
+        );
+        return;
+    }
+
+    // 단가 구분 드롭다운 옵션 준비
+    let typeOptionsHtml = '<option value="">-- 구분 선택 --</option>';
+    (loadedUnitPriceTypes || []).forEach((type) => {
+        // Ensure loadedUnitPriceTypes is an array
+        typeOptionsHtml += `<option value="${type.id}">${type.name}</option>`;
+    });
+
+    let tableHtml = `
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%;">구분</th>
+                    <th style="width: 15%;">재료비</th>
+                    <th style="width: 15%;">노무비</th>
+                    <th style="width: 15%;">경비</th>
+                    <th style="width: 15%;">합계</th>
+                    <th style="width: 20%;">작업</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    const renderRow = (price) => {
+        const isEditMode = price.id === editId;
+        // Decimal 문자열을 숫자로 변환 (실패 시 0)
+        const mat = parseFloat(price.material_cost || '0');
+        const lab = parseFloat(price.labor_cost || '0');
+        const exp = parseFloat(price.expense_cost || '0');
+        const tot = parseFloat(price.total_cost || '0'); // DB에 저장된 total 값
+        const calculatedTotal = mat + lab + exp; // M+L+E 계산 값
+
+        // 표시할 합계 결정: M/L/E 합이 0보다 크면 계산값, 아니면 DB의 total 값 사용
+        const displayTotal =
+            mat > 0 || lab > 0 || exp > 0 ? calculatedTotal : tot;
+
+        console.log(
+            `[DEBUG][Render] Rendering row for price ID: ${price.id}, Edit mode: ${isEditMode}`
+        );
+        console.log(
+            `  Values: M=${mat}, L=${lab}, E=${exp}, T_DB=${tot}, T_Calc=${calculatedTotal}, T_Display=${displayTotal}`
+        );
+
+        if (isEditMode) {
+            // 현재 가격의 type ID를 selected로 설정
+            const currentTypeOptions = (loadedUnitPriceTypes || [])
+                .map(
+                    (type) =>
+                        `<option value="${type.id}" ${
+                            type.id == price.unit_price_type_id
+                                ? 'selected'
+                                : ''
+                        }>${type.name}</option>`
+                )
+                .join('');
+
+            return `
+                <tr class="editable-row" data-id="${price.id}">
+                    <td><select class="price-type-select"><option value="">-- 구분 선택 --</option>${currentTypeOptions}</select></td>
+                    <td><input type="number" step="any" class="price-material-input" value="${mat.toFixed(
+                        4
+                    )}"></td>
+                    <td><input type="number" step="any" class="price-labor-input" value="${lab.toFixed(
+                        4
+                    )}"></td>
+                    <td><input type="number" step="any" class="price-expense-input" value="${exp.toFixed(
+                        4
+                    )}"></td>
+                    <td><input type="number" step="any" class="price-total-input" value="${displayTotal.toFixed(
+                        4
+                    )}"></td>
+                    <td>
+                        <button class="save-price-btn" title="저장">💾</button>
+                        <button class="cancel-price-btn" title="취소">❌</button>
+                    </td>
+                </tr>`;
+        } else {
+            // 보기 모드 행
+            return `
+                <tr data-id="${price.id}">
+                    <td>${price.unit_price_type_name || '?'}</td>
+                    <td>${mat.toFixed(4)}</td>
+                    <td>${lab.toFixed(4)}</td>
+                    <td>${exp.toFixed(4)}</td>
+                    <td>${displayTotal.toFixed(4)}</td> {/* 계산된 합계 표시 */}
+                    <td>
+                        <button class="edit-price-btn" title="수정">✏️</button>
+                        <button class="delete-price-btn" title="삭제">🗑️</button>
+                    </td>
+                </tr>`;
+        }
+    };
+
+    let hasRows = false;
+    if (editId === 'new') {
+        tableHtml += renderRow({
+            id: 'new',
+            material_cost: '0.0',
+            labor_cost: '0.0',
+            expense_cost: '0.0',
+            total_cost: '0.0',
+        });
+        hasRows = true;
+    }
+
+    (prices || []).forEach((price) => {
+        // Ensure prices is an array
+        if (editId !== price.id) {
+            tableHtml += renderRow(price);
+            hasRows = true;
+        } else if (editId && editId !== 'new') {
+            tableHtml += renderRow(prices.find((p) => p.id === editId));
+            hasRows = true;
+        }
+    });
+
+    if (!hasRows) {
+        tableHtml += `<tr><td colspan="6" style="text-align: center; padding: 15px;">이 공사코드에 등록된 단가가 없습니다. "새 단가 추가" 버튼으로 시작하세요.</td></tr>`;
+        console.log(
+            '[DEBUG][Render] No unit prices to display for this cost code.'
+        );
+    }
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log('[DEBUG][Render] renderUnitPricesTable - End');
+}
