@@ -1810,7 +1810,8 @@ def generate_boq_report_api(request, project_id):
         return JsonResponse({'status': 'error', 'message': '하나 이상의 그룹핑 기준을 선택해야 합니다.'}, status=400)
 
     # --- 1. 필드 유형 분리 ---
-    direct_fields = set(['id', 'quantity', 'cost_code_id', 'unit_price_type_id']) # [수정] cost_code_id, unit_price_type_id 추가
+
+    direct_fields = set(['id', 'quantity', 'cost_code_id', 'unit_price_type_id', 'cost_code__name', 'quantity_member_id'])    
     json_fields = set()
     all_requested_fields = set(group_by_fields + display_by_fields)
 
@@ -1846,10 +1847,10 @@ def generate_boq_report_api(request, project_id):
     print(f"[DEBUG] AI/DD 필터링 후 count: {items_qs.count()}")
 
     # 최종적으로 필요한 값들만 조회
-    items_from_db = list(items_qs.select_related( # [수정] list()로 즉시 평가
-        'cost_code', 'unit_price_type', 'quantity_member__classification_tag', # unit_price_type 추가
+    items_from_db = list(items_qs.select_related(
+        'cost_code', 'unit_price_type', 'quantity_member__classification_tag',
         'quantity_member__member_mark', 'quantity_member__raw_element'
-    ).values(*set(values_to_fetch))) # values() 는 QuerySet을 반환하므로 list()로 변환
+    ).values(*set(values_to_fetch))) # values() 에 quantity_member_id 포함됨
     print(f"[DEBUG] 최종 DB 조회할 데이터 count: {len(items_from_db)}")
 
     # --- 2.5 단가 데이터 미리 로드 ---
@@ -1902,7 +1903,9 @@ def generate_boq_report_api(request, project_id):
         # 기본 정보 복사
         processed_item['id'] = db_item['id']
         processed_item['quantity'] = Decimal(str(db_item.get('quantity', 0.0) or 0.0)) # Float -> Decimal로 변환
-
+        processed_item['cost_code_name'] = db_item.get('cost_code__name') # DB에서 가져온 값 사용
+        qm_id = db_item.get('quantity_member_id')
+        processed_item['quantity_member_id'] = str(qm_id) if qm_id else None
         # [핵심] 비용 계산 로직
         cost_code_id = str(db_item.get('cost_code_id'))
         unit_price_type_id = str(db_item.get('unit_price_type_id')) if db_item.get('unit_price_type_id') else None
@@ -2124,13 +2127,29 @@ def generate_boq_report_api(request, project_id):
     # UUID를 문자열로 변환
     for upt in unit_price_types:
         upt['id'] = str(upt['id'])
+    print("[DEBUG] 개별 항목 데이터(items)의 Decimal 필드를 문자열로 변환 시작...")
+    cost_fields_to_convert = [
+        'material_cost_unit', 'material_cost_total',
+        'labor_cost_unit', 'labor_cost_total',
+        'expense_cost_unit', 'expense_cost_total',
+        'total_cost_unit', 'total_cost_total',
+        'quantity'
+    ]
+    for item in items:
+        # 'cost_code_name'은 이미 문자열이므로 변환 대상 아님
+        for field in cost_fields_to_convert:
+            if field in item and isinstance(item[field], Decimal):
+                item[field] = decimal_to_str(item[field])
+            elif field == 'quantity' and isinstance(item.get(field), Decimal):
+                 item[field] = decimal_to_str(item[field])
+    print("[DEBUG] 개별 항목 데이터 문자열 변환 완료.")
 
     return JsonResponse({
         'report': report_data,
         'summary': total_summary,
-        'unit_price_types': unit_price_types # 단가 타입 목록 추가
+        'unit_price_types': unit_price_types,
+        'items_detail': items # quantity_member_id 포함됨
     }, safe=False)
-# ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 # 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def space_classifications_api(request, project_id, sc_id=None):

@@ -2227,10 +2227,11 @@ function updateBoqDetailsPanel(itemIds) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">이 그룹에 포함된 산출항목이 없습니다.</p>';
         renderBoqItemProperties(null);
-        renderBoqBimObjectCostSummary(null); // BIM 객체 요약 패널도 초기화
+        renderBoqBimObjectCostSummary(null);
         return;
     }
 
+    // loadedCostItems에서 ID가 일치하는 항목들을 찾음 (items_detail에서 온 데이터)
     const itemsToRender = loadedCostItems.filter((item) =>
         itemIds.includes(item.id)
     );
@@ -2238,21 +2239,23 @@ function updateBoqDetailsPanel(itemIds) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">산출항목 데이터를 찾을 수 없습니다.</p>';
         renderBoqItemProperties(null);
-        renderBoqBimObjectCostSummary(null); // BIM 객체 요약 패널도 초기화
+        renderBoqBimObjectCostSummary(null);
         return;
     }
 
-    // --- 테이블 헤더 정의 ---
+    // --- 테이블 헤더 정의 (기존 3열 + 비용 + BIM 연동 버튼) ---
     const headers = [
         { id: 'cost_code_name', label: '산출항목' },
         { id: 'quantity', label: '수량', align: 'right' },
-        { id: 'unit_price_type_name', label: '단가기준' }, // 단가 기준 이름 표시
+        { id: 'unit_price_type_name', label: '단가기준' },
         { id: 'total_cost_unit', label: '합계단가', align: 'right' },
         { id: 'total_cost_total', label: '합계금액', align: 'right' },
         { id: 'material_cost_total', label: '재료비', align: 'right' },
         { id: 'labor_cost_total', label: '노무비', align: 'right' },
         { id: 'expense_cost_total', label: '경비', align: 'right' },
-        { id: 'actions', label: 'BIM 연동', align: 'center' }, // BIM 연동 버튼 열 추가
+        { id: 'linked_member_name', label: '연관 부재' }, // 연관 부재 이름 열 추가
+        { id: 'linked_raw_name', label: 'BIM 원본 객체' }, // BIM 원본 이름 열 추가
+        { id: 'actions', label: 'BIM 연동', align: 'center' },
     ];
 
     // --- 테이블 HTML 생성 ---
@@ -2267,37 +2270,50 @@ function updateBoqDetailsPanel(itemIds) {
 
     // --- 각 CostItem 행 생성 ---
     itemsToRender.forEach((item) => {
-        // 단가 및 금액 정보 가져오기 (loadedCostItems에는 이미 계산된 값이 있다고 가정)
-        // 백엔드 API 응답(`generate_boq_report_api`)에서 CostItem별 상세 비용 데이터도 반환해야 함.
-        // 임시: loadedCostItems에 비용 필드가 있다고 가정하고 값 가져오기
-        const qty = parseFloat(item.quantity || 0);
-        const unitPriceType = loadedUnitPriceTypes.find(
-            (t) => t.id === item.unit_price_type_id
-        );
-        const unitPriceTypeName = unitPriceType
-            ? unitPriceType.name
-            : '(미지정)';
+        // --- [핵심 수정] 이름 및 비용 정보 조회 로직 ---
+        const costItemName = item.cost_code_name || '(이름 없는 항목)';
+        const qtyStr = item.quantity || '0.0000'; // 백엔드에서 문자열로 옴
 
-        // 단가/금액 정보 (서버에서 계산된 값 사용 필요 - 이 부분은 generate_boq_report_api 수정 필요)
-        // 임시로 loadedCostItems의 값을 사용 (실제로는 API 응답에서 받아와야 함)
-        const totalUnit = parseFloat(item.total_cost_unit || '0').toFixed(4);
-        const totalAmount = parseFloat(item.total_cost_total || '0').toFixed(4);
-        const matAmount = parseFloat(item.material_cost_total || '0').toFixed(
-            4
-        );
-        const labAmount = parseFloat(item.labor_cost_total || '0').toFixed(4);
-        const expAmount = parseFloat(item.expense_cost_total || '0').toFixed(4);
-
-        // BIM 객체 연동 버튼 활성화 여부 결정
-        let bimButtonHtml = '';
+        // 연관 부재 정보 찾기
         const member = item.quantity_member_id
             ? loadedQuantityMembers.find(
                   (m) => m.id === item.quantity_member_id
               )
             : null;
-        if (member && member.raw_element_id) {
+        const memberName = member
+            ? member.name || '(이름 없는 부재)'
+            : '(연관 부재 없음)';
+
+        // BIM 원본 객체 정보 찾기
+        const rawElement = member?.raw_element_id
+            ? allRevitData.find((el) => el.id === member.raw_element_id)
+            : null;
+        const rawElementName = rawElement
+            ? rawElement.raw_data?.Name || '(이름 없는 원본)'
+            : '(BIM 원본 없음)';
+
+        // 단가 기준 이름 찾기
+        const unitPriceType = loadedUnitPriceTypesForBoq.find(
+            (t) => t.id === item.unit_price_type_id
+        ); // loadedUnitPriceTypesForBoq 사용
+        const unitPriceTypeName = unitPriceType
+            ? unitPriceType.name
+            : '(미지정)';
+
+        // 비용 정보 (loadedCostItems에 이미 문자열로 포함되어 있음)
+        const totalUnit = item.total_cost_unit || '0.0000';
+        const totalAmount = item.total_cost_total || '0.0000';
+        const matAmount = item.material_cost_total || '0.0000';
+        const labAmount = item.labor_cost_total || '0.0000';
+        const expAmount = item.expense_cost_total || '0.0000';
+
+        // BIM 객체 연동 버튼
+        let bimButtonHtml = '';
+        if (rawElement) {
+            // rawElement가 있을 때만 버튼 생성
             bimButtonHtml = `<button class="select-in-client-btn-detail" data-cost-item-id="${item.id}" title="연동 프로그램에서 선택 확인">👁️</button>`;
         }
+        // --- [핵심 수정] 여기까지 ---
 
         tableHtml += `<tr data-item-id="${item.id}">`;
         headers.forEach((h) => {
@@ -2305,11 +2321,11 @@ function updateBoqDetailsPanel(itemIds) {
             let style = h.align ? `style="text-align: ${h.align};"` : '';
             switch (h.id) {
                 case 'cost_code_name':
-                    value = item.cost_code_name || '(이름 없음)';
+                    value = costItemName;
                     break;
                 case 'quantity':
-                    value = qty.toFixed(4);
-                    break;
+                    value = qtyStr;
+                    break; // 문자열 그대로 사용
                 case 'unit_price_type_name':
                     value = unitPriceTypeName;
                     break;
@@ -2328,10 +2344,16 @@ function updateBoqDetailsPanel(itemIds) {
                 case 'expense_cost_total':
                     value = expAmount;
                     break;
+                case 'linked_member_name':
+                    value = memberName;
+                    break; // 추가된 열
+                case 'linked_raw_name':
+                    value = rawElementName;
+                    break; // 추가된 열
                 case 'actions':
                     value = bimButtonHtml;
                     style = `style="text-align: center;"`;
-                    break; // 버튼은 중앙 정렬
+                    break;
                 default:
                     value = item[h.id] || '';
             }
@@ -2344,10 +2366,10 @@ function updateBoqDetailsPanel(itemIds) {
     listContainer.innerHTML = tableHtml;
     console.log('[DEBUG][UI] CostItem list table rendered in details panel.');
 
-    // 첫 번째 항목을 자동으로 선택하고 오른쪽 상세 정보 + BIM 객체 비용 요약 렌더링
+    // 첫 번째 항목 자동 선택 및 상세/요약 렌더링 (기존과 동일)
     const firstItemId = itemsToRender[0].id;
     renderBoqItemProperties(firstItemId);
-    renderBoqBimObjectCostSummary(firstItemId); // BIM 객체 요약 패널 렌더링 호출
+    renderBoqBimObjectCostSummary(firstItemId);
 }
 // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 
@@ -2417,7 +2439,12 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
             '<p style="padding: 10px;">이 BIM 객체와 연관된 산출항목이 없습니다.</p>';
         return;
     }
-
+    if (relatedCostItems.length > 0) {
+        console.log(
+            '[DEBUG][UI] Sample related CostItem for summary:',
+            JSON.stringify(relatedCostItems[0])
+        );
+    }
     // 비용 합계 계산 (Decimal 사용)
     let totalMat = 0; // Decimal(0) -> 0
     let totalLab = 0;

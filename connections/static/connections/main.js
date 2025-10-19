@@ -4156,7 +4156,18 @@ async function generateBoqReport() {
 
         const data = await response.json();
         console.log('[DEBUG] 서버로부터 집계표 데이터 수신 완료:', data);
-
+        if (data.items_detail) {
+            loadedCostItems = data.items_detail; // 전역 변수 업데이트
+            console.log(
+                `[DEBUG] loadedCostItems 업데이트 완료 (${loadedCostItems.length}개 항목).`
+            );
+        } else {
+            console.warn(
+                "[WARN] API 응답에 'items_detail' 필드가 없습니다. 비용 요약이 정확하지 않을 수 있습니다."
+            );
+            // items_detail이 없는 경우에 대한 대비책 (예: 기존 loadedCostItems 유지 또는 초기화)
+            // loadedCostItems = []; // 또는 기존 데이터 유지 결정
+        }
         loadedUnitPriceTypesForBoq = data.unit_price_types || [];
         console.log(
             `[DEBUG] ${loadedUnitPriceTypesForBoq.length}개의 단가 기준 목록 수신.`
@@ -6010,7 +6021,6 @@ async function runBatchAutoUpdate() {
                 reject(new Error('데이터 가져오기 시간 초과.'));
             }, 300000);
         });
-
     try {
         // 1. 데이터 가져오기 (완료될 때까지 대기)
         await waitForDataFetch();
@@ -6048,18 +6058,88 @@ async function runBatchAutoUpdate() {
         showToast('✅ (5/6) 산출항목 자동 생성 완료.', 'success');
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        // ▼▼▼ [수정] 6번째 단계를 '집계표 생성'으로 변경합니다. ▼▼▼
-        console.log('[DEBUG] (6/6) 집계표 생성 시작...');
+        // ▼▼▼ [수정] 6번째 단계 - 집계표 생성 전 그룹핑 확인/설정 ▼▼▼
+        console.log('[DEBUG] (6/6) 집계표 생성 준비...');
         showToast('6/6: 최종 집계표를 생성합니다...', 'info');
-        generateBoqReport(); // resetBoqColumnsAndRegenerate(true) 대신 이 함수를 호출
+
+        // BOQ 탭으로 강제 전환 (UI 업데이트 및 필드 로드 유도)
+        const boqPrimaryButton = document.querySelector(
+            '.main-nav .nav-button[data-primary-tab="boq"]'
+        );
+        if (
+            boqPrimaryButton &&
+            !boqPrimaryButton.classList.contains('active')
+        ) {
+            console.log(
+                '[DEBUG] Switching to BOQ tab for report generation...'
+            );
+            boqPrimaryButton.click();
+            // 탭 전환 및 관련 데이터 로드(loadBoqGroupingFields 등)가 완료될 시간을 약간 기다립니다.
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        } else {
+            // 이미 BOQ 탭이면 필드 로드가 완료되었는지 확인하고 기다릴 수 있습니다.
+            // 간단하게 하기 위해 짧은 지연 시간만 줍니다.
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
+        const boqGroupingControls = document.getElementById(
+            'boq-grouping-controls'
+        );
+        const groupBySelects = boqGroupingControls?.querySelectorAll(
+            '.boq-group-by-select'
+        );
+
+        // 그룹핑 기준이 하나도 없는 경우, 첫 번째 사용 가능한 필드로 기본 그룹핑 추가
+        if (
+            boqGroupingControls &&
+            (!groupBySelects || groupBySelects.length === 0)
+        ) {
+            console.log(
+                '[DEBUG] No grouping criteria found. Adding default grouping...'
+            );
+            if (availableBoqFields.length > 0) {
+                addBoqGroupingLevel(); // 첫 번째 레벨 추가
+                const firstSelect = boqGroupingControls.querySelector(
+                    '.boq-group-by-select'
+                );
+                if (firstSelect && availableBoqFields[0]) {
+                    firstSelect.value = availableBoqFields[0].value; // 첫 번째 필드를 기본값으로 설정
+                    console.log(
+                        `[DEBUG] Default grouping set to: ${availableBoqFields[0].label}`
+                    );
+                } else {
+                    console.warn(
+                        '[WARN] Could not set default grouping value automatically.'
+                    );
+                }
+            } else {
+                console.error(
+                    '[ERROR] Cannot add default grouping because availableBoqFields is empty.'
+                );
+                throw new Error(
+                    '집계표를 생성하기 위한 그룹핑 필드 정보를 불러올 수 없습니다.'
+                );
+            }
+        } else {
+            console.log(
+                '[DEBUG] Existing grouping criteria found or container not available.'
+            );
+        }
+
+        // 이제 그룹핑 기준이 설정되었으므로 집계표 생성
+        generateBoqReport();
         showToast('✅ (6/6) 집계표 생성 완료.', 'success');
-        // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
+        // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 
         showToast('🎉 모든 자동화 프로세스가 완료되었습니다.', 'success', 5000);
         console.log('[DEBUG] --- 일괄 자동 업데이트 성공적으로 완료 ---');
     } catch (error) {
         console.error('[ERROR] 일괄 자동 업데이트 중 오류 발생:', error);
         showToast(`오류 발생: ${error.message}`, 'error', 5000);
+    } finally {
+        // 프로세스 종료 후 항상 프로젝트 선택 가능하도록 복원
+        const projectSelector = document.getElementById('project-selector');
+        if (projectSelector) projectSelector.disabled = false;
     }
 }
 async function loadCostCodesForUnitPrice() {
