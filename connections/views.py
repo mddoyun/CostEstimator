@@ -1,5 +1,6 @@
 # connections/views.py
 import uuid #
+from django.db.models import FloatField # FloatField 임포트 추가
 from django.shortcuts import render, get_object_or_404 # get_object_or_404 추가
 from django.http import JsonResponse, HttpResponse, FileResponse,Http404 # FileResponse 추가
 from django.views.decorators.http import require_http_methods
@@ -52,6 +53,7 @@ from .models import (
     UnitPrice      # <--- 추가 확인
 
 )
+from tensorflow.keras import models # <<< models 임포트 추가
 # --- Project & Revit Data Views ---
 
 def revit_control_panel(request):
@@ -3544,32 +3546,32 @@ def ai_models_api(request, project_id, model_id=None):
     if request.method == 'GET':
         try:
             if model_id: # 상세 조회 (이 부분은 변경 없음)
-                model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
-                data = {
-                    'id': str(model_obj.id),
-                    'name': model_obj.name,
-                    'description': model_obj.description,
-                    'metadata': model_obj.metadata,
-                    'created_at': model_obj.created_at.isoformat(),
-                    'updated_at': model_obj.updated_at.isoformat(),
-                }
+                # ... (기존 상세 조회 코드 유지) ...
                 print(f"[DEBUG][ai_models_api] GET Details for model ID: {model_id}")
                 return JsonResponse(data)
             else: # 목록 조회
                 models = AIModel.objects.filter(project_id=project_id).order_by('-created_at') # 정렬 추가
                 data = []
                 for m in models:
-                    # 메타데이터 안전하게 접근 및 기본값 설정
-                    metadata = m.metadata if isinstance(m.metadata, dict) else {}
-                    input_features = metadata.get('input_features', []) # 기본값 빈 리스트
-                    output_features = metadata.get('output_features', []) # 기본값 빈 리스트
-                    performance = metadata.get('performance', {}) # 기본값 빈 딕셔너리
+                    # --- [수정 시작] 메타데이터 안전하게 처리 ---
+                    metadata = {}
+                    try:
+                        # m.metadata가 유효한 dict인지 확인, 아니면 빈 dict 사용
+                        metadata = m.metadata if isinstance(m.metadata, dict) else json.loads(m.metadata) if isinstance(m.metadata, str) else {}
+                    except (json.JSONDecodeError, TypeError):
+                        print(f"[WARN][ai_models_api] Could not parse metadata for model ID {m.id}. Using empty metadata.")
+                        metadata = {} # 파싱 실패 시 빈 dict
+
+                    input_features = metadata.get('input_features', [])
+                    output_features = metadata.get('output_features', [])
+                    performance = metadata.get('performance', {})
+                    # --- [수정 끝] ---
 
                     model_data = {
                         'id': str(m.id),
                         'name': m.name,
                         'description': m.description,
-                        # [핵심 수정] 메타데이터 내부 필드를 직접 포함
+                        # 메타데이터 내부 필드 직접 포함 (안전하게 접근된 값 사용)
                         'input_features': input_features if isinstance(input_features, list) else [],
                         'output_features': output_features if isinstance(output_features, list) else [],
                         'performance': performance if isinstance(performance, dict) else {},
@@ -4021,38 +4023,58 @@ def start_ai_training(request, project_id):
 
 # ▼▼▼ [추가] 개산견적(SD) 관련 API 뷰 함수들 ▼▼▼
 @require_http_methods(["GET"])
+@require_http_methods(["GET"])
 def get_sd_cost_codes_with_quantity(request, project_id):
-    """개산견적(SD)용으로 활성화된 공사코드 목록과 현재 프로젝트에서의 총 수량 합계를 반환"""
+    """(수정) 개산견적(SD)용으로 활성화되고 수량이 0보다 큰 공사코드 목록과 총 수량 합계를 반환"""
     print(f"\n[DEBUG][get_sd_cost_codes_with_quantity] Request for project: {project_id}")
     try:
         project = get_object_or_404(Project, id=project_id)
 
         # ai_sd_enabled=True 인 공사코드 필터링
-        sd_codes = CostCode.objects.filter(project=project, ai_sd_enabled=True)
+        sd_codes_qs = CostCode.objects.filter(project=project, ai_sd_enabled=True)
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Found {sd_codes_qs.count()} potentially SD-enabled cost codes initially.")
 
-        # 해당 공사코드를 사용하는 CostItem들의 수량 합계 계산
+        # 해당 공사코드를 사용하는 CostItem들의 수량 합계 계산 (Decimal 사용)
         cost_item_quantities = CostItem.objects.filter(
             project=project,
-            cost_code__in=sd_codes
-        ).values('cost_code_id').annotate(total_quantity=Sum('quantity'))
+            cost_code__in=sd_codes_qs
+        ).values('cost_code_id').annotate(
+            total_quantity=Sum(
+                Case( # quantity가 null인 경우 0으로 처리
+                    When(quantity__isnull=True, then=Value(0.0)), # Float 0.0 사용
+                    default=F('quantity'),
+                    output_field=FloatField() # ★★★ output_field를 FloatField로 변경 ★★★
+                )
+            )
+        )
 
-        # 결과를 딕셔너리로 변환 (Key: cost_code_id, Value: total_quantity)
-        quantity_map = {str(item['cost_code_id']): item['total_quantity'] for item in cost_item_quantities}
-        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Calculated quantity sums for {len(quantity_map)} cost codes.")
+        # 수량이 0보다 큰 cost_code_id만 필터링하고 맵 생성 (비교 시 float 사용)
+        quantity_map = {
+            # str(item['cost_code_id']): item['total_quantity']
+            # for item in cost_item_quantities if item['total_quantity'] is not None and item['total_quantity'] > 0.0 # 0.0 (float)과 비교
+            str(item['cost_code_id']): Decimal(str(item['total_quantity'])) # DB 조회 후 Decimal로 변환
+            for item in cost_item_quantities if item['total_quantity'] is not None and item['total_quantity'] > 0.0
+        }
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Calculated non-zero quantity sums for {len(quantity_map)} cost codes.")
 
-        # 최종 응답 데이터 구성
+        # 최종 응답 데이터 구성 (수량이 있는 코드만 포함)
         data = []
-        for code in sd_codes:
+        sd_codes_filtered = sd_codes_qs.filter(id__in=[uuid.UUID(k) for k in quantity_map.keys()])
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Filtering down to {sd_codes_filtered.count()} codes with quantity > 0.")
+
+        for code in sd_codes_filtered:
             code_id_str = str(code.id)
-            total_quantity = quantity_map.get(code_id_str, 0.0) # 합계가 없으면 0
+            total_quantity = quantity_map.get(code_id_str, Decimal('0.0')) # 합계 가져오기 (이미 Decimal)
             data.append({
                 'id': code_id_str,
                 'code': code.code,
                 'name': code.name,
                 'unit': code.unit,
-                'total_quantity': total_quantity if total_quantity is not None else 0.0 # None 방지
+                # Decimal을 문자열로 변환 (기존 코드 유지)
+                'total_quantity': str(total_quantity.quantize(Decimal("0.0001"))) if total_quantity is not None else '0.0000'
             })
-        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Returning {len(data)} SD-enabled cost codes.")
+
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Returning {len(data)} SD-enabled cost codes with quantity > 0.")
         return JsonResponse(data, safe=False)
 
     except Project.DoesNotExist:
@@ -4060,85 +4082,9 @@ def get_sd_cost_codes_with_quantity(request, project_id):
         return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
     except Exception as e:
         print(f"[ERROR][get_sd_cost_codes_with_quantity] Error: {e}")
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-@require_http_methods(["POST"])
-def predict_sd_cost(request, project_id, model_id):
-    """선택된 AI 모델과 사용자 입력을 사용하여 개산견적 비용 예측"""
-    print(f"\n[DEBUG][predict_sd_cost] Prediction request for project: {project_id}, model: {model_id}")
-    try:
-        model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
-        input_data_dict = json.loads(request.body)
-        print(f"[DEBUG][predict_sd_cost] Input data received: {input_data_dict}")
-
-        metadata = model_obj.metadata
-        input_features = metadata.get('input_features')
-        output_features = metadata.get('output_features')
-
-        if not input_features or not output_features:
-            print("[ERROR][predict_sd_cost] Model metadata is incomplete (missing features).")
-            return JsonResponse({'status': 'error', 'message': '선택된 모델의 메타데이터(입력/출력 정보)가 완전하지 않습니다.'}, status=400)
-
-        # 입력 데이터 준비 (메타데이터 순서에 맞게)
-        input_values = []
-        for feature in input_features:
-            value = input_data_dict.get(feature)
-            if value is None:
-                print(f"[ERROR][predict_sd_cost] Missing input value for feature: {feature}")
-                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'이(가) 누락되었습니다."}, status=400)
-            try:
-                input_values.append(float(value))
-            except ValueError:
-                print(f"[ERROR][predict_sd_cost] Invalid numeric value for feature '{feature}': {value}")
-                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'은(는) 숫자여야 합니다."}, status=400)
-
-        input_array = np.array([input_values]) # 모델 입력 형식 (2D 배열)
-        print(f"[DEBUG][predict_sd_cost] Prepared input array: {input_array}")
-
-        # 입력 정규화 (학습 시 사용된 경우)
-        scaler_X_params = metadata.get('scaler_X_params')
-        if scaler_X_params:
-            print("[DEBUG][predict_sd_cost] Applying input scaler...")
-            scaler_X = StandardScaler()
-            # fit은 하지 않고 저장된 mean/scale 사용 (주의: 실제 구현 시 scaler 객체 저장/로드 필요)
-            scaler_X.mean_ = np.array(scaler_X_params.get('mean_', [0.0] * len(input_features)))
-            scaler_X.scale_ = np.array(scaler_X_params.get('scale_', [1.0] * len(input_features)))
-            input_array = scaler_X.transform(input_array)
-            print(f"[DEBUG][predict_sd_cost] Scaled input array: {input_array}")
-
-        # 모델 로드 (DB의 바이너리 데이터로부터)
-        print("[DEBUG][predict_sd_cost] Loading Keras model from database binary data...")
-        with open('temp_model.h5', 'wb') as f: # 임시 파일 사용
-            f.write(model_obj.h5_file_content)
-        model = keras.models.load_model('temp_model.h5')
-        os.remove('temp_model.h5') # 임시 파일 삭제
-        print("[DEBUG][predict_sd_cost] Model loaded successfully.")
-
-        # 예측 수행
-        predictions = model.predict(input_array)
-        print(f"[DEBUG][predict_sd_cost] Raw predictions: {predictions}")
-
-        # 예측 결과 후처리 (정규화 역변환 등 - 여기서는 생략)
-
-        # 결과 딕셔너리 생성
-        results = {}
-        for i, feature in enumerate(output_features):
-            results[feature] = predictions[0][i]
-        print(f"[DEBUG][predict_sd_cost] Formatted prediction results: {results}")
-
-        return JsonResponse({'status': 'success', 'predictions': results})
-
-    except (AIModel.DoesNotExist, Project.DoesNotExist):
-        print(f"[ERROR][predict_sd_cost] Model or Project not found.")
-        return JsonResponse({'status': 'error', 'message': '모델 또는 프로젝트를 찾을 수 없습니다.'}, status=404)
-    except json.JSONDecodeError:
-        print("[ERROR][predict_sd_cost] Invalid JSON input data.")
-        return JsonResponse({'status': 'error', 'message': '잘못된 입력 데이터 형식입니다.'}, status=400)
-    except Exception as e:
-        print(f"[ERROR][predict_sd_cost] Prediction error: {e}")
         import traceback
-        print(traceback.format_exc())
-        return JsonResponse({'status': 'error', 'message': f'예측 중 오류 발생: {str(e)}'}, status=500)
+        print(traceback.format_exc()) # 상세 에러 로그 추가
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 @require_http_methods(["GET"])
 def get_sd_cost_items(request, project_id):
@@ -4325,3 +4271,153 @@ def download_temp_file_api(request):
         import traceback
         print(traceback.format_exc())
         return JsonResponse({'status': 'error', 'message': f'파일 다운로드 중 오류 발생: {str(e)}'}, status=500)
+    
+
+# connections/views.py
+
+# ▼▼▼ [교체] 기존 predict_sd_cost 함수 전체를 아래 코드로 교체 ▼▼▼
+@require_http_methods(["POST"])
+def predict_sd_cost(request, project_id, model_id):
+    """(수정) 선택된 AI 모델과 입력을 사용해 개산견적 비용 예측 및 오차범위 계산"""
+    print(f"\n[DEBUG][predict_sd_cost] Prediction request for project: {project_id}, model: {model_id}")
+    temp_model_path = None # 임시 파일 경로 변수 초기화
+    try:
+        model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+        input_data_dict = json.loads(request.body)
+        print(f"[DEBUG][predict_sd_cost] Input data received: {input_data_dict}")
+
+        metadata = model_obj.metadata
+        input_features = metadata.get('input_features')
+        output_features = metadata.get('output_features')
+        performance_metrics = metadata.get('performance', {}) # 성능 메트릭 가져오기
+        # 오차 계산에 사용할 loss 값 (없으면 0으로 간주)
+        loss_value = performance_metrics.get('final_validation_loss', 0.0)
+
+        if not input_features or not output_features:
+            print("[ERROR][predict_sd_cost] Model metadata is incomplete (missing features).")
+            return JsonResponse({'status': 'error', 'message': '선택된 모델의 메타데이터(입력/출력 정보)가 완전하지 않습니다.'}, status=400)
+
+        # 입력 데이터 준비 (메타데이터 순서에 맞게)
+        input_values = []
+        for feature in input_features:
+            value = input_data_dict.get(feature)
+            if value is None:
+                print(f"[ERROR][predict_sd_cost] Missing input value for feature: {feature}")
+                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'이(가) 누락되었습니다."}, status=400)
+            try:
+                input_values.append(float(value))
+            except (ValueError, TypeError): # TypeError 추가
+                print(f"[ERROR][predict_sd_cost] Invalid numeric value for feature '{feature}': {value}")
+                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'은(는) 숫자여야 합니다."}, status=400)
+
+        input_array = np.array([input_values]) # 모델 입력 형식 (2D 배열)
+        print(f"[DEBUG][predict_sd_cost] Prepared input array shape: {input_array.shape}, values: {input_array}")
+
+        # 입력 정규화 (학습 시 사용된 경우)
+        scaler_X_params = metadata.get('scaler_X_params')
+        if scaler_X_params and scaler_X_params.get('mean_') is not None and scaler_X_params.get('scale_') is not None:
+            print("[DEBUG][predict_sd_cost] Applying input scaler...")
+            scaler_X = StandardScaler()
+            # 저장된 mean/scale 값 로드 (길이 체크 추가)
+            mean_ = np.array(scaler_X_params['mean_'])
+            scale_ = np.array(scaler_X_params['scale_'])
+            if len(mean_) == len(input_features) and len(scale_) == len(input_features):
+                scaler_X.mean_ = mean_
+                scaler_X.scale_ = scale_
+                try:
+                    input_array = scaler_X.transform(input_array)
+                    print(f"[DEBUG][predict_sd_cost] Scaled input array: {input_array}")
+                except ValueError as e:
+                    print(f"[ERROR][predict_sd_cost] Error applying scaler transform: {e}. Check feature count.")
+                    # 오류 발생 시 정규화 없이 진행하거나 에러 반환 (여기서는 에러 반환)
+                    return JsonResponse({'status': 'error', 'message': f'입력값 정규화 중 오류 발생: {e}'}, status=500)
+            else:
+                print("[WARN][predict_sd_cost] Scaler parameters length mismatch. Skipping scaling.")
+        else:
+             print("[DEBUG][predict_sd_cost] No scaler parameters found or incomplete. Skipping scaling.")
+
+
+        # 모델 로드 (DB의 바이너리 데이터로부터 임시 파일 사용)
+        print("[DEBUG][predict_sd_cost] Loading Keras model from database binary data...")
+        temp_model_path = os.path.join(TEMP_UPLOAD_DIR, f"temp_predict_{model_id}.h5")
+        with open(temp_model_path, 'wb') as f:
+            f.write(model_obj.h5_file_content)
+        print(f"[DEBUG][predict_sd_cost] Model content written to temporary file: {temp_model_path}")
+
+        # --- [핵심 수정] compile=False 옵션 추가 ---
+        try:
+            model = models.load_model(temp_model_path, compile=False) # <<< compile=False 추가
+            print("[DEBUG][predict_sd_cost] Model loaded successfully using models.load_model with compile=False.")
+        except Exception as load_err: # 로드 실패 시 추가 디버깅
+            print(f"[ERROR][predict_sd_cost] Failed to load model even with compile=False: {load_err}")
+            import traceback
+            print(traceback.format_exc())
+            raise load_err # 에러를 다시 발생시켜 아래 except 블록에서 처리되도록 함
+        # --- [핵심 수정] 여기까지 ---
+
+        # 예측 수행
+        predictions_raw = model.predict(input_array)
+        print(f"[DEBUG][predict_sd_cost] Raw predictions (shape {predictions_raw.shape}): {predictions_raw}")
+        
+        # 예측 결과 후처리 (정규화 역변환 등 - 여기서는 생략)
+        # scaler_y_params = metadata.get('scaler_y_params')
+        # if scaler_y_params:
+        #     scaler_y = StandardScaler()
+        #     scaler_y.mean_ = np.array(scaler_y_params['mean_'])
+        #     scaler_y.scale_ = np.array(scaler_y_params['scale_'])
+        #     predictions = scaler_y.inverse_transform(predictions_raw)
+        # else:
+        predictions = predictions_raw
+
+        # 결과 딕셔너리 생성 및 오차 범위 계산
+        results = {}
+        if predictions.ndim == 2 and predictions.shape[0] == 1: # 결과가 (1, num_outputs) 형태인지 확인
+            prediction_values = predictions[0] # 첫 번째 (유일한) 샘플의 예측값 사용
+            if len(prediction_values) == len(output_features):
+                for i, feature in enumerate(output_features):
+                    pred_value = float(prediction_values[i]) # NumPy float -> Python float
+                    # loss_value를 백분율 오차로 간주하여 범위 계산 (단순 방식)
+                    # loss 값이 너무 크거나 작으면 범위가 비현실적일 수 있음
+                    error_margin = abs(pred_value * loss_value) if loss_value > 0 else 0.0
+                    min_value = pred_value - error_margin
+                    max_value = pred_value + error_margin
+                    results[feature] = {
+                        'predicted': pred_value,
+                        'min': min_value,
+                        'max': max_value,
+                        'loss_used': loss_value # 계산에 사용된 loss 값 포함
+                    }
+                print(f"[DEBUG][predict_sd_cost] Formatted prediction results with range: {results}")
+            else:
+                print(f"[ERROR][predict_sd_cost] Prediction output dimension ({len(prediction_values)}) mismatch with metadata ({len(output_features)}).")
+                return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 차원이 메타데이터와 일치하지 않습니다.'}, status=500)
+        else:
+             print(f"[ERROR][predict_sd_cost] Unexpected prediction output shape: {predictions.shape}")
+             return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 형식이 예상과 다릅니다.'}, status=500)
+
+
+        return JsonResponse({'status': 'success', 'predictions': results})
+
+    except (AIModel.DoesNotExist, Project.DoesNotExist):
+        print(f"[ERROR][predict_sd_cost] Model or Project not found.")
+        return JsonResponse({'status': 'error', 'message': '모델 또는 프로젝트를 찾을 수 없습니다.'}, status=404)
+    except json.JSONDecodeError:
+        print("[ERROR][predict_sd_cost] Invalid JSON input data.")
+        return JsonResponse({'status': 'error', 'message': '잘못된 입력 데이터 형식입니다.'}, status=400)
+    except FileNotFoundError as e:
+         print(f"[ERROR][predict_sd_cost] Model file loading error: {e}")
+         return JsonResponse({'status': 'error', 'message': f'모델 파일 로딩 중 오류 발생 (파일 경로 확인 필요): {e}'}, status=500)
+    except Exception as e:
+        print(f"[ERROR][predict_sd_cost] Prediction error: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': f'예측 중 오류 발생: {str(e)}'}, status=500)
+    finally:
+        # 임시 모델 파일 삭제
+        if temp_model_path and os.path.exists(temp_model_path):
+            try:
+                os.remove(temp_model_path)
+                print(f"[DEBUG][predict_sd_cost] Temporary model file deleted: {temp_model_path}")
+            except Exception as e:
+                print(f"[WARN][predict_sd_cost] Failed to delete temporary model file {temp_model_path}: {e}")
+# ▲▲▲ [교체] 여기까지 ▲▲▲

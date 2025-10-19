@@ -71,16 +71,6 @@
                             <span id="progress-status-text"></span>
                         </div>
                     </div>
-                    <div id="progress-container" style="display: none">
-                        <div class="progress-bar-wrapper">
-                            <progress
-                                id="data-fetch-progress"
-                                value="0"
-                                max="100"
-                            ></progress>
-                            <span id="progress-status-text"></span>
-                        </div>
-                    </div>
                     <p id="status">서버 연결 대기중...</p>
                 </div>
             </header>
@@ -1350,9 +1340,141 @@
                     </div>
                 </div>
                 <div id="schematic-estimation-sd" class="tab-content">
-                    <h2 style="margin: 20px">
-                        개산견적(SD) 기능이 여기에 구현될 예정입니다.
-                    </h2>
+                    <div class="sd-container">
+                        <div class="sd-top-panel">
+                            <div class="sd-input-section panel-box">
+                                <div class="panel-header">
+                                    <h4>개산견적 입력</h4>
+                                </div>
+                                <div class="panel-content sd-input-content">
+                                    <div class="sd-model-selector">
+                                        <label for="sd-model-select"
+                                            >AI 모델 선택:</label
+                                        >
+                                        <select id="sd-model-select">
+                                            <option value="">
+                                                -- 모델 선택 --
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div
+                                        id="sd-input-fields"
+                                        class="sd-input-fields"
+                                    >
+                                        <p>
+                                            모델을 선택하면 입력 항목이
+                                            표시됩니다.
+                                        </p>
+                                    </div>
+                                    <button id="sd-predict-btn" disabled>
+                                        📈 예측 실행
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="sd-output-section panel-box">
+                                <div class="panel-header">
+                                    <h4>예측 결과</h4>
+                                </div>
+                                <div class="panel-content sd-output-content">
+                                    <div id="sd-prediction-results-table">
+                                        <p>예측 결과가 여기에 표시됩니다.</p>
+                                    </div>
+                                    <canvas
+                                        id="sd-prediction-chart"
+                                        height="150"
+                                    ></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sd-bottom-panel panel-box">
+                            <div class="panel-header">
+                                <h4>개산견적(SD) 대상 산출항목 (검수용)</h4>
+                                <button id="sd-select-in-client-btn">
+                                    👁️ 연동 프로그램에서 선택 확인
+                                </button>
+                            </div>
+                            <div
+                                class="panel-content sd-table-content"
+                                style="display: flex; flex-direction: column"
+                            >
+                                <div
+                                    class="control-box"
+                                    style="
+                                        flex-shrink: 0;
+                                        border: none;
+                                        border-bottom: 1px solid
+                                            var(--border-color);
+                                        padding-bottom: 10px;
+                                        margin-bottom: 10px;
+                                    "
+                                >
+                                    <div
+                                        id="sd-grouping-controls-wrapper"
+                                        style="
+                                            display: flex;
+                                            align-items: center;
+                                            gap: 15px;
+                                        "
+                                    >
+                                        <button id="add-sd-group-level-btn">
+                                            + 그룹핑 추가
+                                        </button>
+                                        <div
+                                            id="sd-grouping-controls"
+                                            style="
+                                                display: flex;
+                                                flex-wrap: nowrap;
+                                                overflow-x: auto;
+                                                gap: 10px;
+                                                align-items: center;
+                                                padding-bottom: 5px;
+                                                min-width: 0;
+                                                flex-grow: 1;
+                                            "
+                                        ></div>
+                                    </div>
+                                    <div
+                                        id="sd-display-fields-wrapper"
+                                        style="
+                                            display: none;
+                                            align-items: center;
+                                            gap: 10px;
+                                            padding-top: 10px;
+                                            border-top: 1px dashed #e0e0e0;
+                                            margin-top: 10px;
+                                        "
+                                    >
+                                        <span>표시 필드:</span>
+                                        <div
+                                            id="sd-display-fields-container"
+                                            style="
+                                                flex-grow: 1;
+                                                max-height: 80px;
+                                                overflow: auto;
+                                                border: 1px solid
+                                                    var(--border-color);
+                                                padding: 5px;
+                                                background-color: #fff;
+                                                border-radius: 4px;
+                                            "
+                                        >
+                                            <small>필드 로딩 중...</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div
+                                    id="sd-table-container"
+                                    class="table-container"
+                                    style="flex-grow: 1; overflow: auto"
+                                >
+                                    <p style="padding: 20px">
+                                        개산견적(SD)에 사용되는 산출항목 목록이
+                                        여기에 표시됩니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="unit-price-management" class="tab-content">

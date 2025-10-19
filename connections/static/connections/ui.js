@@ -1930,17 +1930,39 @@ function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
 
 // ... (기존 함수들 유지) ...
 
-// ▼▼▼ [교체] renderBoqTable 함수 전체를 아래 코드로 교체해주세요 ▼▼▼
 /**
- * [수정됨] 서버로부터 받은 집계 데이터를 기반으로 동적인 BOQ 테이블 (단가/비용 포함)을 렌더링합니다.
+ * [수정됨] 서버 데이터를 기반으로 동적인 BOQ 테이블을 특정 컨테이너에 렌더링합니다.
  * @param {Array} reportData - 중첩된 구조의 집계 데이터 배열
  * @param {Object} summaryData - 전체 합계 데이터
- * @param {Array} unitPriceTypes - 프로젝트의 단가 기준 목록 [{id: 'uuid', name: 'TypeName'}, ...]
+ * @param {Array} unitPriceTypes - 프로젝트의 단가 기준 목록
+ * @param {String} targetContainerId - 테이블을 렌더링할 컨테이너 요소의 ID (예: 'boq-table-container' 또는 'sd-table-container')
  */
-function renderBoqTable(reportData, summaryData, unitPriceTypes) {
-    const container = document.getElementById('boq-table-container');
-    console.log('[DEBUG][Render] renderBoqTable called.');
+function renderBoqTable(
+    reportData,
+    summaryData,
+    unitPriceTypes,
+    targetContainerId
+) {
+    // targetContainerId 인자 추가
+    // const container = document.getElementById('boq-table-container'); // 기존 코드 삭제
+    const container = document.getElementById(targetContainerId); // 인자로 받은 ID 사용
+    console.log(
+        `[DEBUG][Render] renderBoqTable called for container #${targetContainerId}.`
+    ); // 디버깅 로그 수정
 
+    if (!container) {
+        // 컨테이너 존재 여부 확인 추가
+        console.error(
+            `[ERROR][Render] Target container #${targetContainerId} not found.`
+        );
+        showToast(
+            `테이블을 표시할 영역(${targetContainerId})을 찾을 수 없습니다.`,
+            'error'
+        );
+        return;
+    }
+
+    // --- (이하 코드는 이전과 거의 동일) ---
     if (!reportData || reportData.length === 0) {
         container.innerHTML =
             '<p style="padding: 20px;">집계할 데이터가 없습니다.</p>';
@@ -1948,85 +1970,28 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
         return;
     }
 
-    // --- 1. 컬럼 정의 ---
-    // currentBoqColumns가 비어있으면 기본 컬럼 + 선택된 표시 필드로 초기화
-    if (currentBoqColumns.length === 0) {
-        boqColumnAliases = {}; // 별칭 초기화
-        const selectedDisplayFields = Array.from(
-            document.querySelectorAll('.boq-display-field-cb:checked')
-        ).map((cb) => ({
-            id: cb.value.replace(/__/g, '_'), // 프론트엔드 호환 ID
-            label: cb.parentElement.textContent.trim(), // 체크박스 옆 텍스트
-            isDynamic: true, // 동적 필드임을 표시
-        }));
+    // --- 1. 컬럼 정의 (DD/SD 공통 컬럼 상태 변수 사용) ---
+    // [수정] DD/SD 공통 상태 사용 또는 분리 필요. 여기서는 임시로 DD 상태 사용.
+    // 실제 구현 시에는 SD용 컬럼 상태(currentSdBoqColumns)를 사용하도록 수정 필요.
+    const columnsToRender =
+        targetContainerId === 'sd-table-container'
+            ? currentSdBoqColumns
+            : currentBoqColumns; // SD/DD 컬럼 구분
+    const aliasesToUse =
+        targetContainerId === 'sd-table-container'
+            ? sdBoqColumnAliases
+            : boqColumnAliases; // SD/DD 별칭 구분
 
-        // 고정 컬럼 + 동적 컬럼 + 비용 컬럼
-        currentBoqColumns = [
-            { id: 'name', label: '구분', isDynamic: false, align: 'left' },
-            {
-                id: 'unit_price_type_id',
-                label: '단가기준',
-                isDynamic: false,
-                align: 'center',
-                width: '150px',
-            }, // 단가기준 추가
-            { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
-            { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
-            ...selectedDisplayFields,
-            // 비용 관련 컬럼 추가
-            {
-                id: 'material_cost_unit',
-                label: '재료비단가',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'material_cost_total',
-                label: '재료비',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'labor_cost_unit',
-                label: '노무비단가',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'labor_cost_total',
-                label: '노무비',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'expense_cost_unit',
-                label: '경비단가',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'expense_cost_total',
-                label: '경비',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'total_cost_unit',
-                label: '합계단가',
-                isDynamic: false,
-                align: 'right',
-            },
-            {
-                id: 'total_cost_total',
-                label: '합계금액',
-                isDynamic: false,
-                align: 'right',
-            },
-        ];
-        console.log(
-            '[DEBUG][Render] Initialized currentBoqColumns:',
-            currentBoqColumns
+    if (columnsToRender.length === 0) {
+        // 컬럼 정의 안됐을 때 처리
+        console.warn(
+            `[WARN][Render] Column definitions are empty for ${targetContainerId}. Attempting to initialize...`
         );
+        // 컬럼 초기화 로직 필요 (updateSdBoqColumns 또는 updateDdBoqColumns 호출)
+        // 여기서는 임시로 에러 메시지 표시
+        container.innerHTML =
+            '<p style="padding: 20px; color: orange;">테이블 컬럼 정보가 초기화되지 않았습니다.</p>';
+        return;
     }
 
     // --- 2. 테이블 헤더 생성 ---
@@ -2039,20 +2004,21 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
     )}'>
         <thead>
             <tr>`;
-    currentBoqColumns.forEach((column) => {
-        const displayName = boqColumnAliases[column.id] || column.label;
+    columnsToRender.forEach((column) => {
+        // columnsToRender 사용
+        const displayName = aliasesToUse[column.id] || column.label; // aliasesToUse 사용
         const thStyle = column.width ? `style="width: ${column.width};"` : '';
-        tableHtml += `<th draggable="true" data-column-id="${
-            column.id
-        }" ${thStyle}>
+        // [수정] SD 탭에서는 이름 편집 버튼(✏️) 비활성화
+        const canEditName =
+            targetContainerId === 'boq-table-container' &&
+            (column.isDynamic ||
+                ['name', 'unit_price_type_id'].includes(column.id));
+        tableHtml += `<th draggable="${
+            targetContainerId === 'boq-table-container'
+        }" data-column-id="${column.id}" ${thStyle}>
                         ${displayName}
-                        ${
-                            column.isDynamic ||
-                            ['name', 'unit_price_type_id'].includes(column.id)
-                                ? '<i class="col-edit-btn">✏️</i>'
-                                : ''
-                        }
-                      </th>`; // 이름, 단가기준, 동적 컬럼만 편집 가능
+                        ${canEditName ? '<i class="col-edit-btn">✏️</i>' : ''}
+                      </th>`;
     });
     tableHtml += `</tr></thead><tbody>`;
 
@@ -2063,7 +2029,6 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
             unitPriceTypeOptionsHtml += `<option value="${type.id}">${type.name}</option>`;
         });
     }
-    // '다양함' 옵션 추가 (값은 'various')
     const variousOptionHtml =
         '<option value="various" disabled>-- 다양함 --</option>';
 
@@ -2071,21 +2036,26 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
     function renderGroupNode(node) {
         const indent = node.level * 25;
         let rowTds = '';
-        let rowHasMissingPrice = node.has_missing_price; // 그룹 자체에 단가 누락 항목 포함 여부
+        let rowHasMissingPrice = node.has_missing_price;
 
-        currentBoqColumns.forEach((column) => {
+        columnsToRender.forEach((column) => {
+            // columnsToRender 사용
             let cellValue = '';
             let cellStyle = column.align ? `text-align: ${column.align};` : '';
 
-            // 단가 기준 컬럼 렌더링 (Select 드롭다운)
-            if (column.id === 'unit_price_type_id') {
+            // [수정] SD 탭에서는 단가 기준 드롭다운 렌더링 안 함
+            if (
+                column.id === 'unit_price_type_id' &&
+                targetContainerId === 'boq-table-container'
+            ) {
+                // DD 탭에서만 렌더링
+                // (기존 단가 기준 드롭다운 렌더링 코드 유지)
                 let options = unitPriceTypeOptionsHtml;
                 let selectedValue = node.unit_price_type_id || '';
                 if (node.unit_price_type_id === 'various') {
-                    options = variousOptionHtml + options; // '다양함'을 맨 앞에 추가
+                    options = variousOptionHtml + options;
                     selectedValue = 'various';
                 }
-                // 누락된 단가가 있으면 경고 표시 (title 속성 활용)
                 const titleAttr = rowHasMissingPrice
                     ? 'title="주의: 일부 하위 항목의 단가 정보가 누락되어 합계가 부정확할 수 있습니다."'
                     : '';
@@ -2094,16 +2064,16 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
                     : '';
 
                 cellValue = `<td style="${cellStyle}" class="${warningClass}" ${titleAttr}>
-                                <select class="unit-price-type-select" data-item-ids='${JSON.stringify(
-                                    node.item_ids
-                                )}'>
-                                    ${options}
-                                </select>
-                             </td>`;
-                // Select 요소에 selectedValue 설정은 JS로 처리 필요
+                                 <select class="unit-price-type-select" data-item-ids='${JSON.stringify(
+                                     node.item_ids
+                                 )}'>
+                                     ${options}
+                                 </select>
+                              </td>`;
             }
-            // 다른 컬럼 값 렌더링
+            // 다른 컬럼 값 렌더링 (DD/SD 공통)
             else {
+                // (기존 값 렌더링 코드 유지)
                 let displayValue = '';
                 switch (column.id) {
                     case 'name':
@@ -2124,7 +2094,6 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
                     case 'expense_cost_total':
                     case 'total_cost_unit':
                     case 'total_cost_total':
-                        // 서버에서 문자열로 받은 값을 그대로 사용 (이미 소수점 처리됨)
                         displayValue = node[column.id] || '0.0000';
                         break;
                     // 동적 표시 필드
@@ -2132,7 +2101,6 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
                         displayValue = node.display_values[column.id] || '';
                         break;
                 }
-                // 누락된 단가가 있고 비용 컬럼일 경우 경고 스타일 추가
                 const warningClass =
                     rowHasMissingPrice && column.id.includes('_cost_')
                         ? 'missing-price-warning-value'
@@ -2159,7 +2127,9 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
 
     // --- 5. 테이블 푸터 (총계) 생성 ---
     let footerTds = '';
-    currentBoqColumns.forEach((column) => {
+    columnsToRender.forEach((column) => {
+        // columnsToRender 사용
+        // (기존 총계 코드 유지)
         let cellValue = '';
         let cellStyle = column.align ? `text-align: ${column.align};` : '';
         switch (column.id) {
@@ -2185,7 +2155,7 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
                 cellValue = summaryData.total_total_cost;
                 break;
             default:
-                cellValue = ''; // 단가, 단가기준 등은 총계 없음
+                cellValue = '';
         }
         footerTds += `<td style="${cellStyle}">${cellValue}</td>`;
     });
@@ -2197,17 +2167,23 @@ function renderBoqTable(reportData, summaryData, unitPriceTypes) {
         </table>`;
 
     container.innerHTML = tableHtml;
-    console.log('[DEBUG][Render] Table HTML generated.');
+    console.log(
+        `[DEBUG][Render] Table HTML generated for #${targetContainerId}.`
+    );
 
-    // --- 6. 드롭다운 초기 값 설정 (JS로 처리) ---
-    container.querySelectorAll('.unit-price-type-select').forEach((select) => {
-        const row = select.closest('tr');
-        const currentTypeId = row.dataset.currentTypeId;
-        if (currentTypeId) {
-            select.value = currentTypeId;
-        }
-    });
-    console.log('[DEBUG][Render] Dropdown values set.');
+    // --- 6. 드롭다운 초기 값 설정 (DD 탭에서만 실행) ---
+    if (targetContainerId === 'boq-table-container') {
+        container
+            .querySelectorAll('.unit-price-type-select')
+            .forEach((select) => {
+                const row = select.closest('tr');
+                const currentTypeId = row.dataset.currentTypeId;
+                if (currentTypeId) {
+                    select.value = currentTypeId;
+                }
+            });
+        console.log('[DEBUG][Render] Dropdown values set for DD BOQ table.');
+    }
 }
 // ▲▲▲ [교체] 여기까지 입니다 ▲▲▲
 
@@ -2373,9 +2349,8 @@ function updateBoqDetailsPanel(itemIds) {
 }
 // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 
-// ▼▼▼ [신규] BIM 객체별 비용 요약 테이블 렌더링 함수 ▼▼▼
 /**
- * 선택된 CostItem과 연관된 BIM 객체(RawElement)를 찾고,
+ * [수정됨] 선택된 CostItem과 연관된 BIM 객체(RawElement)를 찾고,
  * 해당 BIM 객체에 연결된 모든 CostItem들의 비용을 합산하여 표시합니다.
  * @param {String | null} selectedCostItemId - 현재 중앙 하단 목록에서 선택된 CostItem의 ID
  */
@@ -2393,7 +2368,8 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         return;
     }
 
-    const selectedCostItem = loadedCostItems.find(
+    // [수정] loadedCostItems 대신 loadedDdCostItems 사용
+    const selectedCostItem = loadedDdCostItems.find(
         (item) => item.id === selectedCostItemId
     );
     const member = selectedCostItem?.quantity_member_id
@@ -2427,26 +2403,35 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         .map((qm) => qm.id);
 
     // 이 QuantityMember들에 연결된 모든 CostItem을 찾습니다.
-    const relatedCostItems = loadedCostItems.filter((ci) =>
+    // [수정] loadedCostItems 대신 loadedDdCostItems 사용
+    const relatedCostItems = loadedDdCostItems.filter((ci) =>
         linkedMemberIds.includes(ci.quantity_member_id)
     );
     console.log(
         `[DEBUG][UI] Found ${relatedCostItems.length} related CostItems for this BIM object.`
     );
 
+    // --- [추가] 상세 로깅: 비용 합산 전 데이터 확인 ---
+    console.log(
+        '[DEBUG][UI] Data used for BIM object cost summary:',
+        JSON.stringify(relatedCostItems, null, 2)
+    );
+    // --- [추가] 여기까지 ---
+
     if (relatedCostItems.length === 0) {
         container.innerHTML =
             '<p style="padding: 10px;">이 BIM 객체와 연관된 산출항목이 없습니다.</p>';
         return;
     }
-    if (relatedCostItems.length > 0) {
-        console.log(
-            '[DEBUG][UI] Sample related CostItem for summary:',
-            JSON.stringify(relatedCostItems[0])
-        );
-    }
-    // 비용 합계 계산 (Decimal 사용)
-    let totalMat = 0; // Decimal(0) -> 0
+    // if (relatedCostItems.length > 0) { // 로그 위치 이동
+    //     console.log(
+    //         '[DEBUG][UI] Sample related CostItem for summary:',
+    //         JSON.stringify(relatedCostItems[0])
+    //     );
+    // }
+
+    // 비용 합계 계산 (parseFloat 사용 유지, || '0'으로 NaN 방지)
+    let totalMat = 0;
     let totalLab = 0;
     let totalExp = 0;
     let totalTot = 0;
@@ -2466,12 +2451,11 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
 
     relatedCostItems.forEach((item) => {
         // 백엔드에서 문자열로 받은 값을 parseFloat로 변환, 없으면 0으로 처리
-        const mat = parseFloat(item.material_cost_total || '0'); // Decimal(...) -> parseFloat(...)
+        const mat = parseFloat(item.material_cost_total || '0');
         const lab = parseFloat(item.labor_cost_total || '0');
         const exp = parseFloat(item.expense_cost_total || '0');
         const tot = parseFloat(item.total_cost_total || '0');
 
-        // .add() 대신 += 사용
         totalMat += mat;
         totalLab += lab;
         totalExp += exp;
@@ -2482,16 +2466,17 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         );
         const code = costCode ? costCode.code : '?';
         const name = item.cost_code_name || '?';
+        // quantity도 문자열로 오므로 parseFloat 후 toFixed 사용
         const qty = parseFloat(item.quantity || 0).toFixed(4);
 
         tableHtml += `
             <tr>
-                <td>${code}</td>
-                <td>${name}</td>
+                <td>${escapeHtml(code)}</td>
+                <td>${escapeHtml(name)}</td>
                 <td style="text-align: right;">${qty}</td>
                 <td style="text-align: right;">${tot.toFixed(
                     4
-                )}</td> {/* .toFixed()는 그대로 사용 */}
+                )}</td> {/* .toFixed() 사용 */}
                 <td style="text-align: right;">${mat.toFixed(4)}</td>
                 <td style="text-align: right;">${lab.toFixed(4)}</td>
                 <td style="text-align: right;">${exp.toFixed(4)}</td>
@@ -3766,7 +3751,7 @@ function renderFeatureSelectionLists(headers) {
  */
 function renderSdInputFields(inputFeatures) {
     console.log(
-        '[DEBUG][Render] Rendering SD input fields based on selected AI model.'
+        '[DEBUG][Render] Rendering SD input fields based on selected AI model (ensuring unique IDs).'
     ); // 디버깅
     const container = document.getElementById('sd-input-fields');
     if (!container) {
@@ -3791,7 +3776,6 @@ function renderSdInputFields(inputFeatures) {
             const quantityDisplay = parseFloat(
                 code.total_quantity || 0
             ).toFixed(4); // 소수점 4자리
-            // XSS 방지: 사용자 입력이 아닌 데이터지만 안전하게 처리
             const codeText = escapeHtml(code.code);
             const nameText = escapeHtml(code.name);
             const unitText = escapeHtml(code.unit || '');
@@ -3806,31 +3790,34 @@ function renderSdInputFields(inputFeatures) {
         ); // 디버깅
     }
 
-    inputFeatures.forEach((feature) => {
-        // ID 생성 시 특수문자 고려 (간단히 제거 또는 변환)
-        const featureIdPart = feature.replace(/[^a-zA-Z0-9]/g, '-');
+    // --- [핵심 수정] forEach 루프에 index 추가 ---
+    inputFeatures.forEach((feature, index) => {
+        // <<< index 추가
+        // --- [핵심 수정] ID 생성 시 index 포함하여 고유성 보장 ---
+        const featureIdPart =
+            feature.replace(/[^a-zA-Z0-9]/g, '-') + `-${index}`; // <<< index 추가
         const inputId = `sd-input-${featureIdPart}`;
         const selectId = `sd-select-${featureIdPart}`;
+        // --- [핵심 수정] 여기까지 ---
 
         const groupDiv = document.createElement('div');
         groupDiv.className = 'input-group';
 
-        // XSS 방지: feature 이름을 textContent로 사용
         const label = document.createElement('label');
         label.htmlFor = inputId;
         label.textContent = `${feature}:`;
 
         const numberInput = document.createElement('input');
         numberInput.type = 'number';
-        numberInput.id = inputId;
-        numberInput.dataset.featureName = feature; // 원본 피처 이름 저장
+        numberInput.id = inputId; // 고유 ID 적용
+        numberInput.dataset.featureName = feature;
         numberInput.placeholder = '값 입력...';
         numberInput.step = 'any';
-        numberInput.dataset.selectId = selectId; // 연결된 select ID 저장
+        numberInput.dataset.selectId = selectId; // 연결된 고유 select ID 저장
 
         const select = document.createElement('select');
-        select.id = selectId;
-        select.dataset.inputId = inputId; // 연결된 input ID 저장
+        select.id = selectId; // 고유 ID 적용
+        select.dataset.inputId = inputId; // 연결된 고유 input ID 저장
         select.dataset.inputType = 'costCodeLink';
         select.title = '연동할 공사코드 선택 (선택 시 수량 자동 입력)';
         select.innerHTML = costCodeOptionsHtml;
@@ -3841,7 +3828,7 @@ function renderSdInputFields(inputFeatures) {
         container.appendChild(groupDiv);
     });
     console.log(
-        `[DEBUG][Render] Rendered ${inputFeatures.length} SD input fields.`
+        `[DEBUG][Render] Rendered ${inputFeatures.length} SD input fields with unique IDs.`
     ); // 디버깅
 }
 
@@ -3861,7 +3848,9 @@ function escapeHtml(unsafe) {
  * @param {Object} predictions - 예측 결과 객체 (Key: 출력 피처 이름, Value: 예측값)
  */
 function renderSdResultsTable(predictions) {
-    console.log('[DEBUG][Render] Rendering SD prediction results table.'); // 디버깅
+    console.log(
+        '[DEBUG][Render] Rendering SD prediction results table (with range).'
+    ); // 디버깅
     const container = document.getElementById('sd-prediction-results-table');
     if (!container) {
         console.error(
@@ -3884,31 +3873,53 @@ function renderSdResultsTable(predictions) {
     let tableHtml = `
         <table>
             <thead>
-                <tr><th>항목 (Output Feature)</th><th>예측값 (Predicted Value)</th></tr>
+                <tr>
+                    <th>항목 (Output Feature)</th>
+                    <th style="text-align: right;">최소 예측값</th>
+                    <th style="text-align: right;">평균 예측값</th>
+                    <th style="text-align: right;">최대 예측값</th>
+                </tr>
             </thead>
             <tbody>
     `;
     for (const feature in predictions) {
-        // 예측값을 소수점 2자리까지 표시 (통화 등 고려 시 조정 필요)
-        const value = predictions[feature];
-        const valueDisplay =
-            typeof value === 'number'
-                ? value.toLocaleString(undefined, {
+        const result = predictions[feature];
+        // 결과 객체 구조 확인 및 기본값 설정
+        const predValue =
+            typeof result?.predicted === 'number' ? result.predicted : 0;
+        const minValue =
+            typeof result?.min === 'number' ? result.min : predValue; // min 없으면 predicted 사용
+        const maxValue =
+            typeof result?.max === 'number' ? result.max : predValue; // max 없으면 predicted 사용
+        const lossUsed =
+            typeof result?.loss_used === 'number'
+                ? result.loss_used.toFixed(4)
+                : 'N/A'; // 계산에 사용된 loss
+
+        // 숫자 포맷팅 (지역화, 소수점 2자리)
+        const formatNumber = (num) =>
+            typeof num === 'number'
+                ? num.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
-                  }) // 지역화된 숫자 형식
-                : escapeHtml(value); // 숫자가 아니면 이스케이프
+                  })
+                : 'N/A';
+
         tableHtml += `
-            <tr>
+            <tr title="Loss used for range: ${lossUsed}">
                 <td>${escapeHtml(feature)}</td>
-                <td>${valueDisplay}</td>
+                <td style="text-align: right;">${formatNumber(minValue)}</td>
+                <td style="text-align: right; font-weight: bold;">${formatNumber(
+                    predValue
+                )}</td>
+                <td style="text-align: right;">${formatNumber(maxValue)}</td>
             </tr>
         `;
     }
     tableHtml += '</tbody></table>';
     container.innerHTML = tableHtml;
     console.log(
-        '[DEBUG][Render] SD prediction results table rendered successfully.'
+        '[DEBUG][Render] SD prediction results table (with range) rendered successfully.'
     ); // 디버깅
 }
 
@@ -3917,7 +3928,9 @@ function renderSdResultsTable(predictions) {
  * @param {Object} predictions - 예측 결과 객체
  */
 function renderSdPredictionChart(predictions) {
-    console.log('[DEBUG][Render] Rendering/Updating SD prediction chart.'); // 디버깅
+    console.log(
+        '[DEBUG][Render] Rendering/Updating SD prediction chart (grouped bar).'
+    ); // 디버깅
     const canvas = document.getElementById('sd-prediction-chart');
     if (!canvas) {
         console.warn(
@@ -3946,13 +3959,31 @@ function renderSdPredictionChart(predictions) {
             sdPredictionChartInstance.destroy();
             sdPredictionChartInstance = null;
         }
-        // 캔버스 클리어 (선택 사항)
-        // ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // 캔버스 내용 지우기
+        // 안내 메시지 표시 (선택 사항)
+        // ctx.font = "14px Arial";
+        // ctx.textAlign = "center";
+        // ctx.fillText("예측 결과 없음", canvas.width / 2, canvas.height / 2);
         return;
     }
 
     const labels = Object.keys(predictions);
-    const data = Object.values(predictions);
+    const minData = labels.map(
+        (label) => predictions[label]?.min ?? predictions[label]?.predicted ?? 0
+    ); // min 없으면 predicted, 그것도 없으면 0
+    const predictedData = labels.map(
+        (label) => predictions[label]?.predicted ?? 0
+    );
+    const maxData = labels.map(
+        (label) => predictions[label]?.max ?? predictions[label]?.predicted ?? 0
+    ); // max 없으면 predicted, 그것도 없으면 0
+
+    console.log('[DEBUG][Render] Chart Data:', {
+        labels,
+        minData,
+        predictedData,
+        maxData,
+    }); // 디버깅
 
     // 기존 차트 인스턴스가 있으면 파괴
     if (sdPredictionChartInstance) {
@@ -3962,7 +3993,9 @@ function renderSdPredictionChart(predictions) {
         sdPredictionChartInstance.destroy();
     }
 
-    console.log('[DEBUG][Render] Creating new SD prediction chart instance.'); // 디버깅
+    console.log(
+        '[DEBUG][Render] Creating new SD prediction chart instance (grouped bar).'
+    ); // 디버깅
     try {
         sdPredictionChartInstance = new Chart(ctx, {
             type: 'bar',
@@ -3970,32 +4003,58 @@ function renderSdPredictionChart(predictions) {
                 labels: labels,
                 datasets: [
                     {
-                        label: '예측값',
-                        data: data,
+                        label: '최소 예측',
+                        data: minData,
+                        backgroundColor: 'rgba(255, 159, 64, 0.6)', // 주황색 계열
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: '평균 예측',
+                        data: predictedData,
                         backgroundColor: 'rgba(75, 192, 192, 0.6)', // 청록색 계열
                         borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: '최대 예측',
+                        data: maxData,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)', // 보라색 계열
+                        borderColor: 'rgba(153, 102, 255, 1)',
                         borderWidth: 1,
                     },
                 ],
             },
             options: {
-                indexAxis: 'y', // 항목이 많을 수 있으니 가로 막대 그래프 (선택 사항)
+                // indexAxis: 'y', // 항목이 많으면 가로 막대 그래프 사용
                 responsive: true,
                 maintainAspectRatio: false, // 컨테이너 크기에 맞춤
                 plugins: {
-                    legend: { display: false },
-                    title: { display: true, text: '항목별 예측 결과' },
+                    legend: { position: 'top' }, // 범례 표시
+                    title: {
+                        display: true,
+                        text: '항목별 예측 결과 (최소/평균/최대)',
+                    },
                 },
                 scales: {
                     x: {
+                        title: {
+                            display: true,
+                            text: '출력 항목 (Output Feature)',
+                        },
+                    },
+                    y: {
                         beginAtZero: true,
-                        title: { display: true, text: '예측 값' },
+                        title: {
+                            display: true,
+                            text: '예측 값 (Predicted Value)',
+                        },
                     },
                 },
             },
         });
         console.log(
-            '[DEBUG][Render] SD prediction chart rendered/updated successfully.'
+            '[DEBUG][Render] SD prediction chart (grouped bar) rendered/updated successfully.'
         ); // 디버깅
     } catch (e) {
         console.error(
@@ -4077,3 +4136,60 @@ function renderSdCostItemsTable(items) {
 }
 
 // ▲▲▲ [추가] 여기까지 ▲▲▲
+// connections/static/connections/ui.js
+
+// ▼▼▼ [교체] 기존 initializeSdUI 함수 전체를 아래 코드로 교체 ▼▼▼
+function initializeSdUI() {
+    console.log(
+        '[DEBUG][initializeSdUI] Initializing Schematic Estimation (SD) UI elements.'
+    ); // 디버깅
+    // --- 상단 패널 초기화 ---
+    const modelSelect = document.getElementById('sd-model-select');
+    if (modelSelect)
+        modelSelect.innerHTML = '<option value="">-- 모델 선택 --</option>';
+    const inputFields = document.getElementById('sd-input-fields');
+    if (inputFields)
+        inputFields.innerHTML =
+            '<p>모델을 선택하면 입력 항목이 표시됩니다.</p>';
+    const predictBtn = document.getElementById('sd-predict-btn');
+    if (predictBtn) predictBtn.disabled = true;
+    const resultsTable = document.getElementById('sd-prediction-results-table');
+    if (resultsTable)
+        resultsTable.innerHTML = '<p>예측 결과가 여기에 표시됩니다.</p>';
+
+    // --- 결과 차트 초기화 ---
+    if (sdPredictionChartInstance) {
+        sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
+    }
+    const canvas = document.getElementById('sd-prediction-chart');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); // 캔버스 내용 지우기
+    }
+
+    // --- 하단 패널 BOQ 테이블 컨테이너 초기화 ---
+    // [수정] 하단 테이블 컨테이너 초기화 (renderBoqTable 호출 전 상태)
+    clearContainer(
+        'sd-table-container',
+        '<p>프로젝트를 선택하고 그룹핑 기준을 설정하세요.</p>'
+    );
+
+    // [수정] 하단 패널 BOQ 컨트롤 초기화 (initializeSdBoqControls 호출은 loadDataForActiveTab에서)
+    const sdGroupingContainer = document.getElementById('sd-grouping-controls');
+    if (sdGroupingContainer) sdGroupingContainer.innerHTML = '';
+    const sdDisplayFieldsContainer = document.getElementById(
+        'sd-display-fields-container'
+    );
+    if (sdDisplayFieldsContainer)
+        sdDisplayFieldsContainer.innerHTML = '<small>필드 로딩 중...</small>';
+
+    // 관련 전역 변수 초기화
+    selectedSdModelId = null;
+    // selectedSdItemIds.clear(); // BOQ 테이블 선택 상태는 유지할 수도 있음 (선택적)
+    // currentSdBoqColumns = []; // 컬럼 상태는 generateSdBoqReport에서 관리
+    // sdBoqColumnAliases = {};
+
+    console.log('[DEBUG][initializeSdUI] SD UI elements reset.'); // 디버깅
+}
+// ▲▲▲ [교체] 여기까지 ▲▲▲

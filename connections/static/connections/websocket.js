@@ -52,6 +52,7 @@ function setupWebSocket() {
         switch (data.type) {
             case 'revit_data_start':
             case 'fetch_progress_start': // 두 경우 동일 처리
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 lowerValueCache?.clear?.();
                 allRevitData = [];
                 const totalStart =
@@ -88,6 +89,7 @@ function setupWebSocket() {
                 break;
 
             case 'revit_data_complete':
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 statusEl.textContent = `데이터 로드 완료. 총 ${allRevitData.length}개의 객체.`;
                 showToast(
                     `총 ${allRevitData.length}개의 객체 데이터를 받았습니다.`,
@@ -121,6 +123,7 @@ function setupWebSocket() {
                 break;
 
             case 'fetch_progress_complete':
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 progressBar.value = progressBar.max;
                 progressStatus.textContent = 'DB 동기화 완료!';
                 statusEl.textContent = `DB 동기화 완료. 최종 데이터 요청 중...`;
@@ -140,6 +143,7 @@ function setupWebSocket() {
                 }
                 break;
             case 'all_elements': // fetch_progress_complete 후 서버가 보내는 최종 데이터
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 lowerValueCache?.clear?.();
                 allRevitData = data.payload.elements;
                 statusEl.textContent = `데이터 로드 완료. 총 ${allRevitData.length}개의 객체.`;
@@ -184,6 +188,7 @@ function setupWebSocket() {
                 break;
 
             case 'tags_updated':
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 updateTagLists(data.tags);
                 allTags = data.tags; // 전역 변수 업데이트
                 showToast('수량산출분류 목록이 업데이트되었습니다.', 'info');
@@ -200,6 +205,7 @@ function setupWebSocket() {
                 break;
 
             case 'elements_updated':
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 lowerValueCache?.clear?.();
                 console.log(
                     `[WebSocket] Received element updates for ${data.elements.length} items.`
@@ -252,6 +258,7 @@ function setupWebSocket() {
                 break;
 
             case 'revit_selection_update': {
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 console.log(
                     `[WebSocket] Revit/Blender selection update received: ${data.unique_ids.length} items`
                 ); // 디버깅
@@ -338,6 +345,7 @@ function setupWebSocket() {
                 break;
             }
             case 'training_progress_update':
+                console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 console.log(
                     '[WebSocket] Received AI training progress update:',
                     data
