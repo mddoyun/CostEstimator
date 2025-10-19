@@ -1,8 +1,10 @@
+// ▼▼▼ [교체] 파일 최상단의 전역 변수 선언 영역 전체를 아래 코드로 교체 ▼▼▼
 // main.js
 let allRevitData = [];
 let currentProjectId = null;
 let currentMode = 'revit';
-// ✅ ADD: CSRF 토큰 헬퍼 & 전역 상수
+
+// CSRF 토큰 헬퍼
 function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -10,47 +12,12 @@ function getCookie(name) {
         return decodeURIComponent(parts.pop().split(';').shift());
     return null;
 }
-
-// 템플릿에 {% csrf_token %}이 이미 있으므로 우선 DOM에서, 없으면 쿠키에서
 let csrftoken =
     document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
     getCookie('csrftoken');
-let activeTab = 'data-management';
-let loadedQuantityMembers = []; //
-let loadedPropertyMappingRules = []; //
-let qmColumnFilters = {};
-let selectedQmIds = new Set();
-let qmCollapsedGroups = {};
-let currentQmGroupByFields = [];
-let lastSelectedQmRowIndex = -1;
-let loadedSpaceClassifications = []; //
-let loadedCostCodes = []; //
-let loadedMemberMarks = [];
-let activeQmView = 'quantity-member-view'; //
 
-let loadedCostItems = [];
-let ciColumnFilters = {};
-let selectedCiIds = new Set();
-let ciCollapsedGroups = {};
-let currentCiGroupByFields = [];
-let lastSelectedCiRowIndex = -1;
-let loadedCostCodeRules = [];
-let loadedMemberMarkAssignmentRules = [];
-let loadedCostCodeAssignmentRules = [];
-let loadedSpaceClassificationRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
-let loadedSpaceAssignmentRules = []; // <<< [추가] 새 룰셋 데이터를 담을 변수
-
-let currentCsvImportUrl = null; // <<< [추가] 현재 진행 중인 CSV 가져오기 URL을 저장할 변수
-
-let allTags = []; // 프로젝트의 모든 태그를 저장해 둘 변수
-let boqFilteredRawElementIds = new Set(); // BOQ 탭에서 Revit 선택 필터링을 위한 ID 집합
-let spaceMappingState = { active: false, spaceId: null, spaceName: '' }; // 공간 맵핑 모드 상태
-let spaceMgmtColumnFilters = {};
-let spaceMgmtSelectedIds = new Set();
-let spaceMgmtCollapsedGroups = {};
-let lastSpaceMgmtSelectedRowIndex = -1;
-let loadedUnitPriceTypesForBoq = []; // [추가] BOQ 탭에서 사용할 단가 기준 목록
-
+// --- 탭 및 상태 관리 ---
+let activeTab = 'ruleset-management'; // 초기 활성 탭 변경 (관리->룰셋)
 const viewerStates = {
     'data-management': {
         selectedElementIds: new Set(),
@@ -74,71 +41,221 @@ const viewerStates = {
     },
 };
 
+// --- 데이터 로딩 상태 ---
+let allTags = [];
+let loadedCostCodes = [];
+let loadedMemberMarks = [];
+let loadedSpaceClassifications = [];
+let loadedQuantityMembers = [];
+let loadedCostItems = [];
 let loadedUnitPriceTypes = [];
 let loadedUnitPrices = [];
+// 룰셋 데이터
+let loadedClassificationRules = [];
+let loadedPropertyMappingRules = [];
+let loadedCostCodeRules = [];
+let loadedMemberMarkAssignmentRules = [];
+let loadedCostCodeAssignmentRules = [];
+let loadedSpaceClassificationRules = [];
+let loadedSpaceAssignmentRules = [];
+
+// --- UI 상태 (Quantity Members) ---
+let qmColumnFilters = {};
+let selectedQmIds = new Set();
+let qmCollapsedGroups = {};
+let currentQmGroupByFields = [];
+let lastSelectedQmRowIndex = -1;
+let activeQmView = 'quantity-member-view';
+
+// --- UI 상태 (Cost Items) ---
+let ciColumnFilters = {};
+let selectedCiIds = new Set();
+let ciCollapsedGroups = {};
+let currentCiGroupByFields = [];
+let lastSelectedCiRowIndex = -1;
+
+// --- UI 상태 (Unit Price Management) ---
 let selectedCostCodeIdForUnitPrice = null;
-let currentUnitPriceEditState = { id: null, originalData: null }; // 단가 수정 시 원본 데이터 저장용
+let currentUnitPriceEditState = { id: null, originalData: null };
 
-// main.js
+// --- UI 상태 (BOQ - DD) ---
+let boqFilteredRawElementIds = new Set();
+let availableBoqFields = [];
+let currentBoqColumns = [];
+let boqColumnAliases = {};
+let lastBoqItemIds = []; // BOQ 상세에서 이전 그룹으로 돌아가기 위한 ID 저장 (미사용 시 제거 가능)
+let currentBoqDetailItemId = null; // BOQ 상세에서 현재 선택된 Item ID
+let loadedUnitPriceTypesForBoq = [];
 
-// ▼▼▼ [교체] 기존 DOMContentLoaded 이벤트 리스너 전체를 아래 코드로 교체해주세요. ▼▼▼
+// --- 기타 상태 ---
+let currentCsvImportUrl = null; // CSV 가져오기 시 사용할 URL 임시 저장
+let spaceMappingState = { active: false, spaceId: null, spaceName: '' }; // 공간 매핑 모드 상태
+
+// --- [신규] AI 모델 및 학습 관련 전역 변수 ---
+let loadedAiModels = []; // 로드된 AI 모델 목록
+let currentTrainingTaskId = null; // 현재 진행 중인 학습 작업 ID
+let currentTrainingStatus = {}; // 현재 학습 상태 정보 (WebSocket 업데이트용)
+let trainingChartInstance = null; // Chart.js 인스턴스 (학습 그래프)
+let uploadedCsvFilename = null; // 학습용으로 업로드된 CSV 파일명 (서버 임시 저장 이름)
+let csvHeaders = []; // 업로드된 CSV 헤더 목록
+let trainedModelTempFilename = null; // 학습 완료 후 임시 저장된 h5 파일명 (DB 저장/다운로드용)
+let trainedModelMetadata = null; // 학습 완료 후 생성된 메타데이터
+
+// --- [신규] 개산견적(SD) 관련 전역 변수 ---
+let sdEnabledCostCodes = []; // SD용 공사코드 목록 (수량 포함)
+let selectedSdModelId = null; // SD 탭에서 선택된 AI 모델 ID
+let sdPredictionChartInstance = null; // Chart.js 인스턴스 (SD 결과 그래프)
+let loadedSdCostItems = []; // SD 탭 하단 테이블용 데이터
+let sdColumnFilters = {}; // SD 테이블 필터
+let selectedSdItemIds = new Set(); // SD 테이블 선택 ID
+let sdCollapsedGroups = {}; // SD 테이블 그룹 상태
+let currentSdGroupByFields = []; // SD 테이블 그룹 필드
+// ▲▲▲ [교체] 여기까지 ▲▲▲
+
+// ▼▼▼ [교체] 기존 DOMContentLoaded 이벤트 리스너 함수 전체를 아래 코드로 교체 ▼▼▼
 document.addEventListener('DOMContentLoaded', () => {
+    console.log(
+        '[DEBUG] DOMContentLoaded start - Setting up event listeners...'
+    ); // 디버깅
+
+    // CSRF 토큰 설정
     const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
     if (tokenInput && tokenInput.value) {
-        csrftoken = tokenInput.value; // 전역 let 변수에 안전하게 갱신
+        csrftoken = tokenInput.value;
+        console.log('[DEBUG] CSRF token updated from input field.');
+    } else {
+        console.warn(
+            '[DEBUG] CSRF token input field not found, using cookie value.'
+        );
     }
+
+    // 웹소켓 설정
     setupWebSocket();
+
+    // --- 기본 UI 요소 리스너 ---
     const projectSelector = document.getElementById('project-selector');
-
-    // --- 이벤트 리스너 설정 (Null-safe) ---
     projectSelector?.addEventListener('change', handleProjectChange);
-
-    // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
-    // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
     document
-        .getElementById('add-ci-group-level-btn')
-        ?.addEventListener('click', addCiGroupingLevel);
+        .getElementById('create-project-btn')
+        ?.addEventListener('click', createNewProject);
+    document
+        .getElementById('project-export-btn')
+        ?.addEventListener('click', exportCurrentProject);
+    document
+        .getElementById('project-import-btn')
+        ?.addEventListener('click', () =>
+            document.getElementById('project-import-input').click()
+        );
+    document
+        .getElementById('project-import-input')
+        ?.addEventListener('change', handleProjectImport);
+    document
+        .getElementById('batch-auto-update-btn')
+        ?.addEventListener('click', runBatchAutoUpdate);
+    document
+        .querySelectorAll('input[name="connector_mode"]')
+        .forEach((radio) =>
+            radio.addEventListener('change', handleConnectorModeChange)
+        );
 
-    // 테이블 컨테이너에 이벤트 위임을 사용하여 모든 하위 요소의 이벤트를 처리
-    const ciTableContainer = document.getElementById('ci-table-container');
-    if (ciTableContainer) {
-        // '수정', '삭제', '저장', '취소' 버튼 및 행 선택, 그룹 토글 클릭 처리
-        ciTableContainer.addEventListener('click', handleCostItemActions);
+    // --- 네비게이션 리스너 ---
+    document
+        .querySelectorAll('.main-nav .nav-button')
+        .forEach((button) =>
+            button.addEventListener('click', handleMainNavClick)
+        );
+    document
+        .querySelectorAll('.sub-nav-button')
+        .forEach((button) =>
+            button.addEventListener('click', handleSubNavClick)
+        );
 
-        // 컬럼 필터 입력 처리 (Enter 키 입력 시)
-        ciTableContainer.addEventListener('keyup', handleCiColumnFilter);
+    // --- CSV 파일 입력 리스너 (공통) ---
+    document
+        .getElementById('csv-file-input')
+        ?.addEventListener('change', handleCsvFileSelect);
+
+    // --- 각 탭별 UI 요소 리스너 설정 (헬퍼 함수 호출) ---
+    setupDataManagementListeners();
+    setupTagManagementListeners();
+    setupSpaceManagementListeners();
+    setupRulesetManagementListeners();
+    setupCostCodeManagementListeners();
+    setupMemberMarkManagementListeners();
+    setupQuantityMembersListeners();
+    setupCostItemsListeners();
+    setupDetailedEstimationListeners(); // DD 탭
+    setupUnitPriceManagementListeners();
+    setupAiModelManagementListeners(); // [신규] AI 탭
+    setupSchematicEstimationListeners(); // [신규] SD 탭
+
+    console.log('[DEBUG] All specific tab listeners setup complete.');
+
+    // --- 초기 프로젝트 로드 ---
+    currentProjectId = projectSelector ? projectSelector.value : null;
+    if (currentProjectId) {
+        console.log(
+            `[DEBUG] Initial project ID: ${currentProjectId}. Preparing to load initial data based on default tab...`
+        );
+        // 초기 데이터 로드는 아래 기본 탭 활성화 로직에서 처리
+    } else {
+        console.log('[DEBUG] No initial project selected.');
+        clearAllTabData(); // 프로젝트 없으면 초기화
     }
-    // 주 내비게이션 버튼 이벤트 리스너
-    document.querySelectorAll('.main-nav .nav-button').forEach((button) => {
-        button.addEventListener('click', handleMainNavClick);
-    });
 
-    // 보조 내비게이션 버튼 이벤트 리스너
-    document.querySelectorAll('.sub-nav-button').forEach((button) => {
-        button.addEventListener('click', handleSubNavClick);
-    });
-
-    // 페이지 로드 시 기본 탭(관리 -> 룰셋 관리)을 강제로 활성화
-    const defaultPrimaryTab = document.querySelector(
+    // --- 기본 탭 강제 활성화 (관리 -> 룰셋 관리) ---
+    // 페이지 로드 시 기본적으로 보여줄 탭을 설정합니다.
+    const defaultPrimaryTabButton = document.querySelector(
         '.main-nav .nav-button[data-primary-tab="management"]'
     );
-    if (defaultPrimaryTab) {
-        // 약간의 지연을 주어 다른 스크립트가 로드될 시간을 확보
-        setTimeout(() => defaultPrimaryTab.click(), 100);
+    const defaultSubTabButton = document.querySelector(
+        '#secondary-nav-management .sub-nav-button[data-tab="ruleset-management"]'
+    );
+
+    if (defaultPrimaryTabButton && defaultSubTabButton) {
+        // 이미 활성화된 보조 탭이 있는지 확인 (예: 새로고침 후 브라우저가 상태 유지)
+        const alreadyActiveSubTab = document.querySelector(
+            '.secondary-nav.active .sub-nav-button.active'
+        );
+
+        if (
+            !alreadyActiveSubTab ||
+            !alreadyActiveSubTab.closest('#secondary-nav-management')
+        ) {
+            console.log(
+                '[DEBUG] No relevant active sub-tab found. Forcing activation of default: Management -> Ruleset Management'
+            );
+            // 주 탭 클릭 -> 보조 탭 자동 클릭 순서로 진행 (약간의 지연 추가)
+            setTimeout(() => {
+                defaultPrimaryTabButton.click();
+                // handleMainNavClick 함수가 자동으로 첫 번째 보조 탭(룰셋 관리)을 클릭해줍니다.
+            }, 150); // DOM 렌더링 및 다른 스크립트 실행 시간 확보
+        } else {
+            console.log(
+                '[DEBUG] Default tab activation skipped, an active sub-tab already exists in Management:',
+                alreadyActiveSubTab.dataset.tab
+            );
+            // 이미 활성 탭이 있으면 해당 탭 데이터 로드
+            activeTab = alreadyActiveSubTab.dataset.tab;
+            loadDataForActiveTab();
+        }
+    } else {
+        console.warn(
+            '[WARN] Could not find default tab buttons (Management -> Ruleset) for initial activation.'
+        );
+        // 기본 탭 로드가 안될 경우 대비, 프로젝트가 있으면 데이터 관리 탭이라도 로드 시도
+        if (currentProjectId) {
+            activeTab = 'data-management'; // 임시 기본값
+            loadDataForActiveTab();
+        }
     }
 
-    const filterAiCheckbox = document.getElementById('boq-filter-ai');
-    const filterDdCheckbox = document.getElementById('boq-filter-dd');
+    console.log('[DEBUG] DOMContentLoaded end - Initial setup finished.');
+});
 
-    if (filterAiCheckbox) {
-        filterAiCheckbox.addEventListener('change', generateBoqReport);
-    }
-    if (filterDdCheckbox) {
-        filterDdCheckbox.addEventListener('change', generateBoqReport);
-    }
-    // --- 각 탭 내부에 있는 요소들에 대한 이벤트 리스너 ---
-    // 각 요소가 존재하는지 확인 후 이벤트를 등록합니다.
+// --- 리스너 설정 헬퍼 함수들 (기존 함수들 포함) ---
 
+function setupDataManagementListeners() {
     document
         .getElementById('fetchDataBtn')
         ?.addEventListener('click', fetchDataFromClient);
@@ -149,400 +266,104 @@ document.addEventListener('DOMContentLoaded', () => {
         .getElementById('select-in-client-btn')
         ?.addEventListener('click', selectInClient);
     document
-        .querySelectorAll('input[name="connector_mode"]')
-        .forEach((radio) => {
-            radio.addEventListener('change', (e) => {
-                currentMode = e.target.value;
-                showToast(
-                    `${
-                        currentMode === 'revit' ? 'Revit' : 'Blender'
-                    } 모드로 전환합니다.`,
-                    'info'
-                );
-            });
-        });
-
-    const createProjectBtn = document.getElementById('create-project-btn');
-    if (createProjectBtn)
-        createProjectBtn.addEventListener('click', createNewProject);
-
-    const createTagBtn = document.getElementById('create-tag-btn');
-    if (createTagBtn) createTagBtn.addEventListener('click', createNewTag);
-
-    const tagList = document.getElementById('tag-list');
-    if (tagList) tagList.addEventListener('click', handleTagListActions);
-
-    const importTagsBtn = document.getElementById('import-tags-btn');
-    if (importTagsBtn)
-        importTagsBtn.addEventListener('click', () =>
-            document.getElementById('tag-file-input').click()
-        );
-
-    const tagFileInput = document.getElementById('tag-file-input');
-    if (tagFileInput) tagFileInput.addEventListener('change', importTags);
-
-    const exportTagsBtn = document.getElementById('export-tags-btn');
-    if (exportTagsBtn) exportTagsBtn.addEventListener('click', exportTags);
-
-    const renderTableBtn = document.getElementById('render-table-btn');
-    if (renderTableBtn)
-        renderTableBtn.addEventListener('click', () =>
+        .getElementById('render-table-btn')
+        ?.addEventListener('click', () =>
             renderDataTable(
                 'data-management-data-table-container',
                 'data-management'
             )
         );
-
     document
         .querySelectorAll('#data-management .view-tab-button')
-        .forEach((button) => {
-            button.addEventListener('click', handleViewTabClick);
-        });
-
-    const addGroupLevelBtn = document.getElementById('add-group-level-btn');
-    if (addGroupLevelBtn)
-        addGroupLevelBtn.addEventListener('click', () =>
-            addGroupingLevel('data-management')
+        .forEach((button) =>
+            button.addEventListener('click', handleViewTabClick)
         );
-
-    const dmGroupingControls = document.getElementById(
-        'data-management-grouping-controls'
-    );
-    if (dmGroupingControls) {
-        dmGroupingControls.addEventListener('change', () =>
+    document
+        .getElementById('add-group-level-btn')
+        ?.addEventListener('click', () => addGroupingLevel('data-management'));
+    document
+        .getElementById('data-management-grouping-controls')
+        ?.addEventListener('change', () =>
             renderDataTable(
                 'data-management-data-table-container',
                 'data-management'
             )
-        );
-    }
-
-    const clearSelectionFilterBtn = document.getElementById(
-        'clear-selection-filter-btn'
-    );
-    if (clearSelectionFilterBtn)
-        clearSelectionFilterBtn.addEventListener('click', clearSelectionFilter);
-
-    const assignTagBtn = document.getElementById('assign-tag-btn');
-    if (assignTagBtn)
-        assignTagBtn.addEventListener('click', assignTagsToSelection);
-
-    const applyRulesBtn = document.getElementById('apply-rules-btn');
-    if (applyRulesBtn)
-        applyRulesBtn.addEventListener('click', applyClassificationRules);
-
-    const clearTagsBtn = document.getElementById('clear-tags-btn');
-    if (clearTagsBtn)
-        clearTagsBtn.addEventListener('click', clearTagsFromSelection);
-
-    const tableContainer = document.getElementById(
+        ); // 그룹핑 변경 시 렌더
+    document
+        .getElementById('clear-selection-filter-btn')
+        ?.addEventListener('click', clearSelectionFilter);
+    document
+        .getElementById('assign-tag-btn')
+        ?.addEventListener('click', assignTagsToSelection);
+    document
+        .getElementById('apply-rules-btn')
+        ?.addEventListener('click', () => applyClassificationRules(false)); // 확인창 표시
+    document
+        .getElementById('clear-tags-btn')
+        ?.addEventListener('click', clearTagsFromSelection);
+    const dmTableContainer = document.getElementById(
         'data-management-data-table-container'
-    ); // 이렇게 바꾸고,
-    if (tableContainer) {
-        tableContainer.addEventListener('keyup', (e) =>
+    );
+    if (dmTableContainer) {
+        dmTableContainer.addEventListener('keyup', (e) =>
             handleColumnFilter(e, 'data-management')
-        );
-
-        // 클릭 이벤트 리스너를 아래와 같이 수정합니다.
-        tableContainer.addEventListener('click', (e) =>
+        ); // 필터 입력
+        dmTableContainer.addEventListener('click', (e) =>
             handleTableClick(e, 'data-management')
-        );
+        ); // 행 선택, 그룹 토글
     }
-
-    document.querySelectorAll('.ruleset-nav-button').forEach((button) => {
-        button.addEventListener('click', handleRulesetNavClick);
-    });
-
-    const createQmManualBtn = document.getElementById('create-qm-manual-btn');
-    if (createQmManualBtn)
-        createQmManualBtn.addEventListener('click', createManualQuantityMember);
-
-    const createQmAutoBtn = document.getElementById('create-qm-auto-btn');
-    if (createQmAutoBtn)
-        createQmAutoBtn.addEventListener('click', createAutoQuantityMembers);
+    // 좌측 패널 탭 (필드선택, 분류, BIM속성)
     document
-        .getElementById('apply-assignment-rules-btn')
-        ?.addEventListener('click', applyAssignmentRules);
+        .querySelector('#data-management .left-panel-tabs')
+        ?.addEventListener('click', handleLeftPanelTabClick);
+    console.log('[DEBUG] Data Management listeners setup complete.');
+}
 
-    const qmTableContainer = document.getElementById('qm-table-container');
-    if (qmTableContainer)
-        qmTableContainer.addEventListener('click', handleQuantityMemberActions);
-
-    const qmClearCostCodesBtn = document.getElementById(
-        'qm-clear-cost-codes-btn'
-    );
-    if (qmClearCostCodesBtn)
-        qmClearCostCodesBtn.addEventListener('click', clearCostCodesFromQm);
-
-    const qmAssignCostCodeBtn = document.getElementById(
-        'qm-assign-cost-code-btn'
-    );
-    if (qmAssignCostCodeBtn) {
-        qmAssignCostCodeBtn.addEventListener('click', assignCostCodeToQm);
-    }
-    const costCodesContainer = document.getElementById(
-        'cost-codes-table-container'
-    );
-    if (costCodesContainer)
-        costCodesContainer.addEventListener('click', handleCostCodeActions);
-
-    // ▼▼▼ [추가] 이 코드 블록을 추가해주세요. ▼▼▼
-    const qmAssignMemberMarkBtn = document.getElementById(
-        'qm-assign-member-mark-btn'
-    );
-    if (qmAssignMemberMarkBtn) {
-        qmAssignMemberMarkBtn.addEventListener('click', assignMemberMarkToQm);
-    }
-
-    const qmClearMemberMarksBtn = document.getElementById(
-        'qm-clear-member-marks-btn'
-    );
-    if (qmClearMemberMarksBtn) {
-        qmClearMemberMarksBtn.addEventListener('click', clearMemberMarksFromQm);
-    }
-
+function setupTagManagementListeners() {
     document
-        .getElementById('create-ci-manual-btn')
-        ?.addEventListener('click', createManualCostItem);
-
+        .getElementById('create-tag-btn')
+        ?.addEventListener('click', createNewTag);
     document
-        .getElementById('create-ci-auto-btn')
-        ?.addEventListener('click', createAutoCostItems);
-    // ... (이하 모든 addEventListener에 대해 동일한 패턴으로 null-check를 적용했다고 가정합니다) ...
-    // 제공된 파일 기준으로 모든 리스너를 안전하게 감쌌습니다.
-
-    const classificationRuleset = document.getElementById(
-        'classification-ruleset'
-    );
-    if (classificationRuleset)
-        classificationRuleset.addEventListener(
-            'click',
-            handleClassificationRuleActions
+        .getElementById('tag-list')
+        ?.addEventListener('click', handleTagListActions); // 수정, 삭제 위임
+    document
+        .getElementById('import-tags-btn')
+        ?.addEventListener('click', () =>
+            document.getElementById('tag-file-input').click()
         );
+    document
+        .getElementById('tag-file-input')
+        ?.addEventListener('change', importTags);
+    document
+        .getElementById('export-tags-btn')
+        ?.addEventListener('click', exportTags);
+    console.log('[DEBUG] Tag Management listeners setup complete.');
+}
 
-    const leftPanelTabs = document.querySelector('.left-panel-tabs');
-    if (leftPanelTabs) {
-        leftPanelTabs.addEventListener('click', handleLeftPanelTabClick);
-    }
-
-    const addClassificationRuleBtn = document.getElementById(
-        'add-classification-rule-btn'
-    );
-    if (addClassificationRuleBtn) {
-        addClassificationRuleBtn.addEventListener('click', () => {
-            // 'new' 상태로 테이블을 다시 그려 새 규칙 입력 행을 추가합니다.
-            renderClassificationRulesetTable(loadedClassificationRules, 'new');
-        });
-    }
-
-    const addMappingRuleBtn = document.getElementById('add-mapping-rule-btn');
-    if (addMappingRuleBtn) {
-        addMappingRuleBtn.addEventListener('click', () => {
-            renderPropertyMappingRulesetTable(
-                loadedPropertyMappingRules,
-                'new'
-            );
-        });
-    }
-
-    const addCostCodeRuleBtn = document.getElementById('add-costcode-rule-btn');
-    if (addCostCodeRuleBtn) {
-        addCostCodeRuleBtn.addEventListener('click', () => {
-            renderCostCodeRulesetTable(loadedCostCodeRules, 'new');
-        });
-    }
-
-    const addMemberMarkAssignmentRuleBtn = document.getElementById(
-        'add-member-mark-assignment-rule-btn'
-    );
-    if (addMemberMarkAssignmentRuleBtn) {
-        addMemberMarkAssignmentRuleBtn.addEventListener('click', () => {
-            renderMemberMarkAssignmentRulesetTable(
-                loadedMemberMarkAssignmentRules,
-                'new'
-            );
-        });
-    }
-
-    const addCostCodeAssignmentRuleBtn = document.getElementById(
-        'add-cost-code-assignment-rule-btn'
-    );
-    if (addCostCodeAssignmentRuleBtn) {
-        addCostCodeAssignmentRuleBtn.addEventListener('click', () => {
-            renderCostCodeAssignmentRulesetTable(
-                loadedCostCodeAssignmentRules,
-                'new'
-            );
-        });
-    }
-
-    // 2. 각 룰셋 테이블 내부의 동작(수정, 삭제, 저장 등)을 위한 이벤트 리스너 (이벤트 위임)
-    if (classificationRuleset) {
-        classificationRuleset.addEventListener(
-            'click',
-            handleClassificationRuleActions
-        );
-    }
-
-    const mappingRuleset = document.getElementById(
-        'mapping-ruleset-table-container'
-    );
-    if (mappingRuleset) {
-        mappingRuleset.addEventListener(
-            'click',
-            handlePropertyMappingRuleActions
-        );
-    }
-
-    const costCodeRuleset = document.getElementById(
-        'costcode-ruleset-table-container'
-    );
-    if (costCodeRuleset) {
-        costCodeRuleset.addEventListener('click', handleCostCodeRuleActions);
-    }
-
-    const memberMarkAssignmentRuleset = document.getElementById(
-        'member-mark-assignment-ruleset-table-container'
-    );
-    if (memberMarkAssignmentRuleset) {
-        memberMarkAssignmentRuleset.addEventListener(
-            'click',
-            handleMemberMarkAssignmentRuleActions
-        );
-    }
-
-    const addRootSpaceBtn = document.getElementById('add-root-space-btn');
-    if (addRootSpaceBtn) {
-        addRootSpaceBtn.addEventListener('click', () =>
-            handleSpaceActions('add_root')
-        );
-    }
+function setupSpaceManagementListeners() {
+    document
+        .getElementById('add-root-space-btn')
+        ?.addEventListener('click', () => handleSpaceActions('add_root'));
+    document
+        .getElementById('apply-space-rules-btn')
+        ?.addEventListener('click', applySpaceClassificationRules);
+    document
+        .getElementById('export-space-classifications-btn')
+        ?.addEventListener('click', exportSpaceClassifications);
+    document
+        .getElementById('import-space-classifications-btn')
+        ?.addEventListener('click', triggerSpaceClassificationsImport);
 
     const spaceTreeContainer = document.getElementById('space-tree-container');
-    if (spaceTreeContainer) {
-        spaceTreeContainer.addEventListener('click', (e) => {
-            const target = e.target;
-            const li = target.closest('li');
-            if (!li) return;
-
-            const spaceId = li.dataset.id;
-            const spaceName = li.dataset.name;
-
-            if (target.classList.contains('add-child-space-btn')) {
-                handleSpaceActions('add_child', {
-                    parentId: spaceId,
-                    parentName: spaceName,
-                });
-            } else if (target.classList.contains('rename-space-btn')) {
-                handleSpaceActions('rename', { id: spaceId, name: spaceName });
-            } else if (target.classList.contains('delete-space-btn')) {
-                handleSpaceActions('delete', { id: spaceId, name: spaceName });
-            } else if (target.classList.contains('assign-elements-btn')) {
-                handleSpaceActions('assign_elements', {
-                    id: spaceId,
-                    name: spaceName,
-                });
-            }
-            // ▼▼▼ [추가] 이 else if 블록을 추가합니다. ▼▼▼
-            else if (target.classList.contains('view-assigned-btn')) {
-                showAssignedElements(spaceId, spaceName);
-            }
-        });
-    }
-
-    const costCodeAssignmentRuleset = document.getElementById(
-        'cost-code-assignment-ruleset-table-container'
-    );
-    if (costCodeAssignmentRuleset) {
-        costCodeAssignmentRuleset.addEventListener(
-            'click',
-            handleCostCodeAssignmentRuleActions
-        );
-    }
-
-    currentProjectId = projectSelector ? projectSelector.value : null;
-    initializeBoqUI();
-    const confirmSpaceMapBtn = document.getElementById(
-        'confirm-space-mapping-btn'
-    );
-    if (confirmSpaceMapBtn)
-        confirmSpaceMapBtn.addEventListener('click', applySpaceElementMapping);
-
-    const cancelSpaceMapBtn = document.getElementById(
-        'cancel-space-mapping-btn'
-    );
-    if (cancelSpaceMapBtn)
-        cancelSpaceMapBtn.addEventListener('click', hideSpaceMappingPanel);
-
-    const spaceTableContainer = document.getElementById(
-        'space-data-table-container'
-    );
-    if (spaceTableContainer) {
-        // spaceTableContainer.addEventListener("keyup", (e) => handleColumnFilter(e, 'space-management')); // 필요 시 필터 기능 추가
-        spaceTableContainer.addEventListener('click', (e) =>
-            handleTableClick(e, 'space-management')
-        );
-    }
-
-    const spaceRightPanelTabs = document.getElementById(
-        'space-right-panel-tabs'
-    );
-    if (spaceRightPanelTabs) {
-        spaceRightPanelTabs.addEventListener('click', (e) => {
-            const clickedButton = e.target.closest('.left-panel-tab-button');
-            if (!clickedButton || clickedButton.classList.contains('active'))
-                return;
-
-            const tabContainer = clickedButton.closest(
-                '.left-panel-tab-container'
-            );
-            const targetTabId = clickedButton.dataset.tab;
-
-            tabContainer
-                .querySelector('.left-panel-tab-button.active')
-                .classList.remove('active');
-            tabContainer
-                .querySelector('.left-panel-tab-content.active')
-                .classList.remove('active');
-
-            clickedButton.classList.add('active');
-            tabContainer
-                .querySelector(`#${targetTabId}`)
-                .classList.add('active');
-        });
+    if (spaceTreeContainer && !spaceTreeContainer.dataset.listenerAttached) {
+        spaceTreeContainer.addEventListener('click', handleSpaceTreeActions); // 트리 내 버튼 위임
+        spaceTreeContainer.dataset.listenerAttached = 'true';
     }
     const smPanel = document.getElementById('space-management');
     if (smPanel) {
-        // 탭 전환 (BIM속성, 필드선택)
         smPanel
             .querySelector('.left-panel-tabs')
-            ?.addEventListener('click', (e) => {
-                const button = e.target.closest('.left-panel-tab-button');
-                if (!button || button.classList.contains('active')) return;
-
-                const tabContainer = button.closest(
-                    '.left-panel-tab-container'
-                );
-
-                tabContainer
-                    .querySelector('.left-panel-tab-button.active')
-                    .classList.remove('active');
-                tabContainer
-                    .querySelector('.left-panel-tab-content.active')
-                    .classList.remove('active');
-
-                button.classList.add('active');
-                const contentId = button.dataset.tab;
-                tabContainer
-                    .querySelector(`#${contentId}`)
-                    .classList.add('active');
-
-                if (contentId === 'sm-bim-properties') {
-                    renderBimPropertiesTable('space-management');
-                }
-            });
-
-        // '테이블에 선택 적용' 버튼
+            ?.addEventListener('click', handleLeftPanelTabClick); // 좌측 패널 탭
         document
             .getElementById('sm-render-table-btn')
             ?.addEventListener('click', () =>
@@ -551,15 +372,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     'space-management'
                 )
             );
-
-        // '그룹핑 추가' 버튼
         document
             .getElementById('add-space-management-group-level-btn')
             ?.addEventListener('click', () =>
                 addGroupingLevel('space-management')
             );
-
-        // 그룹핑 Select 변경
         document
             .getElementById('space-management-grouping-controls')
             ?.addEventListener('change', () =>
@@ -567,530 +384,385 @@ document.addEventListener('DOMContentLoaded', () => {
                     'space-management-data-table-container',
                     'space-management'
                 )
-            );
-
-        // 테이블 내 이벤트 위임 (필터, 행 선택, 그룹 토글)
+            ); // 그룹핑 변경
         const smTableContainer = document.getElementById(
             'space-management-data-table-container'
         );
         if (smTableContainer) {
             smTableContainer.addEventListener('keyup', (e) =>
                 handleColumnFilter(e, 'space-management')
-            );
+            ); // 필터
             smTableContainer.addEventListener('click', (e) =>
                 handleTableClick(e, 'space-management')
-            );
+            ); // 행 선택, 그룹 토글
         }
     }
-
+    // 할당된 객체 모달 리스너
     const assignedElementsModal = document.getElementById(
         'assigned-elements-modal'
     );
     if (assignedElementsModal) {
-        // 모달 닫기 버튼 (X 버튼, 닫기 버튼)
         assignedElementsModal
             .querySelector('.modal-close-btn')
-            .addEventListener('click', () => {
-                assignedElementsModal.style.display = 'none';
-            });
+            ?.addEventListener('click', closeAssignedElementsModal);
         document
             .getElementById('modal-close-assigned-elements')
-            .addEventListener('click', () => {
-                assignedElementsModal.style.display = 'none';
-            });
-
-        // '선택 항목 할당 해제' 버튼
+            ?.addEventListener('click', closeAssignedElementsModal);
         document
             .getElementById('modal-unassign-btn')
-            .addEventListener('click', handleUnassignElements);
-
-        // 테이블 내부 이벤트 위임 (전체 선택 체크박스)
-        const tableContainer = assignedElementsModal.querySelector(
-            '#assigned-elements-table-container'
-        );
-        tableContainer.addEventListener('click', (e) => {
-            if (e.target.id === 'unassign-select-all') {
-                tableContainer
-                    .querySelectorAll('.unassign-checkbox')
-                    .forEach((cb) => {
-                        cb.checked = e.target.checked;
-                    });
-            }
-        });
+            ?.addEventListener('click', handleUnassignElements);
+        assignedElementsModal
+            .querySelector('#assigned-elements-table-container')
+            ?.addEventListener('click', handleAssignedElementsTableClick); // 전체 선택 등
     }
+    console.log('[DEBUG] Space Management listeners setup complete.');
+}
+
+function setupRulesetManagementListeners() {
+    document
+        .querySelectorAll('.ruleset-nav-button')
+        .forEach((button) =>
+            button.addEventListener('click', handleRulesetNavClick)
+        ); // 룰셋 종류 탭
+    // 각 룰셋 '새 규칙 추가' 버튼
+    document
+        .getElementById('add-classification-rule-btn')
+        ?.addEventListener('click', () =>
+            renderClassificationRulesetTable(loadedClassificationRules, 'new')
+        );
+    document
+        .getElementById('add-mapping-rule-btn')
+        ?.addEventListener('click', () =>
+            renderPropertyMappingRulesetTable(loadedPropertyMappingRules, 'new')
+        );
+    document
+        .getElementById('add-costcode-rule-btn')
+        ?.addEventListener('click', () =>
+            renderCostCodeRulesetTable(loadedCostCodeRules, 'new')
+        );
+    document
+        .getElementById('add-member-mark-assignment-rule-btn')
+        ?.addEventListener('click', () =>
+            renderMemberMarkAssignmentRulesetTable(
+                loadedMemberMarkAssignmentRules,
+                'new'
+            )
+        );
+    document
+        .getElementById('add-cost-code-assignment-rule-btn')
+        ?.addEventListener('click', () =>
+            renderCostCodeAssignmentRulesetTable(
+                loadedCostCodeAssignmentRules,
+                'new'
+            )
+        );
     document
         .getElementById('add-space-classification-rule-btn')
-        ?.addEventListener('click', () => {
+        ?.addEventListener('click', () =>
             renderSpaceClassificationRulesetTable(
                 loadedSpaceClassificationRules,
                 'new'
-            );
-        });
-
+            )
+        );
+    document
+        .getElementById('add-space-assignment-rule-btn')
+        ?.addEventListener('click', () =>
+            renderSpaceAssignmentRulesetTable(loadedSpaceAssignmentRules, 'new')
+        );
+    // 각 룰셋 테이블 이벤트 위임 (수정, 삭제, 저장, 취소)
+    document
+        .getElementById('classification-ruleset')
+        ?.addEventListener('click', handleClassificationRuleActions);
+    document
+        .getElementById('mapping-ruleset-table-container')
+        ?.addEventListener('click', handlePropertyMappingRuleActions);
+    document
+        .getElementById('costcode-ruleset-table-container')
+        ?.addEventListener('click', handleCostCodeRuleActions);
+    document
+        .getElementById('member-mark-assignment-ruleset-table-container')
+        ?.addEventListener('click', handleMemberMarkAssignmentRuleActions);
+    document
+        .getElementById('cost-code-assignment-ruleset-table-container')
+        ?.addEventListener('click', handleCostCodeAssignmentRuleActions);
     document
         .getElementById('space-classification-ruleset-table-container')
         ?.addEventListener('click', handleSpaceClassificationRuleActions);
-
     document
-        .getElementById('apply-space-rules-btn')
-        ?.addEventListener('click', applySpaceClassificationRules);
+        .getElementById('space-assignment-ruleset-table-container')
+        ?.addEventListener('click', handleSpaceAssignmentRuleActions);
+    // CSV 가져오기/내보내기 버튼 (동적 설정)
+    setupRulesetCsvButtons();
+    console.log('[DEBUG] Ruleset Management listeners setup complete.');
+}
 
+function setupCostCodeManagementListeners() {
+    document
+        .getElementById('add-cost-code-btn')
+        ?.addEventListener('click', () =>
+            renderCostCodesTable(loadedCostCodes, 'new')
+        );
+    document
+        .getElementById('cost-codes-table-container')
+        ?.addEventListener('click', handleCostCodeActions); // 수정, 삭제, 저장, 취소 위임
+    document
+        .getElementById('export-cost-codes-btn')
+        ?.addEventListener('click', exportCostCodes);
+    document
+        .getElementById('import-cost-codes-btn')
+        ?.addEventListener('click', triggerCostCodesImport);
+    console.log('[DEBUG] Cost Code Management listeners setup complete.');
+}
+
+function setupMemberMarkManagementListeners() {
+    document
+        .getElementById('add-member-mark-btn')
+        ?.addEventListener('click', () =>
+            renderMemberMarksTable(loadedMemberMarks, 'new')
+        );
+    document
+        .getElementById('member-marks-table-container')
+        ?.addEventListener('click', handleMemberMarkActions); // 수정, 삭제, 저장, 취소 위임
+    document
+        .getElementById('export-member-marks-btn')
+        ?.addEventListener('click', exportMemberMarks);
+    document
+        .getElementById('import-member-marks-btn')
+        ?.addEventListener('click', triggerMemberMarksImport);
+    console.log('[DEBUG] Member Mark Management listeners setup complete.');
+}
+
+function setupQuantityMembersListeners() {
+    document
+        .getElementById('create-qm-manual-btn')
+        ?.addEventListener('click', createManualQuantityMember);
+    document
+        .getElementById('create-qm-auto-btn')
+        ?.addEventListener('click', () => createAutoQuantityMembers(false)); // 확인창 표시
+    document
+        .getElementById('apply-assignment-rules-btn')
+        ?.addEventListener('click', () => applyAssignmentRules(false)); // 확인창 표시
+    const qmTableContainer = document.getElementById('qm-table-container');
+    if (qmTableContainer) {
+        qmTableContainer.addEventListener('click', handleQuantityMemberActions); // 수정, 삭제, 저장, 취소, 행 선택, 그룹 토글 위임
+        qmTableContainer.addEventListener('keyup', handleQmColumnFilter); // 필터
+    }
+    document
+        .getElementById('qm-properties-container')
+        ?.closest('.control-box')
+        ?.addEventListener('click', handleQmPropertiesActions); // 속성 추가/삭제 위임
+    // 할당 버튼들
+    document
+        .getElementById('qm-assign-cost-code-btn')
+        ?.addEventListener('click', assignCostCodeToQm);
+    document
+        .getElementById('qm-clear-cost-codes-btn')
+        ?.addEventListener('click', clearCostCodesFromQm);
+    document
+        .getElementById('qm-assign-member-mark-btn')
+        ?.addEventListener('click', assignMemberMarkToQm);
+    document
+        .getElementById('qm-clear-member-marks-btn')
+        ?.addEventListener('click', clearMemberMarksFromQm);
     document
         .getElementById('qm-assign-space-btn')
         ?.addEventListener('click', assignSpaceToQm);
     document
         .getElementById('qm-clear-spaces-btn')
         ?.addEventListener('click', clearSpacesFromQm);
-
     document
-        .getElementById('add-space-assignment-rule-btn')
-        ?.addEventListener('click', () => {
-            renderSpaceAssignmentRulesetTable(
-                loadedSpaceAssignmentRules,
-                'new'
-            );
-        });
+        .getElementById('add-qm-group-level-btn')
+        ?.addEventListener('click', addQmGroupingLevel);
     document
-        .getElementById('space-assignment-ruleset-table-container')
-        ?.addEventListener('click', handleSpaceAssignmentRuleActions);
+        .querySelector('#quantity-members .details-panel-tabs')
+        ?.addEventListener('click', handleQmDetailTabClick); // 오른쪽 상세 탭
+    document
+        .querySelector('#quantity-members .view-tabs')
+        ?.addEventListener('click', handleQmViewTabClick); // 테이블 뷰 전환 탭
+    console.log('[DEBUG] Quantity Members listeners setup complete.');
+}
 
-    // ▼▼▼ [추가] 룰셋 CSV 가져오기/내보내기 버튼 이벤트 리스너 ▼▼▼
-    const csvFileInput = document.getElementById('csv-file-input');
-    if (csvFileInput) {
-        csvFileInput.addEventListener('change', handleCsvFileSelect);
+function setupCostItemsListeners() {
+    document
+        .getElementById('create-ci-manual-btn')
+        ?.addEventListener('click', createManualCostItem);
+    document
+        .getElementById('create-ci-auto-btn')
+        ?.addEventListener('click', () => createAutoCostItems(false)); // 확인창 표시
+    document
+        .getElementById('add-ci-group-level-btn')
+        ?.addEventListener('click', addCiGroupingLevel);
+    const ciTableContainer = document.getElementById('ci-table-container');
+    if (ciTableContainer) {
+        ciTableContainer.addEventListener('click', handleCostItemActions); // 수정, 삭제, 저장, 취소, 행 선택, 그룹 토글 위임
+        ciTableContainer.addEventListener('keyup', handleCiColumnFilter); // 필터
     }
+    console.log('[DEBUG] Cost Items listeners setup complete.');
+}
 
-    // 이벤트 핸들러 맵
-    const rulesetActions = {
-        'classification-rules': {
-            importBtn: 'import-classification-rules-btn',
-            exportBtn: 'export-classification-rules-btn',
-            path: 'classification',
-            loadFunc: loadClassificationRules,
-        },
-        'mapping-rules': {
-            importBtn: 'import-mapping-rules-btn',
-            exportBtn: 'export-mapping-rules-btn',
-            path: 'property-mapping',
-            loadFunc: loadPropertyMappingRules,
-        },
-        'costcode-rules': {
-            importBtn: 'import-costcode-rules-btn',
-            exportBtn: 'export-costcode-rules-btn',
-            path: 'cost-code',
-            loadFunc: loadCostCodeRules,
-        },
-        'member-mark-assignment-rules': {
-            importBtn: 'import-member-mark-assignment-rules-btn',
-            exportBtn: 'export-member-mark-assignment-rules-btn',
-            path: 'member-mark-assignment',
-            loadFunc: loadMemberMarkAssignmentRules,
-        },
-        'cost-code-assignment-rules': {
-            importBtn: 'import-cost-code-assignment-rules-btn',
-            exportBtn: 'export-cost-code-assignment-rules-btn',
-            path: 'cost-code-assignment',
-            loadFunc: loadCostCodeAssignmentRules,
-        },
-        'space-classification-rules': {
-            importBtn: 'import-space-classification-rules-btn',
-            exportBtn: 'export-space-classification-rules-btn',
-            path: 'space-classification',
-            loadFunc: loadSpaceClassificationRules,
-        },
-        'space-assignment-rules': {
-            importBtn: 'import-space-assignment-rules-btn',
-            exportBtn: 'export-space-assignment-rules-btn',
-            path: 'space-assignment',
-            loadFunc: loadSpaceAssignmentRules,
-        },
-    };
+function setupDetailedEstimationListeners() {
+    document
+        .getElementById('generate-boq-btn')
+        ?.addEventListener('click', generateBoqReport);
+    document
+        .getElementById('boq-reset-columns-btn')
+        ?.addEventListener('click', () => resetBoqColumnsAndRegenerate(false)); // 확인창 표시
+    document
+        .getElementById('export-boq-btn')
+        ?.addEventListener('click', exportBoqReportToExcel);
+    document
+        .getElementById('boq-get-from-client-btn')
+        ?.addEventListener('click', handleBoqGetFromClient);
+    document
+        .getElementById('boq-select-in-client-btn')
+        ?.addEventListener('click', handleBoqSelectInClient);
+    document
+        .getElementById('boq-clear-selection-filter-btn')
+        ?.addEventListener('click', handleBoqClearFilter);
+    document
+        .getElementById('add-boq-group-level-btn')
+        ?.addEventListener('click', addBoqGroupingLevel);
+    // 필터 체크박스
+    document
+        .getElementById('boq-filter-ai')
+        ?.addEventListener('change', generateBoqReport);
+    document
+        .getElementById('boq-filter-dd')
+        ?.addEventListener('change', generateBoqReport);
+    // DD 탭 UI 초기화 (토글 버튼, 탭 등)
+    initializeBoqUI(); // 패널 토글, 상세 탭 리스너 설정
+    console.log('[DEBUG] Detailed Estimation (DD) listeners setup complete.');
+}
 
-    // 맵을 순회하며 이벤트 리스너 동적 할당
-    for (const key in rulesetActions) {
-        const action = rulesetActions[key];
-        const importBtn = document.getElementById(action.importBtn);
-        const exportBtn = document.getElementById(action.exportBtn);
-
-        if (importBtn) {
-            importBtn.addEventListener('click', () => {
-                currentCsvImportUrl = `/connections/api/rules/${action.path}/${currentProjectId}/import/`;
-                csvFileInput.click();
-            });
-        }
-
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => {
-                if (!currentProjectId) {
-                    showToast('먼저 프로젝트를 선택하세요.', 'error');
-                    return;
-                }
-                window.location.href = `/connections/api/rules/${action.path}/${currentProjectId}/export/`;
-            });
-        }
-    }
-    const addCostCodeBtn = document.getElementById('add-cost-code-btn');
-    if (addCostCodeBtn) {
-        addCostCodeBtn.addEventListener('click', () => {
-            // 'new' 상태로 테이블을 다시 그려 새 코드 입력 행을 추가합니다.
-            renderCostCodesTable(loadedCostCodes, 'new');
-        });
-    }
-
-    const addMemberMarkBtn = document.getElementById('add-member-mark-btn');
-    if (addMemberMarkBtn) {
-        addMemberMarkBtn.addEventListener('click', () => {
-            // 'new' 상태로 테이블을 다시 그려 새 일람부호 입력 행을 추가합니다.
-            renderMemberMarksTable(loadedMemberMarks, 'new');
-        });
-    }
-    const costCodesTableContainer = document.getElementById(
-        'cost-codes-table-container'
-    );
-    if (costCodesTableContainer) {
-        costCodesTableContainer.addEventListener(
-            'click',
-            handleCostCodeActions
-        );
-    }
-
-    const memberMarksTableContainer = document.getElementById(
-        'member-marks-table-container'
-    );
-    if (memberMarksTableContainer) {
-        memberMarksTableContainer.addEventListener(
-            'click',
-            handleMemberMarkActions
-        );
-    }
-
-    const exportCostCodesBtn = document.getElementById('export-cost-codes-btn');
-    if (exportCostCodesBtn) {
-        exportCostCodesBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            window.location.href = `/connections/api/cost-codes/${currentProjectId}/export/`;
-        });
-    }
-
-    const importCostCodesBtn = document.getElementById('import-cost-codes-btn');
-    if (importCostCodesBtn) {
-        importCostCodesBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            currentCsvImportUrl = `/connections/api/cost-codes/${currentProjectId}/import/`;
-            csvFileInput.click();
-        });
-    }
-
-    const exportMemberMarksBtn = document.getElementById(
-        'export-member-marks-btn'
-    );
-    if (exportMemberMarksBtn) {
-        exportMemberMarksBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            window.location.href = `/connections/api/member-marks/${currentProjectId}/export/`;
-        });
-    }
-
-    const importMemberMarksBtn = document.getElementById(
-        'import-member-marks-btn'
-    );
-    if (importMemberMarksBtn) {
-        importMemberMarksBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            currentCsvImportUrl = `/connections/api/member-marks/${currentProjectId}/import/`;
-            csvFileInput.click();
-        });
-    }
-
-    const exportSpacesBtn = document.getElementById(
-        'export-space-classifications-btn'
-    );
-    if (exportSpacesBtn) {
-        exportSpacesBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            window.location.href = `/connections/api/space-classifications/${currentProjectId}/export/`;
-        });
-    }
-
-    const importSpacesBtn = document.getElementById(
-        'import-space-classifications-btn'
-    );
-    if (importSpacesBtn) {
-        importSpacesBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('프로젝트를 선택하세요.', 'error');
-                return;
-            }
-            currentCsvImportUrl = `/connections/api/space-classifications/${currentProjectId}/import/`;
-            csvFileInput.click();
-        });
-    }
-
-    // --- '집계' 탭 버튼 이벤트 리스너 ---
-    const generateBoqBtn = document.getElementById('generate-boq-btn');
-    if (generateBoqBtn) {
-        generateBoqBtn.addEventListener('click', generateBoqReport);
-    }
-
-    const boqResetColumnsBtn = document.getElementById('boq-reset-columns-btn');
-    if (boqResetColumnsBtn) {
-        boqResetColumnsBtn.addEventListener(
-            'click',
-            resetBoqColumnsAndRegenerate
-        );
-    }
-
-    const exportBoqBtn = document.getElementById('export-boq-btn');
-    if (exportBoqBtn) {
-        // Excel 내보내기 기능은 아직 구현되지 않았으므로, 임시 함수를 연결합니다.
-        exportBoqBtn.addEventListener('click', exportBoqReportToExcel);
-    }
-
-    const boqGetFromClientBtn = document.getElementById(
-        'boq-get-from-client-btn'
-    );
-    if (boqGetFromClientBtn) {
-        boqGetFromClientBtn.addEventListener('click', handleBoqGetFromClient);
-    }
-
-    const boqSelectInClientBtn = document.getElementById(
-        'boq-select-in-client-btn'
-    );
-    if (boqSelectInClientBtn) {
-        boqSelectInClientBtn.addEventListener('click', handleBoqSelectInClient);
-    }
-
-    const boqClearFilterBtn = document.getElementById(
-        'boq-clear-selection-filter-btn'
-    );
-    if (boqClearFilterBtn) {
-        boqClearFilterBtn.addEventListener('click', handleBoqClearFilter);
-    }
-
-    const addBoqGroupLevelBtn = document.getElementById(
-        'add-boq-group-level-btn'
-    );
-    if (addBoqGroupLevelBtn) {
-        addBoqGroupLevelBtn.addEventListener('click', addBoqGroupingLevel);
-    }
-
-    const exportProjectBtn = document.getElementById('project-export-btn');
-    if (exportProjectBtn) {
-        exportProjectBtn.addEventListener('click', () => {
-            if (!currentProjectId) {
-                showToast('내보낼 프로젝트를 먼저 선택하세요.', 'error');
-                return;
-            }
-            console.log(
-                `[DEBUG] 프로젝트 내보내기 버튼 클릭 (ID: ${currentProjectId})`
-            );
-            window.location.href = `/connections/export-project/${currentProjectId}/`;
-        });
-    }
-
-    const importProjectBtn = document.getElementById('project-import-btn');
-    const importProjectInput = document.getElementById('project-import-input');
-
-    if (importProjectBtn && importProjectInput) {
-        importProjectBtn.addEventListener('click', () => {
-            console.log(
-                '[DEBUG] 프로젝트 가져오기 버튼 클릭. 파일 선택창을 엽니다.'
-            );
-            importProjectInput.click();
-        });
-
-        importProjectInput.addEventListener('change', async (event) => {
-            const file = event.target.files[0];
-            if (!file) {
-                console.log('[DEBUG] 파일 선택이 취소되었습니다.');
-                return;
-            }
-
-            console.log(
-                `[DEBUG] 파일 선택됨: ${file.name}. 서버로 업로드를 시작합니다.`
-            );
-            showToast(
-                '프로젝트 파일을 업로드하고 있습니다. 용량에 따라 시간이 걸릴 수 있습니다.',
-                'info',
-                10000
-            );
-
-            const formData = new FormData();
-            formData.append('project_file', file);
-
-            try {
-                const response = await fetch('/connections/import-project/', {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrftoken },
-                    body: formData,
-                });
-
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(
-                        result.message || '프로젝트 가져오기에 실패했습니다.'
-                    );
-                }
-
-                showToast(result.message, 'success');
-                console.log(
-                    '[DEBUG] 프로젝트 가져오기 성공. 페이지를 새로고침합니다.'
-                );
-                // 가장 확실한 방법은 페이지를 새로고침하여 프로젝트 목록과 모든 상태를 갱신하는 것입니다.
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
-            } catch (error) {
-                console.error('[ERROR] 프로젝트 가져오기 중 오류 발생:', error);
-                showToast(error.message, 'error');
-            } finally {
-                // 다음 업로드를 위해 파일 입력 필드를 초기화합니다.
-                event.target.value = '';
-            }
-        });
-    }
-
-    const batchAutoUpdateBtn = document.getElementById('batch-auto-update-btn');
-    if (batchAutoUpdateBtn) {
-        batchAutoUpdateBtn.addEventListener('click', runBatchAutoUpdate);
-    }
-    const costCodeSearchInput = document.getElementById(
-        'unit-price-cost-code-search'
-    );
-    if (costCodeSearchInput) {
-        costCodeSearchInput.addEventListener(
-            'input',
-            debounce(() => {
-                console.log(
-                    '[DEBUG] Cost code search input changed, rendering list...'
-                );
-                renderCostCodeListForUnitPrice(loadedCostCodes);
-            }, 300)
-        ); // 300ms 디바운스 적용
-    } else {
-        console.warn('[WARN] Element #unit-price-cost-code-search not found.');
-    }
-
-    const costCodeListContainer = document.getElementById(
-        'unit-price-cost-code-list'
-    );
-    if (costCodeListContainer) {
-        costCodeListContainer.addEventListener(
-            'click',
-            handleCostCodeSelectionForUnitPrice
-        );
-    } else {
-        console.warn('[WARN] Element #unit-price-cost-code-list not found.');
-    }
-
-    const addTypeBtn = document.getElementById('add-unit-price-type-btn');
-    if (addTypeBtn) {
-        addTypeBtn.addEventListener('click', () => {
-            console.log("[DEBUG] 'Add Unit Price Type' button clicked.");
-            // 다른 행이 편집 중인지 확인
-            const existingEditRow = document.querySelector(
-                '#unit-price-type-table-container .editable-row'
-            );
-            if (existingEditRow && existingEditRow.dataset.id !== 'new') {
-                showToast(
-                    '이미 편집 중인 단가 구분이 있습니다. 먼저 저장하거나 취소하세요.',
-                    'warning'
-                );
-                return;
-            }
-            if (existingEditRow && existingEditRow.dataset.id === 'new') {
-                console.log("[DEBUG] Already in 'new type' edit mode.");
-                return; // 이미 새 항목 추가 모드면 무시
-            }
-            renderUnitPriceTypesTable(loadedUnitPriceTypes, 'new');
-        });
-    } else {
-        console.warn('[WARN] Element #add-unit-price-type-btn not found.');
-    }
-
-    const typeTableContainer = document.getElementById(
-        'unit-price-type-table-container'
-    );
-    if (typeTableContainer) {
-        typeTableContainer.addEventListener(
-            'click',
-            handleUnitPriceTypeActions
-        );
-    } else {
-        console.warn(
-            '[WARN] Element #unit-price-type-table-container not found.'
-        );
-    }
-
-    const addPriceBtn = document.getElementById('add-unit-price-btn');
-    if (addPriceBtn) {
-        addPriceBtn.addEventListener('click', () => {
-            console.log("[DEBUG] 'Add Unit Price' button clicked.");
-            if (!selectedCostCodeIdForUnitPrice) {
-                showToast('먼저 왼쪽에서 공사코드를 선택하세요.', 'warning');
-                return;
-            }
-            // 다른 행이 편집 중인지 확인
-            const existingEditRow = document.querySelector(
-                '#unit-price-table-container .editable-row'
-            );
-            if (existingEditRow && existingEditRow.dataset.id !== 'new') {
-                showToast(
-                    '이미 편집 중인 단가가 있습니다. 먼저 저장하거나 취소하세요.',
-                    'warning'
-                );
-                return;
-            }
-            if (existingEditRow && existingEditRow.dataset.id === 'new') {
-                console.log("[DEBUG] Already in 'new price' edit mode.");
-                return; // 이미 새 항목 추가 모드면 무시
-            }
-            renderUnitPricesTable(loadedUnitPrices, 'new');
-        });
-    } else {
-        console.warn('[WARN] Element #add-unit-price-btn not found.');
-    }
-
+function setupUnitPriceManagementListeners() {
+    document.getElementById('unit-price-cost-code-search')?.addEventListener(
+        'input',
+        debounce(() => renderCostCodeListForUnitPrice(loadedCostCodes), 300)
+    ); // 공사코드 검색
+    document
+        .getElementById('unit-price-cost-code-list')
+        ?.addEventListener('click', handleCostCodeSelectionForUnitPrice); // 공사코드 선택
+    document
+        .getElementById('add-unit-price-type-btn')
+        ?.addEventListener('click', () =>
+            renderUnitPriceTypesTable(loadedUnitPriceTypes, 'new')
+        ); // 단가 구분 추가
+    document
+        .getElementById('unit-price-type-table-container')
+        ?.addEventListener('click', handleUnitPriceTypeActions); // 단가 구분 수정/삭제/저장/취소
+    document
+        .getElementById('add-unit-price-btn')
+        ?.addEventListener('click', () =>
+            renderUnitPricesTable(loadedUnitPrices, 'new')
+        ); // 단가 추가
     const priceTableContainer = document.getElementById(
         'unit-price-table-container'
     );
     if (priceTableContainer) {
-        priceTableContainer.addEventListener('click', handleUnitPriceActions);
+        priceTableContainer.addEventListener('click', handleUnitPriceActions); // 단가 수정/삭제/저장/취소
         priceTableContainer.addEventListener(
             'input',
             handleUnitPriceInputChange
-        ); // 실시간 합계 계산
-    } else {
-        console.warn('[WARN] Element #unit-price-table-container not found.');
+        ); // 단가 입력 시 합계 계산
     }
-    // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
+    console.log('[DEBUG] Unit Price Management listeners setup complete.');
+}
 
-    console.log('[DEBUG] DOMContentLoaded end');
-    //DOMContentLoaded 끝
-});
+function setupAiModelManagementListeners() {
+    // 내부 탭 전환
+    document
+        .querySelector('#ai-model-manager .inner-tab-nav')
+        ?.addEventListener('click', handleAiInnerTabClick);
+    // 모델 업로드 관련
+    document
+        .getElementById('upload-ai-model-files-btn')
+        ?.addEventListener('click', triggerAiFileUpload);
+    document
+        .getElementById('confirm-upload-ai-model-btn')
+        ?.addEventListener('click', uploadAiModel);
+    document
+        .getElementById('ai-model-h5-input')
+        ?.addEventListener('change', () =>
+            displaySelectedFileName(
+                'ai-model-h5-input',
+                'upload-ai-model-files-btn'
+            )
+        );
+    document
+        .getElementById('ai-model-json-input')
+        ?.addEventListener('change', () =>
+            displaySelectedFileName(
+                'ai-model-json-input',
+                'upload-ai-model-files-btn'
+            )
+        );
+    // 모델 목록 테이블 액션 (수정, 삭제, 다운로드)
+    document
+        .getElementById('ai-model-list-container')
+        ?.addEventListener('click', handleAiModelListActions);
+    // 모델 학습 관련
+    document
+        .getElementById('upload-csv-btn')
+        ?.addEventListener('click', uploadAndAnalyzeCsv);
+    document
+        .getElementById('training-csv-input')
+        ?.addEventListener('change', () =>
+            displaySelectedFileName('training-csv-input', 'upload-csv-btn')
+        );
+    document
+        .getElementById('start-training-btn')
+        ?.addEventListener('click', startTraining);
+    document
+        .getElementById('save-trained-model-btn')
+        ?.addEventListener('click', saveTrainedModel); // DB 저장 버튼
+    document
+        .getElementById('download-trained-model-h5-btn')
+        ?.addEventListener('click', () => downloadTrainedModelFile('h5')); // H5 다운로드
+    document
+        .getElementById('download-trained-model-json-btn')
+        ?.addEventListener('click', () => downloadTrainedModelFile('json')); // JSON 다운로드
+    document
+        .getElementById('reset-training-btn')
+        ?.addEventListener('click', resetTrainingUI); // 학습 리셋
+    // 피처 선택 리스너 (체크박스 변경 감지)
+    document
+        .getElementById('input-feature-list')
+        ?.addEventListener('change', handleFeatureSelection);
+    document
+        .getElementById('output-feature-list')
+        ?.addEventListener('change', handleFeatureSelection);
+    console.log('[DEBUG] AI Model Management listeners setup complete.');
+}
 
+function setupSchematicEstimationListeners() {
+    document
+        .getElementById('sd-model-select')
+        ?.addEventListener('change', handleSdModelSelection); // 모델 선택
+    document
+        .getElementById('sd-input-fields')
+        ?.addEventListener('input', handleSdInputChange); // 입력값 변경 (직접 or 연동)
+    document
+        .getElementById('sd-predict-btn')
+        ?.addEventListener('click', runSdPrediction); // 예측 실행
+    document
+        .getElementById('sd-select-in-client-btn')
+        ?.addEventListener('click', selectSdItemsInClient); // BIM 연동
+    document
+        .getElementById('sd-cost-item-table-container')
+        ?.addEventListener('click', handleSdTableClick); // 하단 테이블 클릭
+    console.log('[DEBUG] Schematic Estimation (SD) listeners setup complete.');
+}
+
+// ▲▲▲ [교체] 여기까지 ▲▲▲
+
+// ▼▼▼ [교체] 기존 handleProjectChange 함수 전체를 아래 코드로 교체 ▼▼▼
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
     console.log(
         `[DEBUG][handleProjectChange] Project changed to: ${currentProjectId}`
-    );
+    ); // 디버깅
 
-    // --- 기존 상태 초기화 로직 ---
+    // --- 상태 초기화 ---
     allRevitData = []; // BIM 데이터 초기화
     // 각 뷰어 상태 초기화
     Object.keys(viewerStates).forEach((context) => {
@@ -1101,26 +773,76 @@ function handleProjectChange(e) {
         state.isFilterToSelectionActive = false;
         state.collapsedGroups = {};
         state.currentGroupByFields = [];
-        state.lastSelectedRowIndex = -1; // 각 컨텍스트별 last index 초기화
+        state.lastSelectedRowIndex = -1;
     });
-    // qm, ci 관련 상태 초기화
+    // QM 상태 초기화
+    loadedQuantityMembers = [];
+    qmColumnFilters = {};
     selectedQmIds.clear();
     qmCollapsedGroups = {};
     currentQmGroupByFields = [];
     lastSelectedQmRowIndex = -1;
     activeQmView = 'quantity-member-view';
+    // CI 상태 초기화
+    loadedCostItems = [];
+    ciColumnFilters = {};
     selectedCiIds.clear();
     ciCollapsedGroups = {};
     currentCiGroupByFields = [];
     lastSelectedCiRowIndex = -1;
-    // boq 관련 상태 초기화
+    // BOQ(DD) 상태 초기화
     boqFilteredRawElementIds.clear();
     currentBoqColumns = [];
     boqColumnAliases = {};
     lastBoqItemIds = [];
     currentBoqDetailItemId = null;
+    loadedUnitPriceTypesForBoq = [];
     document.getElementById('boq-clear-selection-filter-btn').style.display =
         'none';
+    // 룰셋 데이터 초기화
+    loadedClassificationRules = [];
+    loadedPropertyMappingRules = [];
+    loadedCostCodeRules = [];
+    loadedMemberMarkAssignmentRules = [];
+    loadedCostCodeAssignmentRules = [];
+    loadedSpaceClassificationRules = [];
+    loadedSpaceAssignmentRules = [];
+    // 기타 데이터 초기화
+    allTags = [];
+    loadedCostCodes = [];
+    loadedMemberMarks = [];
+    loadedSpaceClassifications = [];
+    loadedUnitPriceTypes = [];
+    loadedUnitPrices = [];
+    selectedCostCodeIdForUnitPrice = null;
+    currentUnitPriceEditState = { id: null, originalData: null };
+    spaceMappingState = { active: false, spaceId: null, spaceName: '' };
+
+    // --- [신규] AI 및 SD 관련 상태 초기화 ---
+    loadedAiModels = [];
+    currentTrainingTaskId = null;
+    currentTrainingStatus = {};
+    uploadedCsvFilename = null;
+    csvHeaders = [];
+    trainedModelTempFilename = null;
+    trainedModelMetadata = null;
+    sdEnabledCostCodes = [];
+    selectedSdModelId = null;
+    loadedSdCostItems = [];
+    sdColumnFilters = {};
+    selectedSdItemIds.clear();
+    sdCollapsedGroups = {};
+    currentSdGroupByFields = [];
+    // 차트 인스턴스 파기
+    if (trainingChartInstance) {
+        trainingChartInstance.destroy();
+        trainingChartInstance = null;
+    }
+    if (sdPredictionChartInstance) {
+        sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
+    }
+    console.log('[DEBUG][handleProjectChange] AI and SD states reset.'); // 디버깅
     // --- 상태 초기화 끝 ---
 
     if (currentProjectId) {
@@ -1130,11 +852,16 @@ function handleProjectChange(e) {
             }' 선택됨.`,
             'info'
         );
+        console.log(
+            `[DEBUG][handleProjectChange] Project selected: ${
+                e.target.options[e.target.selectedIndex].text
+            }. Loading initial data...`
+        ); // 디버깅
         // --- 초기 웹소켓 요청 ---
         if (frontendSocket && frontendSocket.readyState === WebSocket.OPEN) {
             console.log(
                 '[DEBUG][handleProjectChange] Sending initial WebSocket requests (get_tags, get_all_elements)...'
-            );
+            ); // 디버깅
             frontendSocket.send(
                 JSON.stringify({
                     type: 'get_tags',
@@ -1146,28 +873,32 @@ function handleProjectChange(e) {
                     type: 'get_all_elements',
                     payload: { project_id: currentProjectId },
                 })
-            );
+            ); // BIM 데이터 요청
         } else {
             console.error(
                 '[ERROR][handleProjectChange] WebSocket not open. Cannot send initial requests.'
-            );
+            ); // 디버깅
             showToast('웹소켓 연결 오류. 페이지 새로고침 필요.', 'error');
         }
         // --- 초기 웹소켓 요청 끝 ---
 
-        // --- [핵심 수정] 현재 활성화된 탭의 데이터를 로드합니다. ---
+        // --- 현재 활성 탭 데이터 로드 ---
+        // (주의: WebSocket 응답(all_elements)이 오기 전에 실행될 수 있음)
+        // loadDataForActiveTab 함수는 allRevitData가 비어있어도 UI 초기화 등을 수행함
+        console.log(
+            `[DEBUG][handleProjectChange] Calling loadDataForActiveTab() for active tab: ${activeTab}`
+        ); // 디버깅
         loadDataForActiveTab();
-        // --- [핵심 수정] 여기까지 ---
     } else {
-        // --- [핵심 수정] 프로젝트 선택 해제 시 UI 초기화 ---
+        // --- 프로젝트 선택 해제 시 UI 초기화 ---
         console.log(
             '[DEBUG][handleProjectChange] Project deselected. Clearing UI.'
-        );
+        ); // 디버깅
         showToast('프로젝트 선택이 해제되었습니다.', 'info');
-        clearAllTabData(); // 새로운 헬퍼 함수 호출
-        // --- [핵심 수정] 여기까지 ---
+        clearAllTabData(); // UI 초기화 함수 호출
     }
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲
 
 function createNewProject() {
     const projectNameInput = document.getElementById('new-project-name');
@@ -1208,75 +939,109 @@ function createNewProject() {
 }
 
 // --- 핸들러 함수들 ---
+// ▼▼▼ [교체] 기존 handleMainNavClick 함수 전체를 아래 코드로 교체 ▼▼▼
 function handleMainNavClick(e) {
     const clickedButton = e.currentTarget;
-    const primaryTabId = clickedButton.dataset.primaryTab;
+    const primaryTabId = clickedButton.dataset.primaryTab; // 예: "management", "takeoff", "schematic-estimation-sd"
+    console.log(
+        `[DEBUG][handleMainNavClick] Clicked main tab button: ${primaryTabId}`
+    );
 
-    // 이미 활성 탭이면 아무것도 안함
-    if (clickedButton.classList.contains('active') && primaryTabId !== 'boq') {
+    if (clickedButton.classList.contains('active')) {
+        console.log(
+            `[DEBUG][handleMainNavClick] Tab '${primaryTabId}' is already active.`
+        );
         return;
     }
 
-    // 모든 주 탭 비활성화
+    // --- UI 상태 변경 ---
     document
         .querySelectorAll('.main-nav .nav-button.active')
         .forEach((btn) => btn.classList.remove('active'));
-    // 모든 보조 탭 컨테이너 숨기기
     document
         .querySelectorAll('.secondary-nav.active')
         .forEach((nav) => nav.classList.remove('active'));
-    // 모든 컨텐츠 숨기기
     document
-        .querySelectorAll('.tab-content.active')
+        .querySelectorAll('.main-content > .tab-content.active')
         .forEach((content) => content.classList.remove('active'));
 
-    // 클릭된 주 탭 활성화
     clickedButton.classList.add('active');
+    console.log(
+        `[DEBUG][handleMainNavClick] Main button '${primaryTabId}' activated.`
+    );
 
-    if (
-        primaryTabId === 'detailed-estimation-dd' ||
-        primaryTabId === 'schematic-estimation-sd'
-    ) {
-        // 개산견적 탭도 보조 탭 없음
-        // '상세견적(DD)' 또는 '개산견적(SD)' 탭은 보조 탭이 없으므로 바로 컨텐츠 표시
-        const contentToShow = document.getElementById(primaryTabId); // primaryTabId와 content ID가 동일해야 함
-        if (contentToShow) {
-            contentToShow.classList.add('active');
-            activeTab = primaryTabId; // activeTab을 주 탭 ID로 설정
+    // --- 해당 주 탭에 맞는 보조 탭 또는 컨텐츠 활성화 ---
+    const secondaryNav = document.getElementById(
+        `secondary-nav-${primaryTabId}`
+    );
+    const targetContent = document.getElementById(primaryTabId); // DD, SD 탭은 ID가 동일
+
+    if (secondaryNav) {
+        // '관리', '산출' 탭처럼 보조 네비게이션이 있는 경우
+        console.log(
+            `[DEBUG][handleMainNavClick] Activating secondary nav: secondary-nav-${primaryTabId}`
+        );
+        secondaryNav.classList.add('active');
+
+        let subNavButtonToClick = secondaryNav.querySelector(
+            '.sub-nav-button.active'
+        );
+        if (!subNavButtonToClick) {
+            subNavButtonToClick = secondaryNav.querySelector('.sub-nav-button'); // 첫 번째 버튼
             console.log(
-                `[DEBUG][handleMainNavClick] Switched to primary tab without secondary nav: ${activeTab}`
+                '[DEBUG][handleMainNavClick] No active sub-tab found, will activate the first one.'
             );
-            // 해당 탭 데이터 로드
-            loadDataForActiveTab(); // activeTab 기준으로 데이터 로드
+        } else {
+            console.log(
+                `[DEBUG][handleMainNavClick] Found previously active sub-tab: ${subNavButtonToClick.dataset.tab}`
+            );
+        }
+
+        if (subNavButtonToClick) {
+            console.log(
+                `[DEBUG][handleMainNavClick] Programmatically clicking sub-tab: ${subNavButtonToClick.dataset.tab}`
+            );
+            subNavButtonToClick.click(); // 하위 탭 클릭 핸들러가 컨텐츠 활성화 및 데이터 로드 담당
         } else {
             console.warn(
-                `[WARN][handleMainNavClick] Content for primary tab '${primaryTabId}' not found.`
+                `[WARN][handleMainNavClick] No sub-tab buttons found in secondary nav: secondary-nav-${primaryTabId}.`
             );
+            // 보조 탭 버튼이 없으면, 해당 ID의 메인 컨텐츠를 직접 활성화 시도 (예외 케이스)
+            if (targetContent) {
+                console.log(
+                    `[DEBUG][handleMainNavClick] Activating content directly as fallback: ${primaryTabId}`
+                );
+                targetContent.classList.add('active');
+                activeTab = primaryTabId;
+                loadDataForActiveTab();
+            } else {
+                activeTab = null;
+            }
         }
-    } else {
-        // '관리', '산출', '견적' 탭 처리
-        const secondaryNav = document.getElementById(
-            `secondary-nav-${primaryTabId}`
+        // [수정] DD, SD 탭처럼 보조 네비게이션이 없는 경우 명시적 처리
+    } else if (
+        targetContent &&
+        (primaryTabId === 'detailed-estimation-dd' ||
+            primaryTabId === 'schematic-estimation-sd')
+    ) {
+        console.log(
+            `[DEBUG][handleMainNavClick] Activating content directly for tab without secondary nav: ${primaryTabId}`
         );
-        if (secondaryNav) {
-            secondaryNav.classList.add('active');
-            // ▼▼▼ [핵심 수정] ▼▼▼
-            // 해당 보조 탭에서 이미 'active' 상태인 버튼을 찾거나, 없으면 첫 번째 버튼을 클릭
-            let targetSubNavButton = secondaryNav.querySelector(
-                '.sub-nav-button.active'
-            );
-            if (!targetSubNavButton) {
-                targetSubNavButton =
-                    secondaryNav.querySelector('.sub-nav-button');
-            }
-
-            if (targetSubNavButton) {
-                targetSubNavButton.click();
-            }
-            // ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
-        }
+        targetContent.classList.add('active');
+        activeTab = primaryTabId; // 전역 activeTab 업데이트
+        loadDataForActiveTab(); // 해당 탭 데이터 로드
+    } else {
+        // 정의되지 않은 탭 ID 또는 구조 오류
+        console.error(
+            `[ERROR][handleMainNavClick] Cannot find secondary nav or content for primary tab ID: ${primaryTabId}`
+        );
+        activeTab = null;
     }
+    console.log(
+        `[DEBUG][handleMainNavClick] Function end. Current activeTab: ${activeTab}`
+    );
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲
 function fetchDataFromClient() {
     document.getElementById('project-selector').disabled = true;
     if (!currentProjectId) {
@@ -1636,7 +1401,6 @@ function handleRulesetNavClick(e) {
     // --- [핵심] 여기서 해당 룰셋 데이터 로드 함수 호출 ---
     loadSpecificRuleset(targetRulesetId);
 }
-let loadedClassificationRules = []; // 전역 변수는 그대로 둡니다.
 
 // 룰셋 테이블의 모든 동작(저장, 수정, 취소, 삭제)을 처리하는 함수
 
@@ -4005,14 +3769,6 @@ function handleQmDetailTabClick(event) {
 
 // --- '집계' 탭 이벤트 리스너 ---
 
-// --- '집계' 탭 관련 함수들 ---
-let availableBoqFields = []; // BOQ 그룹핑 필드 목록을 저장할 전역 변수
-
-let currentBoqColumns = []; // 현재 테이블에 표시된 열의 순서와 정보 저장
-let boqColumnAliases = {}; // 사용자가 수정한 열 이름(별칭) 저장
-let lastBoqItemIds = []; // BOQ 상세 목록으로 돌아가기 위해 마지막으로 선택한 Item ID 목록을 저장
-let currentBoqDetailItemId = null;
-
 async function loadBoqGroupingFields() {
     if (!currentProjectId) {
         showToast('먼저 프로젝트를 선택하세요.', 'error');
@@ -5879,141 +5635,155 @@ async function handleCostCodeActions(event) {
     }
 }
 
+// ▼▼▼ [교체] 기존 handleSubNavClick 함수 전체를 아래 코드로 교체 ▼▼▼
 function handleSubNavClick(e) {
-    console.log('[DEBUG][handleSubNavClick] Start');
     const clickedButton = e.currentTarget;
-    const targetTabId = clickedButton.dataset.tab; // 클릭된 보조 탭 ID (예: "ruleset-management", "cost-code-management")
+    const targetTabId = clickedButton.dataset.tab; // 클릭된 보조 탭 ID (예: "ruleset-management", "ai-model-manager")
     const targetContent = document.getElementById(targetTabId);
     console.log(
-        `[DEBUG][handleSubNavClick] Clicked button for tab: ${targetTabId}`
-    );
+        `[DEBUG][handleSubNavClick] Clicked sub-tab button: ${targetTabId}`
+    ); // 디버깅
 
-    // --- 이미 활성화된 탭이면 중복 로드 방지 ---
-    if (targetContent && targetContent.classList.contains('active')) {
+    // --- 이미 활성화된 탭이면 무시 (데이터 중복 로드 방지) ---
+    // (activeTab 변수와 비교하여 정말 같은 탭인지 확인)
+    if (
+        activeTab === targetTabId &&
+        targetContent &&
+        targetContent.classList.contains('active')
+    ) {
         console.log(
-            `[DEBUG][handleSubNavClick] Tab '${targetTabId}' is already active. Preventing re-load.`
-        );
+            `[DEBUG][handleSubNavClick] Tab '${targetTabId}' is already the active tab and content is visible. No action needed.`
+        ); // 디버깅
         return;
     }
 
     // --- 탭 UI 활성화/비활성화 처리 ---
     const parentNav = clickedButton.closest('.secondary-nav');
     if (parentNav) {
-        // 같은 보조 네비게이션 내 다른 활성 버튼 비활성화
         parentNav
             .querySelector('.sub-nav-button.active')
             ?.classList.remove('active');
+        clickedButton.classList.add('active'); // 클릭된 버튼만 활성화
     } else {
         console.warn(
-            `[WARN][handleSubNavClick] Could not find parent .secondary-nav for button.`
-        );
+            `[WARN][handleSubNavClick] Could not find parent .secondary-nav for clicked button.`
+        ); // 디버깅
     }
-    clickedButton.classList.add('active'); // 클릭된 버튼 활성화
 
-    activeTab = clickedButton.dataset.tab; // 전역 activeTab 변수 업데이트
+    // 전역 activeTab 변수 업데이트
+    activeTab = targetTabId;
     console.log(
-        `[DEBUG][handleSubNavClick] Active tab changed to: ${activeTab}`
-    );
+        `[DEBUG][handleSubNavClick] Active tab globally set to: ${activeTab}`
+    ); // 디버깅
 
     // 모든 메인 컨텐츠 영역 숨기기
     document
-        .querySelectorAll('.main-content > .tab-content.active') // '.main-content >' 추가하여 정확도 향상
+        .querySelectorAll('.main-content > .tab-content.active')
         .forEach((c) => c.classList.remove('active'));
 
     // 클릭된 탭에 해당하는 컨텐츠 영역 보이기
     if (targetContent) {
         targetContent.classList.add('active');
         console.log(
-            `[DEBUG][handleSubNavClick] Content for tab '${activeTab}' displayed.`
-        );
+            `[DEBUG][handleSubNavClick] Content element ID '${targetTabId}' activated.`
+        ); // 디버깅
     } else {
         console.warn(
-            `[WARN][handleSubNavClick] Content element with ID '${activeTab}' not found.`
-        );
+            `[WARN][handleSubNavClick] Content element with ID '${targetTabId}' not found.`
+        ); // 디버깅
+        loadDataForActiveTab(); // 컨텐츠 없어도 일단 로드 시도 (오류 방지)
+        return; // 컨텐츠 없으면 이후 로직 중단
     }
     // --- 탭 UI 처리 끝 ---
 
-    // --- [핵심] '룰셋 관리' 탭 진입 시 기본 하위 탭 활성화 로직 ---
-    if (targetTabId === 'ruleset-management') {
+    // --- 특정 탭 진입 시 하위 탭/데이터 로드 로직 ---
+    if (targetTabId === 'ai-model-manager') {
+        // 'AI 모델 관리' 탭 진입 시
         console.log(
-            "[DEBUG][handleSubNavClick] Entering 'ruleset-management' tab."
-        );
-        const rulesetNavContainer =
-            targetContent?.querySelector('.ruleset-nav'); // 룰셋 종류 버튼 컨테이너
-
+            "[DEBUG][handleSubNavClick] Entering 'ai-model-manager' tab. Handling inner tabs..."
+        ); // 디버깅
+        const innerNav = targetContent.querySelector('.inner-tab-nav');
+        if (innerNav) {
+            let activeInnerButton = innerNav.querySelector(
+                '.inner-tab-button.active'
+            );
+            // 활성화된 내부 탭이 없으면 기본값('ai-model-list') 활성화
+            if (!activeInnerButton) {
+                activeInnerButton = innerNav.querySelector(
+                    '[data-inner-tab="ai-model-list"]'
+                );
+                console.log(
+                    "[DEBUG][handleSubNavClick] No active inner AI tab found, activating 'ai-model-list'."
+                ); // 디버깅
+            }
+            // 해당 내부 탭 클릭 (클릭 핸들러에서 데이터 로드)
+            if (activeInnerButton) {
+                console.log(
+                    `[DEBUG][handleSubNavClick] Programmatically clicking inner AI tab: ${activeInnerButton.dataset.innerTab}`
+                ); // 디버깅
+                activeInnerButton.click();
+            } else {
+                console.warn(
+                    "[WARN][handleSubNavClick] Could not find default inner AI tab button 'ai-model-list'."
+                ); // 디버깅
+                // 내부 탭 없으면 그냥 일반 데이터 로드 시도
+                loadDataForActiveTab();
+            }
+        } else {
+            console.warn(
+                "[WARN][handleSubNavClick] Inner tab navigation not found in 'ai-model-manager'. Loading default data for the tab."
+            ); // 디버깅
+            loadDataForActiveTab(); // 내부 탭 구조 없으면 일단 로드 시도
+        }
+    } else if (targetTabId === 'ruleset-management') {
+        // '룰셋 관리' 탭 진입 시
+        console.log(
+            "[DEBUG][handleSubNavClick] Entering 'ruleset-management' tab. Handling ruleset types..."
+        ); // 디버깅
+        const rulesetNavContainer = targetContent.querySelector('.ruleset-nav');
         if (rulesetNavContainer) {
             let activeRulesetButton = rulesetNavContainer.querySelector(
                 '.ruleset-nav-button.active'
             );
-
-            // 만약 현재 활성화된 룰셋 종류 버튼이 없다면 (첫 진입 시)
+            // 활성화된 룰셋 종류 버튼이 없으면 기본값('classification-ruleset') 활성화
             if (!activeRulesetButton) {
-                console.log(
-                    "[DEBUG][handleSubNavClick] No active ruleset type found. Activating default ('classification-ruleset')."
-                );
-                // 기본값인 '분류 할당 룰셋' 버튼 찾기
-                const defaultRulesetButton = rulesetNavContainer.querySelector(
+                activeRulesetButton = rulesetNavContainer.querySelector(
                     '[data-ruleset="classification-ruleset"]'
                 );
-                if (defaultRulesetButton) {
-                    // 기본 룰셋 종류 버튼 활성화
-                    defaultRulesetButton.classList.add('active');
-                    // 해당 룰셋 종류 컨텐츠 활성화
-                    const defaultRulesetContentId =
-                        defaultRulesetButton.dataset.ruleset;
-                    const defaultRulesetContent = document.getElementById(
-                        defaultRulesetContentId
-                    );
-                    if (defaultRulesetContent) {
-                        defaultRulesetContent.classList.add('active');
-                    } else {
-                        console.warn(
-                            `[WARN][handleSubNavClick] Default ruleset content ('${defaultRulesetContentId}') not found.`
-                        );
-                    }
-                } else {
-                    console.warn(
-                        "[WARN][handleSubNavClick] Default ruleset button ('classification-ruleset') not found."
-                    );
-                }
-            } else {
                 console.log(
-                    `[DEBUG][handleSubNavClick] Active ruleset type already set to: ${activeRulesetButton.dataset.ruleset}`
-                );
-                // 이미 활성화된 룰셋 종류가 있다면, 해당 컨텐츠도 활성화 상태인지 확인하고 필요시 활성화
-                const activeRulesetContentId =
-                    activeRulesetButton.dataset.ruleset;
-                const activeRulesetContent = document.getElementById(
-                    activeRulesetContentId
-                );
-                if (
-                    activeRulesetContent &&
-                    !activeRulesetContent.classList.contains('active')
-                ) {
-                    // 다른 룰셋 컨텐츠 비활성화
-                    targetContent
-                        .querySelectorAll('.ruleset-content.active')
-                        .forEach((c) => c.classList.remove('active'));
-                    // 현재 룰셋 컨텐츠 활성화
-                    activeRulesetContent.classList.add('active');
-                }
+                    "[DEBUG][handleSubNavClick] No active ruleset type, activating default 'classification-ruleset'."
+                ); // 디버깅
+            }
+            // 해당 룰셋 종류 버튼 클릭 (클릭 핸들러에서 데이터 로드)
+            if (activeRulesetButton) {
+                console.log(
+                    `[DEBUG][handleSubNavClick] Programmatically clicking ruleset type button: ${activeRulesetButton.dataset.ruleset}`
+                ); // 디버깅
+                activeRulesetButton.click();
+            } else {
+                console.warn(
+                    "[WARN][handleSubNavClick] Could not find default ruleset type button 'classification-ruleset'."
+                ); // 디버깅
+                // 룰셋 종류 버튼 없으면 그냥 일반 데이터 로드 시도
+                loadDataForActiveTab();
             }
         } else {
             console.warn(
-                "[WARN][handleSubNavClick] Ruleset navigation container not found inside 'ruleset-management' tab content."
-            );
+                "[WARN][handleSubNavClick] Ruleset navigation container not found in 'ruleset-management'. Loading default data for the tab."
+            ); // 디버깅
+            loadDataForActiveTab(); // 룰셋 종류 컨테이너 없으면 일단 로드 시도
         }
+    } else {
+        // 다른 모든 보조 탭들은 바로 데이터 로드
+        console.log(
+            `[DEBUG][handleSubNavClick] Calling loadDataForActiveTab() directly for tab '${activeTab}'...`
+        ); // 디버깅
+        loadDataForActiveTab();
     }
-    // --- '룰셋 관리' 탭 초기화 로직 끝 ---
-
-    // --- 활성화된 탭에 필요한 데이터 로드 ---
-    console.log(
-        `[DEBUG][handleSubNavClick] Calling loadDataForActiveTab() for tab '${activeTab}'...`
-    );
-    loadDataForActiveTab(); // 이 함수가 activeTab 값을 보고 필요한 데이터를 로드합니다.
-
-    console.log('[DEBUG][handleSubNavClick] End');
+    console.log('[DEBUG][handleSubNavClick] Function end.'); // 디버깅
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲
+
 function debounce(fn, delay = 300) {
     let t;
     return (...args) => {
@@ -6822,138 +6592,176 @@ function handleUnitPriceInputChange(event) {
         }
     }
 }
-// --- [신규 추가] 현재 활성화된 탭에 따라 데이터 로드 함수를 호출하는 헬퍼 ---
+// ▼▼▼ [교체] 기존 loadDataForActiveTab 함수 전체를 아래 코드로 교체 ▼▼▼
 function loadDataForActiveTab() {
-    // activeTab 전역 변수는 handleMainNavClick, handleSubNavClick에서 업데이트됨
     console.log(
         `[DEBUG][loadDataForActiveTab] Loading data for active tab: ${activeTab}`
-    );
+    ); // 디버깅
     if (!currentProjectId) {
         console.warn(
-            '[WARN][loadDataForActiveTab] No project selected. Aborting data load.'
-        );
-        return; // 프로젝트 ID가 없으면 로드 중단
+            '[WARN][loadDataForActiveTab] No project selected. Clearing UI and aborting data load.'
+        ); // 디버깅
+        clearAllTabData(); // 프로젝트 없으면 모든 UI 클리어
+        return;
     }
 
+    // --- 각 탭에 필요한 데이터 로드 로직 ---
     switch (activeTab) {
         case 'ruleset-management':
-            // 룰셋 관리 탭일 경우, 활성화된 하위 룰셋 종류를 찾아 로드
-            const activeRulesetButton = document.querySelector(
-                '#ruleset-management .ruleset-nav-button.active'
-            );
-            // 만약 활성화된 버튼이 없다면 기본값으로 'classification-ruleset'을 사용
-            const rulesetType = activeRulesetButton
-                ? activeRulesetButton.dataset.ruleset
-                : 'classification-ruleset';
+            // 룰셋 종류 탭(handleRulesetNavClick -> loadSpecificRuleset)에서 실제 로드가 일어나므로 여기서는 패스
             console.log(
-                `[DEBUG][loadDataForActiveTab] Loading specific ruleset: ${rulesetType}`
-            );
-            loadSpecificRuleset(rulesetType);
+                `[DEBUG][loadDataForActiveTab] Ruleset tab activated. Specific ruleset will be loaded by its handler.`
+            ); // 디버깅
+            // 혹시 모를 초기 상태 위해 기본 룰셋 로드 호출 (선택적)
+            // loadSpecificRuleset('classification-ruleset');
             break;
         case 'cost-code-management':
+            console.log(`[DEBUG][loadDataForActiveTab] Loading Cost Codes.`); // 디버깅
             loadCostCodes();
             break;
         case 'member-mark-management':
+            console.log(`[DEBUG][loadDataForActiveTab] Loading Member Marks.`); // 디버깅
             loadMemberMarks();
             break;
         case 'tag-management':
-            // 태그는 get_tags 메시지 수신 시 로드되므로 여기서 별도 호출 불필요
             console.log(
-                '[DEBUG][loadDataForActiveTab] Tags are loaded via WebSocket message.'
-            );
+                `[DEBUG][loadDataForActiveTab] Tags are loaded via WebSocket. Ensuring UI consistency.`
+            ); // 디버깅
+            updateTagLists(allTags); // 현재 메모리에 있는 태그로 UI 갱신
             break;
         case 'space-management':
-            loadSpaceClassifications();
-            populateFieldSelection(); // 공간 탭용 필드 목록도 채워야 함
-            // 테이블/트리 렌더링은 loadSpaceClassifications 함수 내부 또는 이후에 처리
             console.log(
-                '[DEBUG][loadDataForActiveTab] Initializing Space Management UI.'
-            );
+                `[DEBUG][loadDataForActiveTab] Loading Space Classifications and initializing UI.`
+            ); // 디버깅
+            loadSpaceClassifications(); // 공간 트리 로드
+            populateFieldSelection(); // 테이블용 필드 목록 채우기
             renderDataTable(
                 'space-management-data-table-container',
                 'space-management'
-            ); // 초기 빈 테이블 표시
+            ); // 테이블 초기 렌더링 (데이터 로드 전)
             break;
         case 'unit-price-management':
-            loadCostCodesForUnitPrice(); // 공사코드 목록 로드 (단가 관리용)
-            loadUnitPriceTypes(); // 단가 구분 목록 로드
-            selectedCostCodeIdForUnitPrice = null; // 선택된 공사코드 초기화
-            // UI 초기화
-            const addPriceBtn = document.getElementById('add-unit-price-btn');
-            if (addPriceBtn) addPriceBtn.disabled = true;
-            const priceListHeader = document.getElementById(
-                'unit-price-list-header'
-            );
-            if (priceListHeader)
-                priceListHeader.textContent =
-                    '단가 리스트 (공사코드를 선택하세요)';
-            renderUnitPricesTable([]); // 빈 단가 테이블 표시
             console.log(
-                '[DEBUG][loadDataForActiveTab] Initialized Unit Price Management UI.'
-            );
+                `[DEBUG][loadDataForActiveTab] Loading Unit Price data (CostCodes, Types) and initializing UI.`
+            ); // 디버깅
+            loadCostCodesForUnitPrice(); // 왼쪽 공사코드 목록
+            loadUnitPriceTypes(); // 오른쪽 위 단가 구분 목록
+            // UI 초기화 (선택된 코드 없음 상태)
+            selectedCostCodeIdForUnitPrice = null;
+            document.getElementById('add-unit-price-btn').disabled = true;
+            document.getElementById('unit-price-list-header').textContent =
+                '단가 리스트 (공사코드를 선택하세요)';
+            renderUnitPricesTable([]); // 오른쪽 아래 단가 목록 비우기
             break;
         case 'data-management':
-            // BIM 원본 데이터는 get_all_elements 메시지 수신 시 로드됨
-            populateFieldSelection(); // 필드 목록 채움
+            console.log(
+                `[DEBUG][loadDataForActiveTab] Initializing Data Management UI. Data loaded via WebSocket.`
+            ); // 디버깅
+            populateFieldSelection(); // 필드 목록 채우기
+            // BIM 데이터(allRevitData)는 WebSocket 'all_elements' 수신 시 채워짐
             renderDataTable(
                 'data-management-data-table-container',
                 'data-management'
-            ); // 초기 빈 테이블 표시
-            console.log(
-                '[DEBUG][loadDataForActiveTab] Initialized Data Management UI.'
-            );
+            ); // 테이블 초기 렌더링 (데이터 로드 전)
             break;
         case 'quantity-members':
-            // 수량산출부재 탭에 필요한 모든 데이터 로드
-            loadQuantityMembers();
-            loadCostCodes();
-            loadMemberMarks();
-            loadSpaceClassifications(); // 공간분류 목록도 필요
             console.log(
-                '[DEBUG][loadDataForActiveTab] Loading data for Quantity Members tab.'
-            );
+                `[DEBUG][loadDataForActiveTab] Loading QM dependencies (Members, Codes, Marks, Spaces).`
+            ); // 디버깅
+            loadQuantityMembers(); // 부재 목록 (핵심)
+            loadCostCodes(); // 오른쪽 패널 드롭다운용
+            loadMemberMarks(); // 오른쪽 패널 드롭다운용
+            loadSpaceClassifications(); // 오른쪽 패널 드롭다운용
             break;
         case 'cost-item-management':
-            // 수량산출 탭에 필요한 모든 데이터 로드
-            loadCostItems();
-            loadQuantityMembers();
-            loadCostCodes();
-            loadMemberMarks();
-            // loadSpaceClassifications(); // 필요 시 추가
             console.log(
-                '[DEBUG][loadDataForActiveTab] Loading data for Cost Items tab.'
-            );
+                `[DEBUG][loadDataForActiveTab] Loading CI dependencies (Items, Members, Codes, Marks).`
+            ); // 디버깅
+            loadCostItems(); // 산출 항목 목록 (핵심)
+            loadQuantityMembers(); // 오른쪽 패널 상세 정보용
+            loadCostCodes(); // 오른쪽 패널 상세 정보용 (필요 시)
+            loadMemberMarks(); // 오른쪽 패널 상세 정보용
             break;
         case 'detailed-estimation-dd':
-            // 상세견적(DD) 탭에 필요한 데이터 로드 (기존 BOQ 로직과 동일)
-            loadCostItems();
-            loadQuantityMembers();
-            if (allRevitData.length === 0) {
+            console.log(
+                `[DEBUG][loadDataForActiveTab] Loading DD dependencies (Items, Members, BIM, BOQ Fields, Unit Types).`
+            ); // 디버깅
+            // BOQ 생성에 필요한 데이터 로드
+            loadCostItems(); // BOQ는 CostItem 기반
+            loadQuantityMembers(); // CostItem -> QM 참조
+            loadMemberMarks(); // CostItem -> QM -> MM 참조
+            loadUnitPriceTypes(); // 단가 기준 목록용 (loadedUnitPriceTypesForBoq 아님)
+            loadBoqGroupingFields(); // 그룹핑 필드 목록 로드
+
+            // BIM 데이터 확인 및 필요시 요청
+            if (
+                allRevitData.length === 0 &&
+                frontendSocket &&
+                frontendSocket.readyState === WebSocket.OPEN
+            ) {
                 console.log(
-                    "[DEBUG][loadDataForActiveTab] Requesting BIM data for Detailed Estimation (DD) tab as it's empty."
+                    "[DEBUG][loadDataForActiveTab] Requesting BIM data (all_elements) for DD tab as it's empty."
+                ); // 디버깅
+                frontendSocket.send(
+                    JSON.stringify({
+                        type: 'get_all_elements',
+                        payload: { project_id: currentProjectId },
+                    })
                 );
-                fetchDataFromClient();
             }
-            loadBoqGroupingFields(); // 그룹핑 필드 로드 함수 이름은 그대로 사용
-            loadUnitPriceTypes(); // 단가 구분 로드 함수 이름은 그대로 사용
-            initializeBoqUI(); // 상세견적(DD) 탭의 UI 초기화 (버튼 등)
-            console.log(
-                '[DEBUG][loadDataForActiveTab] Loading data for Detailed Estimation (DD) tab.'
+            initializeBoqUI(); // DD 탭 UI 초기화 (토글 버튼, 상세 탭 등)
+            // 테이블은 '집계표 생성' 버튼 클릭 시 로드되므로 여기서는 초기화만
+            clearContainer(
+                'boq-table-container',
+                '<p style="padding: 20px;">집계 기준 설정 후 \'집계표 생성\' 버튼을 누르세요.</p>'
             );
-            break;
-        case 'schematic-estimation-sd':
-            // 개산견적(SD) 탭 로딩 로직 (현재는 비어있음)
-            console.log(
-                '[DEBUG][loadDataForActiveTab] Loading data for Schematic Estimation (SD) tab (placeholder).'
+            clearContainer(
+                'boq-item-list-container',
+                '<p style="padding: 10px;">상단 집계표 행을 선택하세요.</p>'
             );
+            clearContainer(
+                'boq-bim-object-cost-summary',
+                '<p style="padding: 10px;">하단 목록에서 산출항목을 선택하면...</p>'
+            );
+            clearContainer('boq-details-member-container');
+            clearContainer('boq-details-mark-container');
+            clearContainer('boq-details-raw-container');
             break;
-        // 'ai-estimation', 'detailed-estimation' 등 다른 미구현 탭 로딩 로직
+        case 'ai-model-manager': // 'AI 모델 관리' 탭 진입 시
+            console.log(
+                `[DEBUG][loadDataForActiveTab] Loading AI Models and initializing UI.`
+            ); // 디버깅
+            // 활성화된 내부 탭 로드 (handleSubNavClick에서 이미 처리되었을 수 있지만 안전하게 다시 호출)
+            const activeInnerButton = document.querySelector(
+                '#ai-model-manager .inner-tab-button.active'
+            );
+            const innerTabId = activeInnerButton
+                ? activeInnerButton.dataset.innerTab
+                : 'ai-model-list'; // 기본값
+            loadDataForAiInnerTab(innerTabId);
+            break;
+        case 'schematic-estimation-sd': // '개산견적(SD)' 탭 진입 시
+            console.log(
+                `[DEBUG][loadDataForActiveTab] Loading SD dependencies (AI Models, SD Codes, SD Items) and initializing UI.`
+            ); // 디버깅
+            // [수정] 데이터 로딩을 UI 초기화보다 먼저 수행
+            loadAiModelsForSd(); // 상단 AI 모델 드롭다운 채우기 (비동기)
+            loadSdCostCodes(); // 입력값 연동용 공사코드 목록+수량 로드 (비동기)
+            loadSdCostItems(); // 하단 테이블 데이터 로드 (비동기)
+            initializeSdUI(); // SD 탭 UI 초기화 (입력 필드, 결과 등) - 데이터 로딩 완료 전에 실행될 수 있음
+            break;
         default:
             console.log(
-                `[DEBUG][loadDataForActiveTab] No specific data loading function defined for tab: ${activeTab}`
-            );
+                `[DEBUG][loadDataForActiveTab] No specific data loading function defined for currently active tab: ${activeTab}`
+            ); // 디버깅
+            // 정의되지 않은 탭이면 기본 UI 클리어
+            clearAllTabData();
     }
+    console.log(
+        `[DEBUG][loadDataForActiveTab] Finished loading initiation for tab: ${activeTab}`
+    ); // 디버깅
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲s
 
 // --- [신규 추가] 룰셋 종류에 따라 로드 함수를 호출하는 헬퍼 함수 ---
 function loadSpecificRuleset(rulesetType) {
@@ -6989,13 +6797,22 @@ function loadSpecificRuleset(rulesetType) {
     }
 }
 
-// --- [신규 추가] 프로젝트 선택 해제 시 모든 탭 데이터/UI 초기화 헬퍼 ---
+// ▼▼▼ [교체] 기존 clearAllTabData 함수 전체를 아래 코드로 교체 ▼▼▼
 function clearAllTabData() {
-    console.log('[DEBUG][clearAllTabData] Clearing all tab data and UI.');
-    // --- 전역 데이터 배열 초기화 ---
+    console.log(
+        '[DEBUG][clearAllTabData] Clearing all global data, states, and UI elements.'
+    ); // 디버깅
+
+    // --- 전역 데이터 배열 및 객체 초기화 ---
     allRevitData = [];
+    allTags = [];
+    loadedCostCodes = [];
+    loadedMemberMarks = [];
+    loadedSpaceClassifications = [];
     loadedQuantityMembers = [];
     loadedCostItems = [];
+    loadedUnitPriceTypes = [];
+    loadedUnitPrices = [];
     loadedClassificationRules = [];
     loadedPropertyMappingRules = [];
     loadedCostCodeRules = [];
@@ -7003,68 +6820,116 @@ function clearAllTabData() {
     loadedCostCodeAssignmentRules = [];
     loadedSpaceClassificationRules = [];
     loadedSpaceAssignmentRules = [];
-    loadedCostCodes = [];
-    loadedMemberMarks = [];
-    loadedSpaceClassifications = [];
-    loadedUnitPriceTypes = [];
-    loadedUnitPrices = [];
-    allTags = [];
     availableBoqFields = [];
+    loadedUnitPriceTypesForBoq = [];
+    // AI & SD 데이터 초기화
+    loadedAiModels = [];
+    currentTrainingTaskId = null;
+    currentTrainingStatus = {};
+    uploadedCsvFilename = null;
+    csvHeaders = [];
+    trainedModelTempFilename = null;
+    trainedModelMetadata = null;
+    sdEnabledCostCodes = [];
+    selectedSdModelId = null;
+    loadedSdCostItems = [];
 
-    // --- 각 탭별 UI 요소 초기화 ---
-    const clearContainer = (id, message = '<p>프로젝트를 선택하세요.</p>') => {
+    // --- 상태 변수 초기화 ---
+    Object.keys(viewerStates).forEach((context) => {
+        const state = viewerStates[context];
+        state.selectedElementIds.clear();
+        state.revitFilteredIds.clear();
+        state.columnFilters = {};
+        state.isFilterToSelectionActive = false;
+        state.collapsedGroups = {};
+        state.currentGroupByFields = [];
+        state.lastSelectedRowIndex = -1;
+        state.activeView = 'raw-data-view'; // 기본 뷰로 리셋
+    });
+    qmColumnFilters = {};
+    selectedQmIds.clear();
+    qmCollapsedGroups = {};
+    currentQmGroupByFields = [];
+    lastSelectedQmRowIndex = -1;
+    activeQmView = 'quantity-member-view'; // QM 뷰 리셋
+    ciColumnFilters = {};
+    selectedCiIds.clear();
+    ciCollapsedGroups = {};
+    currentCiGroupByFields = [];
+    lastSelectedCiRowIndex = -1;
+    boqFilteredRawElementIds.clear();
+    currentBoqColumns = [];
+    boqColumnAliases = {};
+    lastBoqItemIds = [];
+    currentBoqDetailItemId = null;
+    sdColumnFilters = {};
+    selectedSdItemIds.clear();
+    sdCollapsedGroups = {};
+    currentSdGroupByFields = [];
+    selectedCostCodeIdForUnitPrice = null;
+    currentUnitPriceEditState = { id: null, originalData: null };
+    spaceMappingState = { active: false, spaceId: null, spaceName: '' };
+    currentCsvImportUrl = null;
+
+    // --- 차트 인스턴스 파기 ---
+    if (trainingChartInstance) {
+        trainingChartInstance.destroy();
+        trainingChartInstance = null;
+        console.log('[DEBUG] Training chart destroyed.');
+    }
+    if (sdPredictionChartInstance) {
+        sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
+        console.log('[DEBUG] SD prediction chart destroyed.');
+    }
+
+    console.log(
+        '[DEBUG][clearAllTabData] Global data and states reset complete.'
+    ); // 디버깅
+
+    /**
+     * 지정된 ID의 컨테이너 내용을 비우고 메시지를 표시하는 헬퍼 함수
+     * @param {string} id - 컨테이너 요소의 ID
+     * @param {string} message - 표시할 HTML 메시지 (기본값: '<p>프로젝트를 선택하세요.</p>')
+     */
+    function clearContainer(id, message = '<p>프로젝트를 선택하세요.</p>') {
         const container = document.getElementById(id);
-        if (container) container.innerHTML = message;
-        else console.warn(`[WARN][clearAllTabData] Container not found: ${id}`);
+        if (container) {
+            container.innerHTML = message;
+            // console.log(`[DEBUG][UI] Cleared container: #${id}`); // 필요 시 디버깅 로그 활성화
+        } else {
+            console.warn(`[WARN][UI] Container not found for clearing: #${id}`); // 컨테이너 못 찾으면 경고
+        }
+    }
+    const clearSelect = (id, defaultOptionText = '-- 선택 --') => {
+        const select = document.getElementById(id);
+        if (select)
+            select.innerHTML = `<option value="">${defaultOptionText}</option>`;
     };
 
-    // Ruleset Management
+    // 관리 탭 하위
     document
         .querySelectorAll('.ruleset-table-container')
-        .forEach(
-            (c) =>
-                (c.innerHTML = '<p>프로젝트를 선택하고 규칙을 추가하세요.</p>')
-        );
-    // Cost Code Management
+        .forEach((c) => (c.innerHTML = '<p>프로젝트를 선택하세요.</p>'));
     clearContainer('cost-codes-table-container');
-    // Member Mark Management
     clearContainer('member-marks-table-container');
-    // Tag Management
     clearContainer('tag-list');
-    const tagAssignSelect = document.getElementById('tag-assign-select');
-    if (tagAssignSelect)
-        tagAssignSelect.innerHTML = '<option value="">-- 분류 선택 --</option>';
-    // Space Management
+    clearSelect('tag-assign-select', '-- 분류 선택 --');
     clearContainer('space-tree-container');
-    clearContainer(
-        'space-management-data-table-container',
-        '데이터가 여기에 표시됩니다...'
-    );
-    clearContainer('sm-system-field-container');
-    clearContainer('sm-revit-field-container');
-    clearContainer(
-        'sm-selected-bim-properties-container',
-        '<p>테이블에서 항목을 선택하면 BIM 속성이 여기에 표시됩니다.</p>'
-    );
-    // Unit Price Management
-    clearContainer(
-        'unit-price-cost-code-list',
-        '<p>프로젝트를 선택하면 공사코드가 표시됩니다.</p>'
-    );
-    clearContainer(
-        'unit-price-type-table-container',
-        '<p>단가 구분을 추가하세요.</p>'
-    );
-    clearContainer(
-        'unit-price-table-container',
-        '<p>왼쪽에서 공사코드를 선택하세요.</p>'
-    );
+    clearContainer('unit-price-cost-code-list');
+    clearContainer('unit-price-type-table-container');
+    clearContainer('unit-price-table-container');
     const priceListHeader = document.getElementById('unit-price-list-header');
     if (priceListHeader)
         priceListHeader.textContent = '단가 리스트 (공사코드를 선택하세요)';
     const addPriceBtn = document.getElementById('add-unit-price-btn');
     if (addPriceBtn) addPriceBtn.disabled = true;
-    // Data Management
+
+    // AI 모델 관리 탭
+    clearContainer('ai-model-list-container');
+    resetTrainingUI(); // 학습 UI 초기화 함수 호출
+
+    // 산출 탭 하위
     clearContainer(
         'data-management-data-table-container',
         '데이터가 여기에 표시됩니다...'
@@ -7073,42 +6938,39 @@ function clearAllTabData() {
     clearContainer('revit-field-container');
     clearContainer(
         'selected-bim-properties-container',
-        '<p>테이블에서 항목을 선택하면 BIM 속성이 여기에 표시됩니다.</p>'
+        '<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>'
     );
     clearContainer('selected-tags-list', '항목을 선택하세요.');
-    // Quantity Members
+    clearContainer(
+        'space-management-data-table-container',
+        '데이터가 여기에 표시됩니다...'
+    );
+    clearContainer('sm-system-field-container');
+    clearContainer('sm-revit-field-container');
+    clearContainer(
+        'sm-selected-bim-properties-container',
+        '<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>'
+    );
+    // QM 탭
     clearContainer('qm-table-container');
     clearContainer('qm-properties-container', '부재를 하나만 선택하세요.');
     clearContainer(
         'qm-cost-codes-list',
         '공사코드를 보려면 부재를 선택하세요.'
     );
+    clearSelect('qm-cost-code-assign-select', '-- 공사코드 선택 --');
     clearContainer(
         'qm-member-mark-details-container',
         '부재를 하나만 선택하세요.'
     );
+    clearSelect('qm-member-mark-assign-select', '-- 일람부호 선택 --');
     clearContainer(
         'qm-linked-raw-element-properties-container',
         '<p>부재를 하나만 선택하면 원본 데이터가 표시됩니다.</p>'
     );
     clearContainer('qm-spaces-list', '공간분류를 보려면 부재를 선택하세요.');
-    const qmCostCodeSelect = document.getElementById(
-        'qm-cost-code-assign-select'
-    );
-    if (qmCostCodeSelect)
-        qmCostCodeSelect.innerHTML =
-            '<option value="">-- 공사코드 선택 --</option>';
-    const qmMarkSelect = document.getElementById(
-        'qm-member-mark-assign-select'
-    );
-    if (qmMarkSelect)
-        qmMarkSelect.innerHTML =
-            '<option value="">-- 일람부호 선택 --</option>';
-    const qmSpaceSelect = document.getElementById('qm-space-assign-select');
-    if (qmSpaceSelect)
-        qmSpaceSelect.innerHTML =
-            '<option value="">-- 공간분류 선택 --</option>';
-    // Cost Items
+    clearSelect('qm-space-assign-select', '-- 공간분류 선택 --');
+    // CI 탭
     clearContainer('ci-table-container');
     clearContainer(
         'ci-linked-member-info-header',
@@ -7117,14 +6979,15 @@ function clearAllTabData() {
     clearContainer('ci-linked-member-properties-container');
     clearContainer('ci-linked-mark-properties-container');
     clearContainer('ci-linked-raw-element-properties-container');
-    // BOQ
+
+    // 상세견적(DD) 탭
     clearContainer(
         'boq-table-container',
-        '<p style="padding: 20px;">프로젝트를 선택하고 집계 기준을 설정 후 \'집계표 생성\' 버튼을 눌러주세요.</p>'
+        '<p style="padding: 20px;">프로젝트를 선택하세요.</p>'
     );
     clearContainer(
         'boq-item-list-container',
-        '<p style="padding: 10px;">상단 집계표의 행을 선택하세요.</p>'
+        '<p style="padding: 10px;">상단 집계표 행을 선택하세요.</p>'
     );
     clearContainer(
         'boq-bim-object-cost-summary',
@@ -7137,10 +7000,1705 @@ function clearAllTabData() {
         'boq-display-fields-container',
         '<small>프로젝트를 선택하세요.</small>'
     );
-    clearContainer('boq-grouping-controls'); // 그룹핑 컨트롤 내용 비우기
-    // Reset BOQ columns state
-    currentBoqColumns = [];
-    boqColumnAliases = {};
+    clearContainer('boq-grouping-controls');
 
-    console.log('[DEBUG][clearAllTabData] UI cleared.');
+    // 개산견적(SD) 탭
+    initializeSdUI(); // SD 탭 전용 초기화 함수 호출
+
+    // 기타 UI
+    document.getElementById('clear-selection-filter-btn').style.display =
+        'none';
+
+    console.log('[DEBUG][clearAllTabData] UI elements cleared/reset.'); // 디버깅
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲
+// ▼▼▼ [추가] 파일 맨 아래에 아래 함수들을 모두 추가 ▼▼▼
+
+// =====================================================================
+// [신규] AI 모델 관리 관련 함수들
+// =====================================================================
+
+// AI 모델 관리 내부 탭 클릭 핸들러
+function handleAiInnerTabClick(event) {
+    const clickedButton = event.target.closest('.inner-tab-button');
+    if (!clickedButton || clickedButton.classList.contains('active')) return;
+
+    const targetInnerTabId = clickedButton.dataset.innerTab; // "ai-model-list" 또는 "ai-model-training"
+    console.log(
+        `[DEBUG][handleAiInnerTabClick] Inner tab clicked: ${targetInnerTabId}`
+    ); // 디버깅
+
+    // 모든 내부 탭 버튼과 컨텐츠 비활성화
+    const container = clickedButton.closest('#ai-model-manager'); // 부모 컨텐츠 영역
+    container
+        .querySelectorAll('.inner-tab-button.active')
+        .forEach((btn) => btn.classList.remove('active'));
+    container
+        .querySelectorAll('.inner-tab-content.active')
+        .forEach((content) => content.classList.remove('active'));
+
+    // 클릭된 버튼과 컨텐츠 활성화
+    clickedButton.classList.add('active');
+    const targetContent = container.querySelector(`#${targetInnerTabId}`); // 내부 컨텐츠 ID
+    if (targetContent) {
+        targetContent.classList.add('active');
+        console.log(
+            `[DEBUG][handleAiInnerTabClick] Inner content activated: ${targetInnerTabId}`
+        ); // 디버깅
+        // 내부 탭 전환 시 필요한 데이터 로드
+        loadDataForAiInnerTab(targetInnerTabId);
+    } else {
+        console.warn(
+            `[WARN][handleAiInnerTabClick] Inner content element not found for ID: ${targetInnerTabId}`
+        ); // 디버깅
+    }
+}
+
+// AI 모델 관리 내부 탭 데이터 로드 함수
+function loadDataForAiInnerTab(innerTabId) {
+    console.log(
+        `[DEBUG][loadDataForAiInnerTab] Loading data for AI inner tab: ${innerTabId}`
+    ); // 디버깅
+    if (!currentProjectId) {
+        console.warn('[WARN][loadDataForAiInnerTab] No project selected.'); // 디버깅
+        return;
+    }
+
+    if (innerTabId === 'ai-model-list') {
+        loadAiModels(); // 모델 목록 로드 API 호출
+    } else if (innerTabId === 'ai-model-training') {
+        console.log(
+            `[DEBUG][loadDataForAiInnerTab] Initializing AI training UI.`
+        ); // 디버깅
+        resetTrainingUI(); // 학습 UI 초기 상태로 설정
+    } else {
+        console.warn(
+            `[WARN][loadDataForAiInnerTab] Unknown inner tab ID: ${innerTabId}`
+        ); // 디버깅
+    }
+}
+
+// AI 모델 목록 로드 API 호출
+async function loadAiModels() {
+    console.log('[DEBUG][loadAiModels] Loading AI models list...'); // 디버깅
+    if (!currentProjectId) {
+        renderAiModelsTable([]); // 빈 테이블 렌더링 (ui.js 함수)
+        console.warn('[WARN][loadAiModels] No project selected.'); // 디버깅
+        return;
+    }
+    try {
+        const response = await fetch(
+            `/connections/api/ai-models/${currentProjectId}/`
+        );
+        if (!response.ok) throw new Error('AI 모델 목록 로딩 실패');
+        loadedAiModels = await response.json(); // 전역 변수 업데이트
+        console.log(
+            `[DEBUG][loadAiModels] Loaded ${loadedAiModels.length} models.`
+        ); // 디버깅
+        renderAiModelsTable(loadedAiModels); // ui.js 함수 호출하여 테이블 렌더링
+        // SD 탭 모델 드롭다운도 갱신 (선택 사항 - 필요 시 호출)
+        // populateSdModelSelect(loadedAiModels);
+    } catch (error) {
+        console.error('[ERROR][loadAiModels] Failed:', error); // 디버깅
+        showToast(error.message, 'error');
+        renderAiModelsTable([]); // 오류 시 빈 테이블
+    }
+}
+
+// AI 모델 파일 선택 트리거
+function triggerAiFileUpload() {
+    console.log(
+        '[DEBUG][triggerAiFileUpload] Triggering file inputs for AI model upload (.h5 and .json).'
+    ); // 디버깅
+    document.getElementById('ai-model-h5-input')?.click();
+    document.getElementById('ai-model-json-input')?.click(); // 메타데이터 파일도 같이 선택 유도
+}
+
+// 파일 선택 시 버튼 텍스트 변경 (헬퍼 함수 - 이전 코드에 이미 있음, 디버깅 강화)
+function displaySelectedFileName(inputId, buttonId) {
+    const input = document.getElementById(inputId);
+    const button = document.getElementById(buttonId);
+    let fileNames = '';
+    if (input && input.files.length > 0) {
+        fileNames = Array.from(input.files)
+            .map((f) => f.name)
+            .join(', ');
+        console.log(
+            `[DEBUG][displaySelectedFileName] File selected for ${inputId}: ${fileNames}`
+        ); // 디버깅
+    } else {
+        console.log(
+            `[DEBUG][displaySelectedFileName] No file selected or selection cleared for ${inputId}.`
+        ); // 디버깅
+    }
+
+    // 버튼 텍스트 업데이트 로직 (여러 파일 입력을 하나의 버튼에 표시)
+    if (button) {
+        let baseText = '';
+        if (buttonId === 'upload-ai-model-files-btn') baseText = '파일 선택';
+        else if (buttonId === 'upload-csv-btn') baseText = 'CSV 업로드 및 분석';
+        else baseText = button.textContent.split('(')[0].trim(); // 기본 텍스트 추출
+
+        const h5File =
+            document.getElementById('ai-model-h5-input')?.files[0]?.name;
+        const jsonFile = document.getElementById('ai-model-json-input')
+            ?.files[0]?.name;
+        const csvFile =
+            document.getElementById('training-csv-input')?.files[0]?.name;
+
+        let displayFiles = [];
+        if (buttonId === 'upload-ai-model-files-btn') {
+            if (h5File) displayFiles.push(h5File);
+            if (jsonFile) displayFiles.push(jsonFile);
+        } else if (buttonId === 'upload-csv-btn' && csvFile) {
+            displayFiles.push(csvFile);
+        }
+
+        if (displayFiles.length > 0) {
+            button.textContent = `${baseText} (${displayFiles.join(', ')})`;
+        } else {
+            button.textContent = baseText; // 파일 선택 없으면 기본 텍스트
+        }
+    }
+}
+
+// AI 모델 업로드 API 호출
+async function uploadAiModel() {
+    console.log(
+        '[DEBUG][uploadAiModel] Attempting to upload AI model via API.'
+    ); // 디버깅
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+
+    const nameInput = document.getElementById('new-ai-model-name');
+    const h5Input = document.getElementById('ai-model-h5-input');
+    const jsonInput = document.getElementById('ai-model-json-input');
+    const metadataManualInput = document.getElementById(
+        'ai-model-metadata-manual'
+    );
+
+    const name = nameInput.value.trim();
+    const h5File = h5Input.files[0];
+    const jsonFile = jsonInput.files[0];
+    const metadataManual = metadataManualInput.value.trim();
+
+    if (!name || !h5File) {
+        showToast('모델 이름과 .h5 파일은 필수입니다.', 'error');
+        console.log('[DEBUG][uploadAiModel] Missing required name or h5 file.'); // 디버깅
+        return;
+    }
+    // 이름 중복 검사 (선택 사항 - 클라이언트 측)
+    if (loadedAiModels.some((m) => m.name === name)) {
+        showToast('이미 사용 중인 모델 이름입니다.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('h5_file', h5File);
+    if (jsonFile) {
+        formData.append('json_file', jsonFile);
+        console.log('[DEBUG][uploadAiModel] Using metadata from json_file.'); // 디버깅
+    } else if (metadataManual) {
+        formData.append('metadata_manual', metadataManual);
+        console.log('[DEBUG][uploadAiModel] Using metadata from manual input.'); // 디버깅
+    } else {
+        console.log(
+            '[WARN][uploadAiModel] No metadata file or manual input provided. Default metadata will be used.'
+        ); // 디버깅
+    }
+    // description 필드 추가 (선택 사항)
+    // formData.append('description', '...');
+
+    showToast('AI 모델 업로드 중...', 'info');
+    try {
+        const response = await fetch(
+            `/connections/api/ai-models/${currentProjectId}/`,
+            {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrftoken },
+                body: formData,
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || '업로드 실패');
+
+        showToast(result.message, 'success');
+        console.log(
+            `[DEBUG][uploadAiModel] Upload successful. New model ID: ${result.model_id}`
+        ); // 디버깅
+        loadAiModels(); // 목록 새로고침
+
+        // 입력 필드 초기화
+        nameInput.value = '';
+        h5Input.value = '';
+        jsonInput.value = '';
+        metadataManualInput.value = '';
+        displaySelectedFileName(
+            'ai-model-h5-input',
+            'upload-ai-model-files-btn'
+        ); // 버튼 텍스트 초기화
+    } catch (error) {
+        console.error('[ERROR][uploadAiModel] Upload failed:', error); // 디버깅
+        showToast(error.message, 'error');
+    }
+}
+
+// AI 모델 목록 테이블 액션 처리 (수정, 삭제, 다운로드)
+async function handleAiModelListActions(event) {
+    const target = event.target;
+    const modelRow = target.closest('tr[data-model-id]');
+    if (!modelRow) return;
+    const modelId = modelRow.dataset.modelId;
+
+    if (target.classList.contains('edit-ai-model-btn')) {
+        console.log(
+            `[DEBUG][handleAiModelListActions] Edit button clicked for model ID: ${modelId}`
+        ); // 디버깅
+        // TODO: 수정 UI 구현 (예: 모달 팝업 또는 인라인 편집)
+        showToast('모델 정보 수정 기능은 아직 구현되지 않았습니다.', 'info');
+    } else if (target.classList.contains('delete-ai-model-btn')) {
+        console.log(
+            `[DEBUG][handleAiModelListActions] Delete button clicked for model ID: ${modelId}`
+        ); // 디버깅
+        const modelName = modelRow.cells[0].textContent; // 테이블에서 이름 가져오기
+        if (confirm(`AI 모델 '${modelName}'을(를) 삭제하시겠습니까?`)) {
+            console.log(
+                `[DEBUG][handleAiModelListActions] Sending DELETE request for model ID: ${modelId}`
+            ); // 디버깅
+            try {
+                const response = await fetch(
+                    `/connections/api/ai-models/${currentProjectId}/${modelId}/`,
+                    {
+                        method: 'DELETE',
+                        headers: { 'X-CSRFToken': csrftoken },
+                    }
+                );
+                const result = await response.json();
+                if (!response.ok)
+                    throw new Error(result.message || '삭제 실패');
+                showToast(result.message, 'success');
+                console.log(
+                    `[DEBUG][handleAiModelListActions] Model deleted successfully.`
+                ); // 디버깅
+                loadAiModels(); // 목록 새로고침
+            } catch (error) {
+                console.error(
+                    '[ERROR][handleAiModelListActions] Delete failed:',
+                    error
+                ); // 디버깅
+                showToast(error.message, 'error');
+            }
+        } else {
+            console.log('[DEBUG][handleAiModelListActions] Delete cancelled.'); // 디버깅
+        }
+    } else if (target.classList.contains('download-ai-model-h5-btn')) {
+        console.log(
+            `[DEBUG][handleAiModelListActions] Download H5 button clicked for model ID: ${modelId}`
+        ); // 디버깅
+        window.location.href = `/connections/api/ai-models/${currentProjectId}/${modelId}/download/?type=h5`;
+    } else if (target.classList.contains('download-ai-model-json-btn')) {
+        console.log(
+            `[DEBUG][handleAiModelListActions] Download JSON button clicked for model ID: ${modelId}`
+        ); // 디버깅
+        window.location.href = `/connections/api/ai-models/${currentProjectId}/${modelId}/download/?type=json`;
+    }
+}
+
+// =====================================================================
+// [신규] AI 모델 학습 관련 함수들
+// =====================================================================
+
+// CSV 업로드 및 분석 API 호출
+async function uploadAndAnalyzeCsv() {
+    console.log(
+        '[DEBUG][uploadAndAnalyzeCsv] Attempting to upload and analyze CSV for training.'
+    ); // 디버깅
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    const csvInput = document.getElementById('training-csv-input');
+    if (csvInput.files.length === 0) {
+        showToast('학습용 CSV 파일을 선택하세요.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('training_csv', csvInput.files[0]);
+
+    showToast('CSV 파일 업로드 및 분석 중...', 'info');
+    try {
+        const response = await fetch(
+            `/connections/api/ai-training/${currentProjectId}/upload-csv/`,
+            {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrftoken },
+                body: formData,
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'CSV 분석 실패');
+
+        showToast(result.message, 'success');
+        console.log(
+            `[DEBUG][uploadAndAnalyzeCsv] CSV analyzed. Headers: ${result.headers.length}, Temp file: ${result.temp_filename}`
+        ); // 디버깅
+        uploadedCsvFilename = result.temp_filename; // 임시 파일명 저장
+        csvHeaders = result.headers; // 헤더 목록 저장
+
+        // UI 업데이트: 1단계 숨기고 2단계 표시, 피처 목록 채우기
+        document.getElementById('training-step-1').style.display = 'none';
+        document.getElementById('training-step-2').style.display = 'block';
+        document.getElementById('training-step-3').style.display = 'none'; // 3단계 숨김
+        renderFeatureSelectionLists(csvHeaders); // ui.js 함수 호출
+    } catch (error) {
+        console.error('[ERROR][uploadAndAnalyzeCsv] Failed:', error); // 디버깅
+        showToast(error.message, 'error');
+        resetTrainingUI(); // 오류 시 UI 초기화
+    }
+}
+
+// 입력/출력 피처 선택 처리 (체크박스 변경 시)
+function handleFeatureSelection(event) {
+    if (event.target.type === 'checkbox') {
+        const featureName = event.target.value;
+        const isInputList = event.currentTarget.id === 'input-feature-list';
+        // 선택 시 다른 목록에서 자동 해제 (Input과 Output은 중복 불가)
+        const otherListId = isInputList
+            ? 'output-feature-list'
+            : 'input-feature-list';
+        const otherCheckbox = document.querySelector(
+            `#${otherListId} input[value="${featureName}"]`
+        );
+        if (event.target.checked && otherCheckbox && otherCheckbox.checked) {
+            otherCheckbox.checked = false;
+            console.log(
+                `[DEBUG][handleFeatureSelection] Feature '${featureName}' deselected from ${
+                    isInputList ? 'Output' : 'Input'
+                } list due to selection in ${
+                    isInputList ? 'Input' : 'Output'
+                } list.`
+            ); // 디버깅
+        }
+        console.log(
+            `[DEBUG][handleFeatureSelection] Feature '${featureName}' selection changed in ${
+                isInputList ? 'Input' : 'Output'
+            } list. Checked: ${event.target.checked}`
+        ); // 디버깅
+    }
+}
+
+// 학습 시작 API 호출
+async function startTraining() {
+    console.log(
+        '[DEBUG][startTraining] Validating inputs and preparing to start AI training...'
+    ); // 디버깅
+    if (!currentProjectId || !uploadedCsvFilename) {
+        showToast('프로젝트 선택 및 CSV 파일 업로드가 필요합니다.', 'error');
+        return;
+    }
+
+    // 선택된 입력/출력 피처 가져오기
+    const inputFeatures = Array.from(
+        document.querySelectorAll('#input-feature-list input:checked')
+    ).map((cb) => cb.value);
+    const outputFeatures = Array.from(
+        document.querySelectorAll('#output-feature-list input:checked')
+    ).map((cb) => cb.value);
+    const modelName = document
+        .getElementById('training-model-name')
+        .value.trim();
+
+    // 유효성 검사
+    if (inputFeatures.length === 0 || outputFeatures.length === 0) {
+        showToast('입력 및 출력 피처를 하나 이상 선택하세요.', 'error');
+        return;
+    }
+    if (!modelName) {
+        showToast('학습된 모델의 이름을 입력하세요.', 'error');
+        return;
+    }
+    // 모델 이름 중복 검사 (클라이언트 측)
+    if (loadedAiModels.some((m) => m.name === modelName)) {
+        showToast(
+            '이미 사용 중인 모델 이름입니다. 다른 이름을 사용하세요.',
+            'error'
+        );
+        return;
+    }
+
+    // 학습 설정 객체 생성
+    const config = {
+        temp_filename: uploadedCsvFilename,
+        model_name: modelName,
+        input_features: inputFeatures,
+        output_features: outputFeatures,
+        hidden_layers:
+            parseInt(document.getElementById('hidden-layers').value) || 1,
+        nodes_per_layer:
+            parseInt(document.getElementById('nodes-per-layer').value) || 64,
+        learning_rate:
+            parseFloat(document.getElementById('learning-rate').value) || 0.001,
+        epochs: parseInt(document.getElementById('epochs').value) || 10,
+        optimizer: document.getElementById('optimizer').value || 'adam',
+        normalize_inputs: document.getElementById('normalize-inputs').checked,
+    };
+    console.log(
+        '[DEBUG][startTraining] Training configuration prepared:',
+        config
+    ); // 디버깅
+
+    // UI 업데이트: 2단계 숨기고 3단계 표시, 진행률 초기화
+    document.getElementById('training-step-1').style.display = 'none';
+    document.getElementById('training-step-2').style.display = 'none';
+    document.getElementById('training-step-3').style.display = 'block';
+    document.getElementById('training-progress-info').textContent =
+        '학습 시작 요청 중...';
+    document.getElementById('training-results').innerHTML = ''; // 이전 결과 초기화
+    document.getElementById('training-actions').style.display = 'none'; // 완료 후 버튼 숨김
+    // 차트 초기화
+    if (trainingChartInstance) trainingChartInstance.destroy();
+    const ctx = document
+        .getElementById('training-progress-chart')
+        .getContext('2d');
+    trainingChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Loss', data: [], borderColor: 'red', fill: false },
+                {
+                    label: 'Validation Loss',
+                    data: [],
+                    borderColor: 'blue',
+                    fill: false,
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { title: { display: true, text: 'Epoch' } },
+                y: { title: { display: true, text: 'Loss' } },
+            },
+        },
+    });
+    console.log(
+        '[DEBUG][startTraining] Training UI updated to Step 3 (Progress). Chart initialized.'
+    ); // 디버깅
+
+    showToast('AI 모델 학습 시작 요청...', 'info');
+    try {
+        const response = await fetch(
+            `/connections/api/ai-training/${currentProjectId}/start/`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: JSON.stringify(config),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || '학습 시작 실패');
+
+        showToast(result.message, 'success');
+        currentTrainingTaskId = result.task_id; // 작업 ID 저장
+        currentTrainingStatus = {
+            status: 'queued',
+            message: '학습 대기 중...',
+        }; // 초기 상태 설정
+        console.log(
+            `[DEBUG][startTraining] Training start request successful. Task ID: ${currentTrainingTaskId}`
+        ); // 디버깅
+        // WebSocket 메시지가 진행률을 업데이트할 것임
+    } catch (error) {
+        console.error(
+            '[ERROR][startTraining] Failed to start training:',
+            error
+        ); // 디버깅
+        showToast(error.message, 'error');
+        document.getElementById(
+            'training-progress-info'
+        ).textContent = `오류: ${error.message}`;
+        // 오류 발생 시 UI를 이전 단계로 되돌리거나 리셋
+        // document.getElementById('training-step-2').style.display = 'block';
+        // document.getElementById('training-step-3').style.display = 'none';
+        resetTrainingUI(); // 아예 처음으로 리셋
+    }
+}
+
+// WebSocket 으로 학습 진행률 업데이트 처리 (websocket.js 에서 호출됨)
+function handleTrainingProgressUpdate(data) {
+    // 요청한 작업 ID와 일치하는지, 그리고 현재 학습 UI가 보이는지 확인
+    if (
+        data.task_id !== currentTrainingTaskId ||
+        activeTab !== 'ai-model-manager' ||
+        document.getElementById('ai-model-training')?.style.display === 'none'
+    ) {
+        // console.log(`[DEBUG][handleTrainingProgressUpdate] Received progress for irrelevant task (${data.task_id}) or tab, ignoring.`); // 너무 빈번할 수 있음
+        return;
+    }
+
+    currentTrainingStatus = data.progress; // 최신 상태 저장
+    console.log(
+        '[DEBUG][handleTrainingProgressUpdate] Received progress update:',
+        currentTrainingStatus
+    ); // 디버깅
+
+    const progressInfo = document.getElementById('training-progress-info');
+    const resultsDiv = document.getElementById('training-results');
+    const actionsDiv = document.getElementById('training-actions');
+    const chart = trainingChartInstance;
+
+    // 진행률 메시지 업데이트
+    if (currentTrainingStatus.status === 'running') {
+        progressInfo.textContent = `Epoch ${
+            currentTrainingStatus.current_epoch || '-'
+        }/${currentTrainingStatus.total_epochs || '-'} 진행 중... Loss: ${
+            currentTrainingStatus.loss?.toFixed(4) ?? 'N/A'
+        }, Val Loss: ${currentTrainingStatus.val_loss?.toFixed(4) ?? 'N/A'}`;
+    } else {
+        progressInfo.textContent =
+            currentTrainingStatus.message || '상태 업데이트 중...';
+    }
+
+    // 차트 업데이트 (epoch_history 데이터 사용)
+    if (
+        chart &&
+        currentTrainingStatus.epoch_history &&
+        currentTrainingStatus.epoch_history.length > 0
+    ) {
+        const history = currentTrainingStatus.epoch_history;
+        chart.data.labels = history.map((h) => h.epoch);
+        chart.data.datasets[0].data = history.map((h) => h.loss); // Loss
+        chart.data.datasets[1].data = history.map((h) => h.val_loss); // Validation Loss
+        try {
+            chart.update();
+        } catch (e) {
+            console.warn('Chart update error:', e);
+        } // 차트 업데이트 오류 방지
+    }
+
+    // 상태에 따른 UI 처리 (완료 또는 오류)
+    if (currentTrainingStatus.status === 'completed') {
+        progressInfo.textContent = `✅ 학습 완료! ${currentTrainingStatus.message}`;
+        resultsDiv.innerHTML = `<ul><li>최종 검증 손실(Final Validation Loss): ${
+            currentTrainingStatus.final_val_loss?.toFixed(4) ?? 'N/A'
+        }</li></ul>`;
+        actionsDiv.style.display = 'block'; // 완료 후 버튼 표시
+        trainedModelTempFilename = currentTrainingStatus.trained_model_filename; // 임시 파일명 저장
+        trainedModelMetadata = currentTrainingStatus.metadata; // 메타데이터 저장
+        console.log(
+            `[DEBUG][handleTrainingProgressUpdate] Training completed. Temp file: ${trainedModelTempFilename}`
+        ); // 디버깅
+    } else if (currentTrainingStatus.status === 'error') {
+        progressInfo.textContent = `❌ 오류: ${currentTrainingStatus.message}`;
+        resultsDiv.innerHTML = '';
+        actionsDiv.style.display = 'none'; // 오류 시 버튼 숨김
+        console.error(
+            `[ERROR][handleTrainingProgressUpdate] Training failed: ${currentTrainingStatus.message}`
+        ); // 디버깅
+        currentTrainingTaskId = null; // 오류 발생 시 ID 초기화
+    } else {
+        // 학습 진행 중이면 결과/액션 숨김
+        resultsDiv.innerHTML = '';
+        actionsDiv.style.display = 'none';
+    }
+}
+
+// 학습된 모델 저장 API 호출 (DB에)
+async function saveTrainedModel() {
+    console.log(
+        '[DEBUG][saveTrainedModel] Attempting to save trained model to database via API.'
+    ); // 디버깅
+    const modelName =
+        currentTrainingStatus?.metadata?.training_config?.model_name; // 학습 설정에서 이름 가져오기
+
+    if (
+        !currentProjectId ||
+        !trainedModelTempFilename ||
+        !trainedModelMetadata ||
+        !modelName
+    ) {
+        showToast(
+            '학습이 완료되지 않았거나 저장할 모델 정보가 없습니다.',
+            'error'
+        );
+        console.error(
+            '[ERROR][saveTrainedModel] Missing required data (project, temp_filename, metadata, model_name).'
+        ); // 디버깅
+        return;
+    }
+    // 모델 이름 중복 다시 확인 (저장 직전)
+    if (loadedAiModels.some((m) => m.name === modelName)) {
+        showToast(
+            `모델 이름 '${modelName}'이(가) 이미 존재합니다. 학습 시 다른 이름을 사용했어야 합니다.`,
+            'error'
+        );
+        return;
+    }
+
+    showToast(`모델 '${modelName}' 저장 요청 중...`, 'info');
+    try {
+        // 백엔드에 임시 파일명과 메타데이터를 보내 DB 저장을 요청하는 새 API 호출
+        const response = await fetch(
+            `/connections/api/ai-models/${currentProjectId}/save-trained/`,
+            {
+                // << 백엔드에 이 URL 구현 필요
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: JSON.stringify({
+                    temp_h5_filename: trainedModelTempFilename, // 임시 h5 파일 이름
+                    name: modelName,
+                    metadata: trainedModelMetadata,
+                    description: `Trained on ${new Date().toLocaleDateString()}`, // 간단한 설명
+                }),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || '모델 저장 실패');
+
+        showToast(result.message, 'success');
+        console.log(
+            `[DEBUG][saveTrainedModel] Model saved successfully to database. New ID: ${result.model_id}`
+        ); // 디버깅
+        loadAiModels(); // 모델 목록 새로고침 ('목록/업로드' 탭으로 자동 전환은 X)
+
+        // 저장 후 임시 정보 초기화 (선택적)
+        // trainedModelTempFilename = null;
+        // trainedModelMetadata = null;
+        // 버튼 비활성화 등 추가 처리 가능
+        document.getElementById('save-trained-model-btn').disabled = true; // 저장 버튼 비활성화
+    } catch (error) {
+        console.error('[ERROR][saveTrainedModel] Failed:', error); // 디버깅
+        showToast(error.message, 'error');
+    }
+}
+
+// 학습된 모델 파일 다운로드 (.h5 또는 .json)
+function downloadTrainedModelFile(type) {
+    // type: 'h5' or 'json'
+    console.log(
+        `[DEBUG][downloadTrainedModelFile] Requesting download for trained model file. Type: ${type}`
+    ); // 디버깅
+    const modelName =
+        currentTrainingStatus?.metadata?.training_config?.model_name;
+
+    if (
+        !currentProjectId ||
+        !trainedModelTempFilename ||
+        !trainedModelMetadata ||
+        !modelName
+    ) {
+        showToast('다운로드할 학습된 모델 정보가 없습니다.', 'error');
+        console.error(
+            '[ERROR][downloadTrainedModelFile] Missing required data (project, temp_filename, metadata, model_name).'
+        ); // 디버깅
+        return;
+    }
+
+    if (type === 'h5') {
+        // 백엔드에 임시 h5 파일 다운로드 API 요청 (새 API 엔드포인트 필요)
+        console.log(
+            `[DEBUG][downloadTrainedModelFile] Triggering H5 download for temp file: ${trainedModelTempFilename}`
+        ); // 디버깅
+        // 백엔드에 임시 파일명과 원하는 다운로드 파일명을 전달
+        window.location.href = `/connections/api/ai-training/download-temp/?filename=${trainedModelTempFilename}&type=h5&download_name=${encodeURIComponent(
+            modelName
+        )}.h5`; // << 백엔드에 이 URL 구현 필요
+    } else if (type === 'json') {
+        // 메타데이터는 프론트엔드에 있으므로 직접 Blob 생성하여 다운로드
+        console.log(
+            `[DEBUG][downloadTrainedModelFile] Generating JSON metadata file for download.`
+        ); // 디버깅
+        const metadataString = JSON.stringify(trainedModelMetadata, null, 2);
+        const blob = new Blob([metadataString], {
+            type: 'application/json;charset=utf-8',
+        }); // UTF-8 명시
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${modelName}_metadata.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log(
+            `[DEBUG][downloadTrainedModelFile] JSON metadata download initiated.`
+        ); // 디버깅
+    } else {
+        console.error(
+            `[ERROR][downloadTrainedModelFile] Invalid download type specified: ${type}`
+        ); // 디버깅
+    }
+}
+
+// 학습 UI 초기화 (CSV 업로드 단계로)
+function resetTrainingUI() {
+    console.log(
+        '[DEBUG][resetTrainingUI] Resetting AI training UI to Step 1 (CSV Upload).'
+    ); // 디버깅
+    // 단계 표시 초기화
+    document.getElementById('training-step-1').style.display = 'block';
+    document.getElementById('training-step-2').style.display = 'none';
+    document.getElementById('training-step-3').style.display = 'none';
+    // 입력 값 초기화
+    const csvInput = document.getElementById('training-csv-input');
+    if (csvInput) csvInput.value = ''; // 파일 선택 초기화
+    displaySelectedFileName('training-csv-input', 'upload-csv-btn'); // 버튼 텍스트 복원
+    document.getElementById('csv-info').innerHTML = '';
+    document.getElementById('input-feature-list').innerHTML = '';
+    document.getElementById('output-feature-list').innerHTML = '';
+    document.getElementById('training-model-name').value = '';
+    // 모델 설정 기본값 복원 (선택적)
+    document.getElementById('hidden-layers').value = 2;
+    document.getElementById('nodes-per-layer').value = 64;
+    document.getElementById('learning-rate').value = 0.001;
+    document.getElementById('epochs').value = 50;
+    document.getElementById('optimizer').value = 'adam';
+    document.getElementById('normalize-inputs').checked = true;
+    // 진행률/결과/액션 초기화
+    document.getElementById('training-progress-info').textContent =
+        '학습 대기 중...';
+    document.getElementById('training-results').innerHTML = '';
+    document.getElementById('training-actions').style.display = 'none';
+    document.getElementById('save-trained-model-btn').disabled = false; // 저장 버튼 다시 활성화
+    // 차트 초기화
+    if (trainingChartInstance) {
+        trainingChartInstance.destroy();
+        trainingChartInstance = null;
+    }
+    // 전역 변수 초기화
+    uploadedCsvFilename = null;
+    csvHeaders = [];
+    currentTrainingTaskId = null;
+    currentTrainingStatus = {};
+    trainedModelTempFilename = null;
+    trainedModelMetadata = null;
+    console.log(
+        '[DEBUG][resetTrainingUI] Training UI and state variables reset.'
+    ); // 디버깅
+}
+
+// =====================================================================
+// [신규] 개산견적 (SD) 관련 함수들
+// =====================================================================
+
+// SD 탭 진입 시 AI 모델 목록 로드 (드롭다운 채우기)
+async function loadAiModelsForSd() {
+    console.log(
+        '[DEBUG][loadAiModelsForSd] Loading AI models for SD tab dropdown.'
+    ); // 디버깅
+    const select = document.getElementById('sd-model-select');
+    if (!select) {
+        console.error(
+            '[ERROR][loadAiModelsForSd] SD model select dropdown not found.'
+        );
+        return;
+    }
+    if (!currentProjectId) {
+        select.innerHTML = '<option value="">-- 프로젝트 선택 --</option>';
+        return;
+    }
+
+    // loadedAiModels 전역 변수가 이미 로드되었는지 확인 (AI 관리 탭 등에서)
+    if (loadedAiModels.length > 0) {
+        console.log(
+            '[DEBUG][loadAiModelsForSd] Using already loaded AI models.'
+        ); // 디버깅
+        populateSdModelSelect(loadedAiModels); // 로드된 데이터로 드롭다운 채우기
+    } else {
+        // 아직 로드되지 않았으면 API 호출
+        console.log(
+            '[DEBUG][loadAiModelsForSd] AI models not loaded, fetching from API...'
+        ); // 디버깅
+        try {
+            const response = await fetch(
+                `/connections/api/ai-models/${currentProjectId}/`
+            );
+            if (!response.ok) throw new Error('AI 모델 목록 로딩 실패');
+            loadedAiModels = await response.json(); // 전역 변수 업데이트
+            console.log(
+                `[DEBUG][loadAiModelsForSd] Fetched ${loadedAiModels.length} models.`
+            ); // 디버깅
+            populateSdModelSelect(loadedAiModels);
+        } catch (error) {
+            console.error('[ERROR][loadAiModelsForSd] Failed:', error); // 디버깅
+            showToast(error.message, 'error');
+            select.innerHTML = '<option value="">모델 로딩 실패</option>';
+        }
+    }
+}
+
+// AI 모델 목록으로 SD 탭 드롭다운 채우기 (헬퍼 함수)
+function populateSdModelSelect(models) {
+    const select = document.getElementById('sd-model-select');
+    if (!select) return;
+    select.innerHTML = '<option value="">-- 모델 선택 --</option>'; // 초기화
+    models.forEach((model) => {
+        select.add(
+            new Option(
+                `${model.name} (${new Date(
+                    model.created_at
+                ).toLocaleDateString()})`,
+                model.id
+            )
+        );
+    });
+    // 이전에 선택된 모델 복원
+    if (selectedSdModelId && models.some((m) => m.id === selectedSdModelId)) {
+        select.value = selectedSdModelId;
+        handleSdModelSelection({ target: select }); // 입력 필드 렌더링
+        console.log(
+            `[DEBUG][populateSdModelSelect] Restored SD model selection: ${selectedSdModelId}`
+        ); // 디버깅
+    } else {
+        selectedSdModelId = null; // 유효하지 않으면 초기화
+        document.getElementById('sd-input-fields').innerHTML =
+            '<p>모델을 선택하면 입력 항목이 표시됩니다.</p>';
+        document.getElementById('sd-predict-btn').disabled = true;
+    }
+    console.log(
+        '[DEBUG][populateSdModelSelect] SD model select dropdown populated.'
+    ); // 디버깅
+}
+
+// SD 탭 진입 시 연동 가능한 공사코드+수량 로드
+async function loadSdCostCodes() {
+    console.log(
+        '[DEBUG][loadSdCostCodes] Loading SD-enabled cost codes with quantities...'
+    ); // 디버깅
+    if (!currentProjectId) {
+        sdEnabledCostCodes = [];
+        return;
+    }
+    try {
+        const response = await fetch(
+            `/connections/api/sd/cost-codes/${currentProjectId}/`
+        );
+        if (!response.ok) throw new Error('SD용 공사코드 목록 로딩 실패');
+        sdEnabledCostCodes = await response.json(); // 전역 변수 업데이트
+        console.log(
+            `[DEBUG][loadSdCostCodes] Loaded ${sdEnabledCostCodes.length} SD cost codes for linking.`
+        ); // 디버깅
+        // 로드된 데이터는 입력 필드 렌더링 시 사용됨 (renderSdInputFields)
+        // 만약 모델이 이미 선택되어 있다면 입력 필드 다시 렌더링하여 콤보박스 채우기
+        if (selectedSdModelId) {
+            const selectedModel = loadedAiModels.find(
+                (m) => m.id === selectedSdModelId
+            );
+            if (selectedModel?.metadata?.input_features) {
+                renderSdInputFields(selectedModel.metadata.input_features);
+                console.log(
+                    '[DEBUG][loadSdCostCodes] Refreshed SD input fields with loaded cost codes.'
+                ); // 디버깅
+            }
+        }
+    } catch (error) {
+        console.error('[ERROR][loadSdCostCodes] Failed:', error); // 디버깅
+        showToast(error.message, 'error');
+        sdEnabledCostCodes = [];
+    }
+}
+
+// SD 탭에서 AI 모델 선택 시 처리
+function handleSdModelSelection(event) {
+    selectedSdModelId = event.target.value;
+    console.log(
+        `[DEBUG][handleSdModelSelection] SD AI model selected: ${selectedSdModelId}`
+    ); // 디버깅
+    const predictBtn = document.getElementById('sd-predict-btn');
+    const inputFieldsDiv = document.getElementById('sd-input-fields');
+    const resultsTableDiv = document.getElementById(
+        'sd-prediction-results-table'
+    );
+
+    // 결과 영역 초기화
+    resultsTableDiv.innerHTML = '<p>예측 결과가 여기에 표시됩니다.</p>';
+    if (sdPredictionChartInstance) {
+        sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
+    }
+
+    if (selectedSdModelId) {
+        const selectedModel = loadedAiModels.find(
+            (m) => m.id === selectedSdModelId
+        );
+        if (selectedModel?.metadata?.input_features) {
+            console.log(
+                '[DEBUG][handleSdModelSelection] Rendering SD input fields based on selected model.'
+            ); // 디버깅
+            renderSdInputFields(selectedModel.metadata.input_features); // ui.js 함수 호출 (공사코드 연동 포함)
+            predictBtn.disabled = false;
+        } else {
+            console.warn(
+                `[WARN][handleSdModelSelection] Metadata or input features missing for model: ${selectedSdModelId}`
+            ); // 디버깅
+            inputFieldsDiv.innerHTML =
+                '<p style="color: red;">선택된 모델의 입력 정보(메타데이터)가 없습니다.</p>';
+            predictBtn.disabled = true;
+        }
+    } else {
+        // 모델 선택 해제 시 초기화
+        console.log('[DEBUG][handleSdModelSelection] SD Model deselected.'); // 디버깅
+        inputFieldsDiv.innerHTML =
+            '<p>모델을 선택하면 입력 항목이 표시됩니다.</p>';
+        predictBtn.disabled = true;
+    }
+}
+
+// SD 입력 필드 변경 시 처리 (직접 입력 or 공사코드 연동)
+function handleSdInputChange(event) {
+    const target = event.target;
+    // 콤보박스 변경 시: 연결된 숫자 입력 필드 자동 채우기/읽기전용 설정
+    if (
+        target.tagName === 'SELECT' &&
+        target.dataset.inputType === 'costCodeLink'
+    ) {
+        const inputId = target.dataset.inputId; // 연결된 숫자 입력 필드 ID
+        const selectedCostCodeId = target.value;
+        const numberInput = document.getElementById(inputId);
+        console.log(
+            `[DEBUG][handleSdInputChange] Cost code link changed for input '${inputId}'. Selected code ID: ${selectedCostCodeId}`
+        ); // 디버깅
+
+        if (selectedCostCodeId && numberInput) {
+            const selectedCodeData = sdEnabledCostCodes.find(
+                (c) => c.id === selectedCostCodeId
+            );
+            if (selectedCodeData) {
+                numberInput.value = parseFloat(
+                    selectedCodeData.total_quantity || 0
+                ).toFixed(4); // 수량 자동 입력 (소수점 4자리)
+                numberInput.readOnly = true; // 직접 수정 불가
+                console.log(
+                    `[DEBUG][handleSdInputChange] Auto-filled quantity: ${numberInput.value}`
+                ); // 디버깅
+            } else {
+                console.warn(
+                    `[WARN][handleSdInputChange] Quantity data not found for cost code ID: ${selectedCostCodeId}`
+                ); // 디버깅
+                numberInput.value = '0.0000'; // 못 찾으면 0
+                numberInput.readOnly = false; // 직접 입력 가능
+            }
+        } else if (numberInput) {
+            console.log(
+                `[DEBUG][handleSdInputChange] Cost code link cleared for input '${inputId}'. Enabling direct input.`
+            ); // 디버깅
+            numberInput.readOnly = false; // '-- 직접 입력 --' 시 직접 입력 가능
+            numberInput.value = ''; // 값 비우기
+        }
+    }
+    // 숫자 입력 필드 직접 변경 시: 연결된 콤보박스 초기화
+    else if (
+        target.tagName === 'INPUT' &&
+        target.type === 'number' &&
+        !target.readOnly
+    ) {
+        console.log(
+            `[DEBUG][handleSdInputChange] Direct numeric input changed for '${target.id}': ${target.value}`
+        ); // 디버깅
+        const selectId = target.dataset.selectId; // 연결된 select ID (ui.js에서 설정 필요)
+        const linkedSelect = document.getElementById(selectId);
+        if (linkedSelect && linkedSelect.value !== '') {
+            linkedSelect.value = ''; // '-- 직접 입력 --'으로 변경
+            console.log(
+                `[DEBUG][handleSdInputChange] Cleared linked cost code selection due to direct input.`
+            ); // 디버깅
+        }
+    }
+}
+
+// SD 예측 실행 API 호출
+async function runSdPrediction() {
+    console.log('[DEBUG][runSdPrediction] Starting SD prediction API call...'); // 디버깅
+    if (!currentProjectId || !selectedSdModelId) {
+        showToast('프로젝트와 예측 모델을 선택하세요.', 'error');
+        return;
+    }
+
+    const inputFieldsDiv = document.getElementById('sd-input-fields');
+    const numberInputs = inputFieldsDiv.querySelectorAll(
+        'input[type="number"]'
+    );
+    const inputData = {};
+    let isValid = true;
+
+    // 입력값 수집 및 유효성 검사
+    numberInputs.forEach((input) => {
+        const featureName = input.dataset.featureName;
+        const valueStr = input.value.trim();
+        if (valueStr === '' || isNaN(parseFloat(valueStr))) {
+            showToast(
+                `입력값 '${featureName}'이(가) 유효하지 않습니다.`,
+                'error'
+            );
+            console.error(
+                `[ERROR][runSdPrediction] Invalid input for ${featureName}: '${valueStr}'`
+            ); // 디버깅
+            isValid = false;
+        }
+        inputData[featureName] = valueStr; // 문자열로 전달 (백엔드에서 float 변환)
+    });
+
+    if (!isValid) return;
+
+    console.log(
+        '[DEBUG][runSdPrediction] Input data for prediction:',
+        inputData
+    ); // 디버깅
+    showToast('AI 모델 예측 중...', 'info');
+    const predictBtn = document.getElementById('sd-predict-btn');
+    predictBtn.disabled = true; // 중복 실행 방지
+
+    try {
+        const response = await fetch(
+            `/connections/api/sd/predict/${currentProjectId}/${selectedSdModelId}/`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: JSON.stringify(inputData),
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || '예측 실패');
+
+        showToast('예측 성공!', 'success');
+        console.log(
+            '[DEBUG][runSdPrediction] Prediction successful. Results:',
+            result.predictions
+        ); // 디버깅
+        renderSdResultsTable(result.predictions); // ui.js 함수 호출 (테이블)
+        renderSdPredictionChart(result.predictions); // ui.js 함수 호출 (차트)
+    } catch (error) {
+        console.error('[ERROR][runSdPrediction] Prediction failed:', error); // 디버깅
+        showToast(error.message, 'error');
+        document.getElementById(
+            'sd-prediction-results-table'
+        ).innerHTML = `<p style="color: red;">예측 오류: ${error.message}</p>`;
+        if (sdPredictionChartInstance) {
+            sdPredictionChartInstance.destroy();
+            sdPredictionChartInstance = null;
+        } // 오류 시 차트 제거
+    } finally {
+        predictBtn.disabled = false; // 버튼 다시 활성화
+    }
+}
+
+// SD 탭 하단 테이블 데이터 로드 API 호출
+async function loadSdCostItems() {
+    console.log(
+        '[DEBUG][loadSdCostItems] Loading SD cost items for bottom table...'
+    ); // 디버깅
+    if (!currentProjectId) {
+        renderSdCostItemsTable([]); // 빈 테이블
+        return;
+    }
+    try {
+        const response = await fetch(
+            `/connections/api/sd/cost-items/${currentProjectId}/`
+        );
+        if (!response.ok) throw new Error('SD 산출항목 목록 로딩 실패');
+        loadedSdCostItems = await response.json(); // 전역 변수 업데이트
+        console.log(
+            `[DEBUG][loadSdCostItems] Loaded ${loadedSdCostItems.length} SD cost items.`
+        ); // 디버깅
+        renderSdCostItemsTable(loadedSdCostItems); // ui.js 함수 호출하여 테이블 렌더링
+        // TODO: SD 테이블 그룹핑 필드 설정 함수 호출 (필요 시)
+        // populateSdFieldSelection(loadedSdCostItems);
+    } catch (error) {
+        console.error('[ERROR][loadSdCostItems] Failed:', error); // 디버깅
+        showToast(error.message, 'error');
+        renderSdCostItemsTable([]); // 오류 시 빈 테이블
+    }
+}
+
+// SD 테이블 클릭 처리 (행 선택)
+function handleSdTableClick(event) {
+    const row = event.target.closest('tr[data-id]');
+    if (!row) return; // 데이터 행이 아니면 무시
+
+    // TODO: 그룹 헤더 토글 기능 추가 시 여기에 분기
+
+    const itemId = row.dataset.id;
+    if (itemId) {
+        console.log(
+            `[DEBUG][handleSdTableClick] Row clicked. SD Item ID: ${itemId}`
+        ); // 디버깅
+        // 단일 선택 처리 (Ctrl/Shift 키 조합은 필요 시 추가)
+        selectedSdItemIds.clear();
+        selectedSdItemIds.add(itemId);
+        console.log(
+            `[DEBUG][handleSdTableClick] Selected SD Item ID set to: ${itemId}`
+        ); // 디버깅
+        renderSdCostItemsTable(loadedSdCostItems); // 선택 상태 반영하여 다시 렌더링
+    }
+}
+
+// SD 테이블 선택 항목 BIM 연동 실행
+function selectSdItemsInClient() {
+    console.log(
+        `[DEBUG][selectSdItemsInClient] Attempting to select ${selectedSdItemIds.size} SD items in ${currentMode}...`
+    ); // 디버깅
+    if (selectedSdItemIds.size === 0) {
+        showToast('테이블에서 연동할 산출항목을 선택하세요.', 'error');
+        return;
+    }
+
+    const uniqueIdsToSend = [];
+    selectedSdItemIds.forEach((itemId) => {
+        const item = loadedSdCostItems.find((i) => i.id === itemId);
+        // raw_element_unique_id 가 있는지 확인
+        if (item?.raw_element_unique_id) {
+            uniqueIdsToSend.push(item.raw_element_unique_id);
+        } else {
+            console.warn(
+                `[WARN][selectSdItemsInClient] BIM Unique ID not found for SD item ID: ${itemId}. Skipping.`
+            ); // 디버깅
+        }
+    });
+
+    if (uniqueIdsToSend.length === 0) {
+        showToast('선택된 항목 중 연동 가능한 BIM 객체가 없습니다.', 'warning');
+        console.log(
+            '[DEBUG][selectSdItemsInClient] No valid Unique IDs found to send.'
+        ); // 디버깅
+        return;
+    }
+
+    const targetGroup =
+        currentMode === 'revit'
+            ? 'revit_broadcast_group'
+            : 'blender_broadcast_group';
+    console.log(
+        `[DEBUG][selectSdItemsInClient] Sending 'select_elements' command to group ${targetGroup} with ${uniqueIdsToSend.length} IDs.`
+    ); // 디버깅
+    frontendSocket.send(
+        JSON.stringify({
+            type: 'command_to_client',
+            payload: {
+                command: 'select_elements',
+                unique_ids: uniqueIdsToSend,
+                target_group: targetGroup,
+            },
+        })
+    );
+    showToast(`${uniqueIdsToSend.length}개 객체 선택 명령 전송.`, 'info');
+}
+
+// SD 탭 UI 초기화 함수
+function initializeSdUI() {
+    console.log(
+        '[DEBUG][initializeSdUI] Initializing Schematic Estimation (SD) UI elements.'
+    ); // 디버깅
+    // 모델 선택 드롭다운
+    const modelSelect = document.getElementById('sd-model-select');
+    if (modelSelect)
+        modelSelect.innerHTML = '<option value="">-- 모델 선택 --</option>';
+    // 입력 필드
+    const inputFields = document.getElementById('sd-input-fields');
+    if (inputFields)
+        inputFields.innerHTML =
+            '<p>모델을 선택하면 입력 항목이 표시됩니다.</p>';
+    // 예측 버튼
+    const predictBtn = document.getElementById('sd-predict-btn');
+    if (predictBtn) predictBtn.disabled = true;
+    // 결과 테이블
+    const resultsTable = document.getElementById('sd-prediction-results-table');
+    if (resultsTable)
+        resultsTable.innerHTML = '<p>예측 결과가 여기에 표시됩니다.</p>';
+    // 결과 차트
+    if (sdPredictionChartInstance) {
+        sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
+    }
+    // 하단 테이블
+    const itemTable = document.getElementById('sd-cost-item-table-container');
+    if (itemTable) itemTable.innerHTML = '<p>프로젝트를 선택하세요.</p>';
+    // 관련 전역 변수 초기화 (필요 시 더 추가)
+    selectedSdModelId = null;
+    selectedSdItemIds.clear();
+    console.log('[DEBUG][initializeSdUI] SD UI elements reset.'); // 디버깅
+}
+
+// ▲▲▲ [추가] 여기까지 ▲▲▲
+// ▼▼▼ [추가] 프로젝트 내보내기 함수 ▼▼▼
+function exportCurrentProject() {
+    console.log(
+        "[DEBUG][exportCurrentProject] '프로젝트 내보내기' button clicked."
+    ); // 디버깅
+    if (!currentProjectId) {
+        showToast('내보낼 프로젝트를 먼저 선택하세요.', 'error');
+        console.warn(
+            '[WARN][exportCurrentProject] No project selected for export.'
+        ); // 디버깅
+        return;
+    }
+    console.log(
+        `[DEBUG][exportCurrentProject] Triggering project export for ID: ${currentProjectId}`
+    ); // 디버깅
+    // 서버의 export_project URL로 요청을 보냅니다.
+    window.location.href = `/connections/export-project/${currentProjectId}/`;
+}
+// ▲▲▲ [추가] 여기까지 ▲▲▲
+// ▼▼▼ [추가] 프로젝트 내보내기 함수 ▼▼▼
+function exportCurrentProject() {
+    console.log(
+        "[DEBUG][exportCurrentProject] '프로젝트 내보내기' button clicked."
+    ); // 디버깅
+    if (!currentProjectId) {
+        showToast('내보낼 프로젝트를 먼저 선택하세요.', 'error');
+        console.warn(
+            '[WARN][exportCurrentProject] No project selected for export.'
+        ); // 디버깅
+        return;
+    }
+    console.log(
+        `[DEBUG][exportCurrentProject] Triggering project export for ID: ${currentProjectId}`
+    ); // 디버깅
+    // 서버의 export_project URL로 요청을 보냅니다.
+    window.location.href = `/connections/export-project/${currentProjectId}/`;
+}
+// ▲▲▲ [추가] 여기까지 ▲▲▲
+// ▼▼▼ [추가] 프로젝트 가져오기 처리 함수 ▼▼▼
+async function handleProjectImport(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        console.log('[DEBUG][handleProjectImport] File selection cancelled.'); // 디버깅
+        return;
+    }
+
+    console.log(
+        `[DEBUG][handleProjectImport] File selected: ${file.name}. Starting upload...`
+    ); // 디버깅
+    showToast('프로젝트 파일을 업로드하고 있습니다...', 'info', 10000);
+
+    const formData = new FormData();
+    formData.append('project_file', file);
+
+    try {
+        const response = await fetch('/connections/import-project/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: formData,
+        });
+
+        const result = await response.json();
+        // [수정] 응답 상태(ok) 먼저 확인
+        if (!response.ok) {
+            // 서버에서 보낸 에러 메시지 사용, 없으면 기본 메시지
+            throw new Error(
+                result.message ||
+                    `프로젝트 가져오기에 실패했습니다. Status: ${response.status}`
+            );
+        }
+
+        showToast(result.message, 'success');
+        console.log(
+            '[DEBUG][handleProjectImport] Project import successful. Reloading page...'
+        ); // 디버깅
+        // 성공 시 페이지 새로고침하여 새 프로젝트 목록 로드
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    } catch (error) {
+        console.error(
+            '[ERROR][handleProjectImport] Error during import:',
+            error
+        ); // 디버깅
+        showToast(`오류: ${error.message}`, 'error', 7000); // 에러 메시지 상세 표시 및 시간 늘림
+    } finally {
+        // 성공/실패 여부와 관계없이 파일 입력 초기화
+        event.target.value = '';
+    }
+}
+// ▲▲▲ [추가] 여기까지 ▲▲▲
+// ▼▼▼ [추가] 파일 맨 아래에 아래 함수들을 모두 추가 (중복 시 기존 것 유지) ▼▼▼
+
+// --- 유틸리티 함수 ---
+function debounce(fn, delay = 300) {
+    let timeoutId;
+    return function (...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+            fn.apply(this, args);
+        }, delay);
+    };
+}
+
+// --- 공통 CSV 파일 처리 ---
+async function handleCsvFileSelect(event) {
+    console.log('[DEBUG][handleCsvFileSelect] CSV file selected.'); // 디버깅
+    if (!currentProjectId || !currentCsvImportUrl) {
+        showToast(
+            '프로젝트가 선택되지 않았거나, 잘못된 CSV 가져오기 요청입니다.',
+            'error'
+        );
+        console.error(
+            '[ERROR][handleCsvFileSelect] Missing project ID or import URL.'
+        ); // 디버깅
+        event.target.value = ''; // Reset file input
+        return;
+    }
+    const file = event.target.files[0];
+    if (!file) {
+        console.log('[DEBUG][handleCsvFileSelect] File selection cancelled.'); // 디버깅
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csv_file', file);
+    const importUrl = currentCsvImportUrl; // 임시 저장된 URL 사용
+    currentCsvImportUrl = null; // 사용 후 초기화
+
+    showToast(`CSV 파일 (${file.name}) 가져오는 중...`, 'info');
+    console.log(`[DEBUG][handleCsvFileSelect] Uploading CSV to: ${importUrl}`); // 디버깅
+    try {
+        const response = await fetch(importUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: formData,
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.message || '파일 업로드/처리 실패');
+        }
+        showToast(result.message, 'success');
+        console.log(`[DEBUG][handleCsvFileSelect] CSV import successful.`); // 디버깅
+
+        // 가져오기 성공 후 현재 활성 탭 데이터 새로고침
+        console.log(
+            `[DEBUG][handleCsvFileSelect] Reloading data for active tab: ${activeTab}`
+        ); // 디버깅
+        loadDataForActiveTab();
+    } catch (error) {
+        console.error('[ERROR][handleCsvFileSelect] CSV import failed:', error); // 디버깅
+        showToast(`CSV 가져오기 실패: ${error.message}`, 'error');
+    } finally {
+        // 성공/실패 여부와 관계없이 파일 입력 초기화
+        event.target.value = '';
+    }
+}
+
+// --- 룰셋 CSV 버튼 설정 및 핸들러 ---
+function setupRulesetCsvButtons() {
+    console.log('[DEBUG] Setting up Ruleset CSV import/export buttons...');
+    const rulesetActions = {
+        classification: {
+            importBtn: 'import-classification-rules-btn',
+            exportBtn: 'export-classification-rules-btn',
+            path: 'classification',
+        },
+        'property-mapping': {
+            importBtn: 'import-mapping-rules-btn',
+            exportBtn: 'export-mapping-rules-btn',
+            path: 'property-mapping',
+        },
+        'cost-code': {
+            importBtn: 'import-costcode-rules-btn',
+            exportBtn: 'export-costcode-rules-btn',
+            path: 'cost-code',
+        },
+        'member-mark-assignment': {
+            importBtn: 'import-member-mark-assignment-rules-btn',
+            exportBtn: 'export-member-mark-assignment-rules-btn',
+            path: 'member-mark-assignment',
+        },
+        'cost-code-assignment': {
+            importBtn: 'import-cost-code-assignment-rules-btn',
+            exportBtn: 'export-cost-code-assignment-rules-btn',
+            path: 'cost-code-assignment',
+        },
+        'space-classification': {
+            importBtn: 'import-space-classification-rules-btn',
+            exportBtn: 'export-space-classification-rules-btn',
+            path: 'space-classification',
+        },
+        'space-assignment': {
+            importBtn: 'import-space-assignment-rules-btn',
+            exportBtn: 'export-space-assignment-rules-btn',
+            path: 'space-assignment',
+        },
+    };
+
+    for (const key in rulesetActions) {
+        const action = rulesetActions[key];
+        const importButton = document.getElementById(action.importBtn);
+        const exportButton = document.getElementById(action.exportBtn);
+        if (importButton) {
+            importButton.addEventListener('click', () =>
+                triggerRulesetImport(action.path)
+            );
+        } else {
+            console.warn(
+                `[WARN] Ruleset Import button not found: ${action.importBtn}`
+            );
+        }
+        if (exportButton) {
+            exportButton.addEventListener('click', () =>
+                exportRuleset(action.path)
+            );
+        } else {
+            console.warn(
+                `[WARN] Ruleset Export button not found: ${action.exportBtn}`
+            );
+        }
+    }
+    console.log('[DEBUG] Ruleset CSV buttons setup complete.');
+}
+
+function triggerRulesetImport(rulesetPath) {
+    console.log(
+        `[DEBUG] Triggering CSV import for ruleset path: ${rulesetPath}`
+    );
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    // 공통 CSV 파일 입력(`csv-file-input`)을 사용하고, 업로드할 URL을 임시 저장
+    currentCsvImportUrl = `/connections/api/rules/${rulesetPath}/${currentProjectId}/import/`;
+    document.getElementById('csv-file-input')?.click();
+}
+
+function exportRuleset(rulesetPath) {
+    console.log(
+        `[DEBUG] Triggering CSV export for ruleset path: ${rulesetPath}`
+    );
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    window.location.href = `/connections/api/rules/${rulesetPath}/${currentProjectId}/export/`;
+}
+
+// --- 공사코드 CSV 핸들러 ---
+function exportCostCodes() {
+    console.log('[DEBUG] Triggering Cost Codes CSV export.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    window.location.href = `/connections/api/cost-codes/${currentProjectId}/export/`;
+}
+function triggerCostCodesImport() {
+    console.log('[DEBUG] Triggering Cost Codes CSV import.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    currentCsvImportUrl = `/connections/api/cost-codes/${currentProjectId}/import/`;
+    document.getElementById('csv-file-input')?.click();
+}
+
+// --- 일람부호 CSV 핸들러 ---
+function exportMemberMarks() {
+    console.log('[DEBUG] Triggering Member Marks CSV export.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    window.location.href = `/connections/api/member-marks/${currentProjectId}/export/`;
+}
+function triggerMemberMarksImport() {
+    console.log('[DEBUG] Triggering Member Marks CSV import.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    currentCsvImportUrl = `/connections/api/member-marks/${currentProjectId}/import/`;
+    document.getElementById('csv-file-input')?.click();
+}
+
+// --- 공간분류 CSV 핸들러 ---
+function exportSpaceClassifications() {
+    console.log('[DEBUG] Triggering Space Classifications CSV export.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    window.location.href = `/connections/api/space-classifications/${currentProjectId}/export/`;
+}
+function triggerSpaceClassificationsImport() {
+    console.log('[DEBUG] Triggering Space Classifications CSV import.');
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    currentCsvImportUrl = `/connections/api/space-classifications/${currentProjectId}/import/`;
+    document.getElementById('csv-file-input')?.click();
+}
+
+// --- 공간 관리 관련 핸들러 ---
+function handleSpaceTreeActions(e) {
+    const target = e.target;
+    const li = target.closest('li[data-id]');
+    if (!li) return;
+    const spaceId = li.dataset.id;
+    const spaceName = li.dataset.name;
+
+    if (target.classList.contains('add-child-space-btn'))
+        handleSpaceActions('add_child', {
+            parentId: spaceId,
+            parentName: spaceName,
+        });
+    else if (target.classList.contains('rename-space-btn'))
+        handleSpaceActions('rename', { id: spaceId, name: spaceName });
+    else if (target.classList.contains('delete-space-btn'))
+        handleSpaceActions('delete', { id: spaceId, name: spaceName });
+    else if (target.classList.contains('assign-elements-btn'))
+        handleSpaceActions('assign_elements', {
+            id: spaceId,
+            name: spaceName,
+        });
+    // 객체 할당 시작
+    else if (target.classList.contains('view-assigned-btn'))
+        showAssignedElements(spaceId, spaceName); // 할당된 객체 보기
+}
+
+function closeAssignedElementsModal() {
+    const modal = document.getElementById('assigned-elements-modal');
+    if (modal) modal.style.display = 'none';
+    console.log('[DEBUG] Closed Assigned Elements Modal.');
+}
+
+function handleAssignedElementsTableClick(e) {
+    // 전체 선택 체크박스 처리
+    if (e.target.id === 'unassign-select-all') {
+        const isChecked = e.target.checked;
+        e.currentTarget.querySelectorAll('.unassign-checkbox').forEach((cb) => {
+            cb.checked = isChecked;
+        });
+        console.log(
+            `[DEBUG] Assigned elements table: Select All toggled to ${isChecked}`
+        );
+    }
+    // 개별 체크박스 상태 변경 시 전체 선택 체크박스 상태 업데이트 (선택 사항)
+    else if (e.target.classList.contains('unassign-checkbox')) {
+        const allCheckboxes =
+            e.currentTarget.querySelectorAll('.unassign-checkbox');
+        const allChecked = Array.from(allCheckboxes).every((cb) => cb.checked);
+        const selectAllCheckbox = document.getElementById(
+            'unassign-select-all'
+        );
+        if (selectAllCheckbox) selectAllCheckbox.checked = allChecked;
+    }
+}
+
+// --- 할당 룰셋 일괄 적용 ---
+async function applyAssignmentRules(skipConfirmation = false) {
+    console.log(
+        '[DEBUG][applyAssignmentRules] Attempting to apply assignment rules...'
+    ); // 디버깅
+    if (!currentProjectId) {
+        showToast('프로젝트를 선택하세요.', 'error');
+        return;
+    }
+    if (
+        !skipConfirmation &&
+        !confirm(
+            '정의된 모든 할당 룰셋(일람부호, 공사코드, 공간)을 전체 부재에 적용하시겠습니까?\n이 작업은 기존 할당 정보를 덮어쓰거나 추가할 수 있습니다.'
+        )
+    ) {
+        console.log('[DEBUG][applyAssignmentRules] User cancelled.'); // 디버깅
+        return;
+    }
+
+    showToast('룰셋을 적용하고 있습니다. 잠시만 기다려주세요...', 'info', 5000);
+    try {
+        const response = await fetch(
+            `/connections/api/quantity-members/apply-assignment-rules/${currentProjectId}/`,
+            {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrftoken },
+            }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || '룰셋 적용 실패');
+
+        showToast(result.message, 'success');
+        console.log(`[DEBUG][applyAssignmentRules] Success: ${result.message}`); // 디버깅
+
+        // 룰셋 적용 후 관련 데이터 및 UI 새로고침
+        console.log(
+            '[DEBUG][applyAssignmentRules] Reloading related data (CostCodes, MemberMarks, QM, QM UI)...'
+        ); // 디버깅
+        await loadCostCodes(); // 공사코드 목록 (룰에 의해 새로 생성되었을 수 있음)
+        await loadMemberMarks(); // 일람부호 목록 (룰에 의해 새로 생성되었을 수 있음)
+        await loadQuantityMembers(); // 부재 목록 (할당 정보 업데이트됨)
+        // QM 탭의 오른쪽 상세 정보 패널 업데이트
+        renderQmCostCodesList();
+        renderQmMemberMarkDetails();
+        renderQmSpacesList(); // 공간 정보도 업데이트
+    } catch (error) {
+        console.error('[ERROR][applyAssignmentRules] Failed:', error); // 디버깅
+        showToast(`룰셋 적용 실패: ${error.message}`, 'error');
+    }
+}
+
+// --- BOQ Excel 내보내기 ---
+function exportBoqReportToExcel() {
+    console.log(
+        '[DEBUG][exportBoqReportToExcel] Export to Excel button clicked.'
+    ); // 디버깅
+    showToast('Excel 내보내기 기능은 현재 준비 중입니다.', 'info');
+    // TODO: SheetJS 등의 라이브러리를 사용하여 실제 Excel 내보내기 기능 구현
+}
+
+// --- 커넥터 모드 변경 핸들러 ---
+function handleConnectorModeChange(e) {
+    currentMode = e.target.value;
+    showToast(
+        `${currentMode === 'revit' ? 'Revit' : 'Blender'} 모드로 전환합니다.`,
+        'info'
+    );
+    console.log(`[UI] Connector mode changed to: ${currentMode}`); // 디버깅
+}
+
+// --- 좌측 패널 탭 클릭 핸들러 (Data Management, Space Management 공통) ---
+function handleLeftPanelTabClick(event) {
+    const clickedButton = event.target.closest('.left-panel-tab-button');
+    if (!clickedButton || clickedButton.classList.contains('active')) {
+        return; // 버튼 아니거나 이미 활성이면 무시
+    }
+
+    const tabContainer = clickedButton.closest('.left-panel-tab-container');
+    const targetTabId = clickedButton.dataset.tab; // 예: "fields", "classification", "bim-properties"
+    console.log(
+        `[DEBUG][handleLeftPanelTabClick] Clicked left panel tab: ${targetTabId}`
+    ); // 디버깅
+
+    // 현재 활성 탭/콘텐츠 비활성화
+    tabContainer
+        .querySelector('.left-panel-tab-button.active')
+        ?.classList.remove('active');
+    tabContainer
+        .querySelector('.left-panel-tab-content.active')
+        ?.classList.remove('active');
+
+    // 클릭된 탭/콘텐츠 활성화
+    clickedButton.classList.add('active');
+    const targetContent = tabContainer.querySelector(`#${targetTabId}`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+        console.log(
+            `[DEBUG][handleLeftPanelTabClick] Activated left panel content: #${targetTabId}`
+        ); // 디버깅
+    } else {
+        console.warn(
+            `[WARN][handleLeftPanelTabClick] Left panel content not found for ID: ${targetTabId}`
+        ); // 디버깅
+    }
+}
+
+// ▲▲▲ [추가] 여기까지 ▲▲▲

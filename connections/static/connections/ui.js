@@ -2703,77 +2703,125 @@ function renderBoqDisplayFieldControls(fields) {
         )
         .join('');
 }
+// ▼▼▼ [교체] 기존 renderBimPropertiesTable 함수 전체를 아래 코드로 교체 ▼▼▼
 /**
- * [수정됨] 현재 활성화된 탭 컨텍스트에 따라 올바른 위치에 BIM 속성 테이블을 렌더링합니다.
+ * [수정됨] 현재 활성화된 탭 컨텍스트('data-management' 또는 'space-management')에 따라
+ * 올바른 위치에 선택된 단일 BIM 객체의 속성 테이블을 렌더링합니다.
  * @param {string} contextPrefix - 'data-management' 또는 'space-management'
  */
 function renderBimPropertiesTable(contextPrefix) {
-    // 1. [핵심 수정] contextPrefix에 따라 올바른 컨테이너 ID를 선택합니다.
+    console.log(
+        `[DEBUG][Render] Rendering BIM Properties table for context: ${contextPrefix}`
+    ); // 디버깅
+
+    // 1. contextPrefix에 따라 올바른 컨테이너 ID와 상태 객체를 선택합니다.
     const containerId =
         contextPrefix === 'space-management'
-            ? 'sm-selected-bim-properties-container'
-            : 'selected-bim-properties-container';
+            ? 'sm-selected-bim-properties-container' // 공간 관리 탭의 컨테이너 ID
+            : 'selected-bim-properties-container'; // 데이터 관리 탭의 컨테이너 ID
     const container = document.getElementById(containerId);
-
     const state = viewerStates[contextPrefix];
 
-    if (!container || !state) return;
-
-    // 2. 이하 로직은 기존과 동일합니다.
-    if (state.selectedElementIds.size !== 1) {
-        container.innerHTML =
-            '<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>';
+    if (!container) {
+        console.warn(
+            `[WARN][Render] BIM Properties container not found for ID: ${containerId}`
+        ); // 디버깅
+        return;
+    }
+    if (!state) {
+        console.warn(
+            `[WARN][Render] Viewer state not found for context: ${contextPrefix}`
+        ); // 디버깅
+        container.innerHTML = '<p>뷰 상태 정보를 찾을 수 없습니다.</p>';
         return;
     }
 
+    // 2. 단일 항목 선택 여부 확인
+    if (state.selectedElementIds.size !== 1) {
+        container.innerHTML =
+            '<p>BIM 속성을 보려면 테이블에서 하나의 항목만 선택하세요.</p>';
+        // console.log(`[DEBUG][Render] BIM Properties: ${state.selectedElementIds.size} items selected. Clearing table.`); // 디버깅 (선택 변경 시 매번 출력될 수 있음)
+        return;
+    }
+
+    // 3. 선택된 항목 데이터 조회
     const selectedId = state.selectedElementIds.values().next().value;
     const selectedItem = allRevitData.find((item) => item.id === selectedId);
+    console.log(
+        `[DEBUG][Render] BIM Properties: Rendering for element ID: ${selectedId}`
+    ); // 디버깅
 
     if (!selectedItem || !selectedItem.raw_data) {
         container.innerHTML =
             '<p>선택된 항목의 BIM 원본 데이터를 찾을 수 없습니다.</p>';
+        console.warn(
+            `[WARN][Render] Raw data not found for selected element ID: ${selectedId}`
+        ); // 디버깅
         return;
     }
 
+    // 4. 속성 데이터 추출 및 정렬
     const properties = [];
     const rawData = selectedItem.raw_data;
+    // 최상위 속성
     for (const key in rawData) {
-        if (key === 'Parameters' && typeof rawData[key] === 'object') {
-            for (const paramKey in rawData[key]) {
-                properties.push({
-                    key: paramKey,
-                    value: rawData[key][paramKey],
-                    source: 'Parameters',
-                });
-            }
-        } else if (
-            key === 'TypeParameters' &&
-            typeof rawData[key] === 'object'
-        ) {
-            for (const paramKey in rawData[key]) {
-                properties.push({
-                    key: paramKey,
-                    value: rawData[key][paramKey],
-                    source: 'TypeParameters',
-                });
-            }
-        } else if (typeof rawData[key] !== 'object') {
+        if (typeof rawData[key] !== 'object' && rawData[key] !== null) {
+            // 객체/배열/null 제외
             properties.push({ key: key, value: rawData[key], source: 'Root' });
         }
     }
+    // Parameters 속성
+    if (typeof rawData.Parameters === 'object' && rawData.Parameters !== null) {
+        for (const paramKey in rawData.Parameters) {
+            properties.push({
+                key: paramKey,
+                value: rawData.Parameters[paramKey],
+                source: 'Parameters',
+            });
+        }
+    }
+    // TypeParameters 속성
+    if (
+        typeof rawData.TypeParameters === 'object' &&
+        rawData.TypeParameters !== null
+    ) {
+        for (const paramKey in rawData.TypeParameters) {
+            properties.push({
+                key: `Type.${paramKey}`,
+                value: rawData.TypeParameters[paramKey],
+                source: 'TypeParameters',
+            }); // 'Type.' 접두사 추가
+        }
+    }
+    // 속성 키 기준으로 정렬
     properties.sort((a, b) => a.key.localeCompare(b.key));
+    console.log(
+        `[DEBUG][Render] BIM Properties: Extracted ${properties.length} properties.`
+    ); // 디버깅
 
+    // 5. HTML 테이블 생성
     let tableHtml = `<table class="properties-table"><thead><tr><th style="width: 40%;">속성 (Property)</th><th>값 (Value)</th></tr></thead><tbody>`;
     if (properties.length === 0) {
         tableHtml += '<tr><td colspan="2">표시할 속성이 없습니다.</td></tr>';
     } else {
         properties.forEach((prop) => {
-            tableHtml += `<tr><td>${prop.key}</td><td>${prop.value}</td></tr>`;
+            // 값이 너무 길면 잘라서 표시 (선택 사항)
+            const displayValue =
+                String(prop.value).length > 100
+                    ? String(prop.value).substring(0, 97) + '...'
+                    : prop.value;
+            tableHtml += `<tr title="${prop.key}: ${prop.value} (Source: ${prop.source})"><td>${prop.key}</td><td>${displayValue}</td></tr>`; // title 속성에 전체 값 표시
         });
     }
     tableHtml += '</tbody></table>';
+
+    // 6. 컨테이너에 렌더링
     container.innerHTML = tableHtml;
+    console.log(
+        `[DEBUG][Render] BIM Properties table rendered successfully in #${containerId}.`
+    ); // 디버깅
 }
+// ▲▲▲ [교체] 여기까지 ▲▲▲
 
 function renderAssignedTagsTable(contextPrefix) {
     const listContainer = document.getElementById('selected-tags-list');
@@ -3564,3 +3612,469 @@ function initializeBoqUI() {
 
     console.log('[DEBUG] Detailed Estimation (DD) UI initialization complete.');
 }
+// ▼▼▼ [추가] ui.js 파일 맨 아래에 아래 함수들을 모두 추가 ▼▼▼
+
+// =====================================================================
+// [신규] AI 모델 관리 UI 렌더링 함수들
+// =====================================================================
+
+/**
+ * AI 모델 목록을 테이블 형태로 렌더링합니다.
+ * @param {Array} models - 서버에서 받아온 AI 모델 데이터 배열 [{id, name, description, metadata: {input_features, output_features, performance}, created_at}, ...]
+ */
+function renderAiModelsTable(models) {
+    console.log(
+        `[DEBUG][Render] Rendering AI Models table with ${models.length} items.`
+    ); // 디버깅
+    const container = document.getElementById('ai-model-list-container');
+    if (!container) {
+        console.error(
+            "[ERROR][Render] AI Model list container '#ai-model-list-container' not found."
+        );
+        return;
+    }
+    if (!currentProjectId) {
+        // 프로젝트 미선택 시
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
+        return;
+    }
+    if (!Array.isArray(models) || models.length === 0) {
+        // 모델 없을 시
+        container.innerHTML =
+            '<p>등록된 AI 모델이 없습니다. 새 모델을 업로드하세요.</p>';
+        return;
+    }
+
+    let tableHtml = `
+        <table class="ruleset-table"> <thead>
+                <tr>
+                    <th style="width: 20%;">이름</th>
+                    <th style="width: 25%;">설명</th>
+                    <th>입력 피처</th>
+                    <th>출력 피처</th>
+                    <th style="width: 10%;">성능 (Loss)</th>
+                    <th style="width: 10%;">생성일</th>
+                    <th style="width: 15%;">작업</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    // 날짜 포맷 함수 (간단 버전)
+    const formatDate = (isoString) =>
+        isoString ? new Date(isoString).toLocaleDateString() : 'N/A';
+
+    models.forEach((model) => {
+        // 메타데이터 안전하게 접근
+        const metadata = model.metadata || {};
+        const inputFeatures = Array.isArray(metadata.input_features)
+            ? metadata.input_features.join(', ')
+            : 'N/A';
+        const outputFeatures = Array.isArray(metadata.output_features)
+            ? metadata.output_features.join(', ')
+            : 'N/A';
+        const performanceMetric =
+            metadata.performance?.final_validation_loss?.toFixed(4) ?? 'N/A'; // 최종 검증 손실
+        const createdAt = formatDate(model.created_at);
+
+        tableHtml += `
+            <tr data-model-id="${model.id}">
+                <td>${model.name || 'N/A'}</td>
+                <td>${model.description || ''}</td>
+                <td title="${inputFeatures}">${inputFeatures.substring(0, 30)}${
+            inputFeatures.length > 30 ? '...' : ''
+        }</td>
+                <td title="${outputFeatures}">${outputFeatures.substring(
+            0,
+            30
+        )}${outputFeatures.length > 30 ? '...' : ''}</td>
+                <td>${performanceMetric}</td>
+                <td>${createdAt}</td>
+                <td>
+                    <button class="edit-ai-model-btn" title="정보 수정">✏️</button>
+                    <button class="delete-ai-model-btn" title="모델 삭제">🗑️</button>
+                    <button class="download-ai-model-h5-btn" title=".h5 파일 다운로드">💾 H5</button>
+                    <button class="download-ai-model-json-btn" title="메타데이터(.json) 다운로드">💾 JSON</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log('[DEBUG][Render] AI Models table rendered successfully.'); // 디버깅
+}
+
+/**
+ * 학습용 CSV 헤더를 기반으로 입력/출력 피처 선택 체크박스 리스트를 렌더링합니다.
+ * @param {Array<string>} headers - CSV 파일의 헤더(컬럼명) 배열
+ */
+function renderFeatureSelectionLists(headers) {
+    console.log(
+        '[DEBUG][Render] Rendering feature selection lists for AI training.'
+    ); // 디버깅
+    const inputListDiv = document.getElementById('input-feature-list');
+    const outputListDiv = document.getElementById('output-feature-list');
+    if (!inputListDiv || !outputListDiv) {
+        console.error('[ERROR][Render] Feature list containers not found.');
+        return;
+    }
+    inputListDiv.innerHTML = ''; // 초기화
+    outputListDiv.innerHTML = ''; // 초기화
+
+    if (!Array.isArray(headers) || headers.length === 0) {
+        const message = '<small>CSV 헤더 정보를 읽을 수 없습니다.</small>';
+        inputListDiv.innerHTML = message;
+        outputListDiv.innerHTML = message;
+        console.warn(
+            '[WARN][Render] Cannot render feature lists, headers array is invalid or empty.'
+        ); // 디버깅
+        return;
+    }
+
+    headers.forEach((header) => {
+        // XSS 방지: header 문자열을 textContent로 설정
+        const inputLabel = document.createElement('label');
+        const inputCheckbox = document.createElement('input');
+        inputCheckbox.type = 'checkbox';
+        inputCheckbox.name = 'input_feature';
+        inputCheckbox.value = header;
+        inputLabel.appendChild(inputCheckbox);
+        inputLabel.appendChild(document.createTextNode(` ${header}`)); // 텍스트 노드로 추가
+        inputListDiv.appendChild(inputLabel);
+
+        const outputLabel = document.createElement('label');
+        const outputCheckbox = document.createElement('input');
+        outputCheckbox.type = 'checkbox';
+        outputCheckbox.name = 'output_feature';
+        outputCheckbox.value = header;
+        outputLabel.appendChild(outputCheckbox);
+        outputLabel.appendChild(document.createTextNode(` ${header}`)); // 텍스트 노드로 추가
+        outputListDiv.appendChild(outputLabel);
+    });
+    console.log(
+        `[DEBUG][Render] ${headers.length} feature selection checkboxes rendered.`
+    ); // 디버깅
+}
+
+// =====================================================================
+// [신규] 개산견적 (SD) UI 렌더링 함수들
+// =====================================================================
+
+/**
+ * 선택된 AI 모델의 입력 피처에 따라 SD 탭의 입력 필드를 동적으로 생성합니다.
+ * @param {Array<string>} inputFeatures - 모델 메타데이터의 입력 피처 이름 배열
+ */
+function renderSdInputFields(inputFeatures) {
+    console.log(
+        '[DEBUG][Render] Rendering SD input fields based on selected AI model.'
+    ); // 디버깅
+    const container = document.getElementById('sd-input-fields');
+    if (!container) {
+        console.error(
+            "[ERROR][Render] SD input fields container '#sd-input-fields' not found."
+        );
+        return;
+    }
+    container.innerHTML = ''; // 기존 필드 초기화
+
+    if (!Array.isArray(inputFeatures) || inputFeatures.length === 0) {
+        container.innerHTML =
+            '<p>선택된 모델에 필요한 입력 정보가 없습니다.</p>';
+        console.warn('[WARN][Render] No input features provided for SD model.'); // 디버깅
+        return;
+    }
+
+    // 연동 가능한 공사코드 옵션 HTML 생성 (sdEnabledCostCodes 전역 변수 사용)
+    let costCodeOptionsHtml = '<option value="">-- 직접 입력 --</option>';
+    if (Array.isArray(sdEnabledCostCodes)) {
+        sdEnabledCostCodes.forEach((code) => {
+            const quantityDisplay = parseFloat(
+                code.total_quantity || 0
+            ).toFixed(4); // 소수점 4자리
+            // XSS 방지: 사용자 입력이 아닌 데이터지만 안전하게 처리
+            const codeText = escapeHtml(code.code);
+            const nameText = escapeHtml(code.name);
+            const unitText = escapeHtml(code.unit || '');
+            const optionText = `${codeText} ${nameText} (${quantityDisplay} ${unitText})`;
+            costCodeOptionsHtml += `<option value="${escapeHtml(
+                code.id
+            )}">${optionText}</option>`;
+        });
+    } else {
+        console.warn(
+            '[WARN][Render] sdEnabledCostCodes is not an array, cannot populate cost code options.'
+        ); // 디버깅
+    }
+
+    inputFeatures.forEach((feature) => {
+        // ID 생성 시 특수문자 고려 (간단히 제거 또는 변환)
+        const featureIdPart = feature.replace(/[^a-zA-Z0-9]/g, '-');
+        const inputId = `sd-input-${featureIdPart}`;
+        const selectId = `sd-select-${featureIdPart}`;
+
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'input-group';
+
+        // XSS 방지: feature 이름을 textContent로 사용
+        const label = document.createElement('label');
+        label.htmlFor = inputId;
+        label.textContent = `${feature}:`;
+
+        const numberInput = document.createElement('input');
+        numberInput.type = 'number';
+        numberInput.id = inputId;
+        numberInput.dataset.featureName = feature; // 원본 피처 이름 저장
+        numberInput.placeholder = '값 입력...';
+        numberInput.step = 'any';
+        numberInput.dataset.selectId = selectId; // 연결된 select ID 저장
+
+        const select = document.createElement('select');
+        select.id = selectId;
+        select.dataset.inputId = inputId; // 연결된 input ID 저장
+        select.dataset.inputType = 'costCodeLink';
+        select.title = '연동할 공사코드 선택 (선택 시 수량 자동 입력)';
+        select.innerHTML = costCodeOptionsHtml;
+
+        groupDiv.appendChild(label);
+        groupDiv.appendChild(numberInput);
+        groupDiv.appendChild(select);
+        container.appendChild(groupDiv);
+    });
+    console.log(
+        `[DEBUG][Render] Rendered ${inputFeatures.length} SD input fields.`
+    ); // 디버깅
+}
+
+// HTML 문자열 이스케이프 헬퍼 함수
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+/**
+ * SD 예측 결과를 테이블 형태로 렌더링합니다.
+ * @param {Object} predictions - 예측 결과 객체 (Key: 출력 피처 이름, Value: 예측값)
+ */
+function renderSdResultsTable(predictions) {
+    console.log('[DEBUG][Render] Rendering SD prediction results table.'); // 디버깅
+    const container = document.getElementById('sd-prediction-results-table');
+    if (!container) {
+        console.error(
+            '[ERROR][Render] SD prediction results table container not found.'
+        );
+        return;
+    }
+    if (
+        !predictions ||
+        typeof predictions !== 'object' ||
+        Object.keys(predictions).length === 0
+    ) {
+        container.innerHTML = '<p>예측 결과가 없습니다.</p>';
+        console.log(
+            '[DEBUG][Render] No SD prediction data to render in table.'
+        ); // 디버깅
+        return;
+    }
+
+    let tableHtml = `
+        <table>
+            <thead>
+                <tr><th>항목 (Output Feature)</th><th>예측값 (Predicted Value)</th></tr>
+            </thead>
+            <tbody>
+    `;
+    for (const feature in predictions) {
+        // 예측값을 소수점 2자리까지 표시 (통화 등 고려 시 조정 필요)
+        const value = predictions[feature];
+        const valueDisplay =
+            typeof value === 'number'
+                ? value.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                  }) // 지역화된 숫자 형식
+                : escapeHtml(value); // 숫자가 아니면 이스케이프
+        tableHtml += `
+            <tr>
+                <td>${escapeHtml(feature)}</td>
+                <td>${valueDisplay}</td>
+            </tr>
+        `;
+    }
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log(
+        '[DEBUG][Render] SD prediction results table rendered successfully.'
+    ); // 디버깅
+}
+
+/**
+ * SD 예측 결과를 Chart.js를 사용하여 막대 그래프로 렌더링합니다.
+ * @param {Object} predictions - 예측 결과 객체
+ */
+function renderSdPredictionChart(predictions) {
+    console.log('[DEBUG][Render] Rendering/Updating SD prediction chart.'); // 디버깅
+    const canvas = document.getElementById('sd-prediction-chart');
+    if (!canvas) {
+        console.warn(
+            "[WARN][Render] SD prediction chart canvas '#sd-prediction-chart' not found."
+        ); // 디버깅
+        return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        console.error(
+            '[ERROR][Render] Failed to get 2D context for SD prediction chart.'
+        );
+        return; // 캔버스 오류
+    }
+
+    // 예측 데이터 없으면 기존 차트 파괴하고 종료
+    if (
+        !predictions ||
+        typeof predictions !== 'object' ||
+        Object.keys(predictions).length === 0
+    ) {
+        console.log(
+            '[DEBUG][Render] No SD prediction data for chart. Destroying existing chart if any.'
+        ); // 디버깅
+        if (sdPredictionChartInstance) {
+            sdPredictionChartInstance.destroy();
+            sdPredictionChartInstance = null;
+        }
+        // 캔버스 클리어 (선택 사항)
+        // ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+    }
+
+    const labels = Object.keys(predictions);
+    const data = Object.values(predictions);
+
+    // 기존 차트 인스턴스가 있으면 파괴
+    if (sdPredictionChartInstance) {
+        console.log(
+            '[DEBUG][Render] Destroying previous SD prediction chart instance.'
+        ); // 디버깅
+        sdPredictionChartInstance.destroy();
+    }
+
+    console.log('[DEBUG][Render] Creating new SD prediction chart instance.'); // 디버깅
+    try {
+        sdPredictionChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '예측값',
+                        data: data,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)', // 청록색 계열
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                    },
+                ],
+            },
+            options: {
+                indexAxis: 'y', // 항목이 많을 수 있으니 가로 막대 그래프 (선택 사항)
+                responsive: true,
+                maintainAspectRatio: false, // 컨테이너 크기에 맞춤
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: '항목별 예측 결과' },
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: { display: true, text: '예측 값' },
+                    },
+                },
+            },
+        });
+        console.log(
+            '[DEBUG][Render] SD prediction chart rendered/updated successfully.'
+        ); // 디버깅
+    } catch (e) {
+        console.error(
+            '[ERROR][Render] Failed to create SD prediction chart:',
+            e
+        ); // 디버깅
+        showToast('결과 차트를 그리는 중 오류 발생.', 'error');
+    }
+}
+
+/**
+ * 개산견적(SD) 탭 하단 테이블에 CostItem 목록을 렌더링합니다.
+ * @param {Array} items - 서버에서 받아온 SD용 CostItem 데이터 배열 [{id, quantity, cost_code_name, cost_code_unit, quantity_member_name, ...}, ...]
+ */
+function renderSdCostItemsTable(items) {
+    console.log(
+        `[DEBUG][Render] Rendering SD Cost Items table with ${items.length} items.`
+    ); // 디버깅
+    const container = document.getElementById('sd-cost-item-table-container');
+    if (!container) {
+        console.error(
+            '[ERROR][Render] SD Cost Item table container not found.'
+        );
+        return;
+    }
+    if (!currentProjectId) {
+        container.innerHTML = '<p>프로젝트를 선택하세요.</p>';
+        return;
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+        container.innerHTML = '<p>개산견적(SD) 대상 산출항목이 없습니다.</p>';
+        return;
+    }
+
+    // TODO: 그룹핑 기능 추가 시 그룹핑 로직 구현 필요
+
+    // 기본 테이블 렌더링 (그룹핑 미구현 상태)
+    const columns = [
+        // 표시할 컬럼 정의
+        { id: 'cost_code_name', label: '산출항목 (공사코드)' },
+        { id: 'quantity', label: '수량', align: 'right' },
+        { id: 'cost_code_unit', label: '단위' },
+        { id: 'quantity_member_name', label: '연관 부재' },
+        { id: 'classification_tag_name', label: '부재 분류' },
+        { id: 'member_mark_name', label: '일람부호' },
+        { id: 'raw_element_unique_id', label: 'BIM Unique ID' }, // BIM 연동 위해 추가
+    ];
+
+    let tableHtml = `<table class="ruleset-table"><thead><tr>`; // ruleset-table 스타일 재사용
+    columns.forEach(
+        (col) =>
+            (tableHtml += `<th style="text-align: ${
+                col.align || 'left'
+            }">${escapeHtml(col.label)}</th>`)
+    );
+    tableHtml += `</tr></thead><tbody>`;
+
+    items.forEach((item) => {
+        // 선택된 행 강조
+        const isSelected = selectedSdItemIds.has(item.id);
+        tableHtml += `<tr data-id="${item.id}" class="${
+            isSelected ? 'selected-row' : ''
+        }" style="cursor: pointer;">`; // 선택 가능하도록 cursor 추가
+        columns.forEach((col) => {
+            let value = item[col.id] ?? ''; // null/undefined 방지
+            if (col.id === 'quantity' && typeof value === 'number') {
+                value = value.toFixed(4); // 소수점 4자리
+            }
+            tableHtml += `<td style="text-align: ${
+                col.align || 'left'
+            }">${escapeHtml(value)}</td>`; // 값 이스케이프
+        });
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log('[DEBUG][Render] SD Cost Items table rendered successfully.'); // 디버깅
+}
+
+// ▲▲▲ [추가] 여기까지 ▲▲▲

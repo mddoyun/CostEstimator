@@ -1,13 +1,27 @@
 # connections/views.py
-
-from django.shortcuts import render
-from django.http import JsonResponse, HttpResponse
+import uuid #
+from django.shortcuts import render, get_object_or_404 # get_object_or_404 추가
+from django.http import JsonResponse, HttpResponse, FileResponse,Http404 # FileResponse 추가
 from django.views.decorators.http import require_http_methods
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import json
 import csv
-import re 
+import re
+from urllib.parse import quote as urlquote # Python 기본 라이브러리 사용
+import os # 파일 처리 위해 추가
+import base64 # 바이너리 데이터 인코딩/디코딩 위해 추가
+from django.conf import settings # 임시 파일 경로 위해 추가
+import tensorflow as tf # TensorFlow/Keras 임포트
+from tensorflow import keras # Keras 임포트
+import numpy as np # 데이터 처리 위해 NumPy 임포트
+import pandas as pd # CSV 처리 위해 Pandas 임포트
+from sklearn.model_selection import train_test_split # 데이터 분할 위해 추가
+from sklearn.preprocessing import StandardScaler # 정규화 위해 추가
+import threading # 백그라운드 학습 위해 추가
+# ▼▼▼ [추가] AI 모델 임포트 ▼▼▼
+from .models import AIModel
+# ▲▲▲ [추가] 여기까지 ▲▲▲
 from django.db.models import F, Sum, Count, Q
 from functools import reduce
 import operator
@@ -27,9 +41,9 @@ from .models import (
     CostItem,
     CostCode,
     PropertyMappingRule,
-    MemberMark, 
-    CostCodeRule, 
-    MemberMarkAssignmentRule, 
+    MemberMark,
+    CostCodeRule,
+    MemberMarkAssignmentRule,
     CostCodeAssignmentRule,
     SpaceClassification,
     SpaceClassificationRule,
@@ -41,29 +55,41 @@ from .models import (
 # --- Project & Revit Data Views ---
 
 def revit_control_panel(request):
+    # 디버깅: 템플릿 렌더링 시작
+    print("[DEBUG][revit_control_panel] Rendering revit_control.html")
     projects = Project.objects.all().order_by('-created_at')
     return render(request, 'revit_control.html', {'projects': projects})
-
 def create_project(request):
+    # 디버깅: 프로젝트 생성 요청 수신
+    print("[DEBUG][create_project] Received request to create project")
     if request.method == 'POST':
         data = json.loads(request.body)
         project_name = data.get('name')
         if project_name:
             project = Project.objects.create(name=project_name)
+            # 디버깅: 프로젝트 생성 성공
+            print(f"[DEBUG][create_project] Project '{project.name}' created with ID: {project.id}")
             return JsonResponse({'status': 'success', 'project_id': str(project.id), 'project_name': project.name})
+    # 디버깅: 잘못된 요청
+    print("[ERROR][create_project] Invalid request method or missing name")
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
 def trigger_revit_data_fetch(request, project_id):
+    # 디버깅: 데이터 가져오기 명령 트리거
+    print(f"[DEBUG][trigger_revit_data_fetch] Triggering data fetch for project ID: {project_id}")
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
-        RevitConsumer.revit_group_name,
+        # ▼▼▼ [수정] RevitConsumer의 그룹 이름 사용 ▼▼▼
+        'revit_broadcast_group', # RevitConsumer.revit_group_name 대신 실제 그룹 이름 사용 (하드코딩 주의)
+        # ▲▲▲ [수정] 여기까지 ▲▲▲
         {'type': 'send.command', 'command_data': {'command': 'fetch_all_elements', 'project_id': str(project_id)}}
     )
     return JsonResponse({'status': 'success', 'message': f'Fetch command sent for project {project_id}.'})
-
 # --- Tag Import/Export Views ---
 
 def export_tags(request, project_id):
+    # 디버깅: 태그 내보내기 시작
+    print(f"[DEBUG][export_tags] Exporting tags for project ID: {project_id}")
     project = Project.objects.get(id=project_id)
     tags = project.classification_tags.all().order_by('name')
     response = HttpResponse(content_type='text/csv')
@@ -72,32 +98,44 @@ def export_tags(request, project_id):
     writer.writerow(['name', 'description'])
     for tag in tags:
         writer.writerow([tag.name, tag.description])
+    # 디버깅: 태그 내보내기 완료
+    print(f"[DEBUG][export_tags] Exported {tags.count()} tags.")
     return response
 
 def import_tags(request, project_id):
+    # 디버깅: 태그 가져오기 요청 수신
+    print(f"[DEBUG][import_tags] Importing tags for project ID: {project_id}")
     if request.method == 'POST' and request.FILES.get('tag_file'):
         project = Project.objects.get(id=project_id)
         tag_file = request.FILES['tag_file']
         try:
             # [수정] 삭제 전, 영향을 받을 모든 RawElement의 ID를 미리 가져옵니다.
             affected_element_ids = list(RawElement.objects.filter(
-                project=project, 
+                project=project,
                 classification_tags__isnull=False
             ).values_list('id', flat=True))
+            # 디버깅: 영향 받는 객체 ID 확인
+            print(f"[DEBUG][import_tags] Found {len(affected_element_ids)} potentially affected elements before deletion.")
 
             # 기존 태그를 모두 삭제합니다.
-            project.classification_tags.all().delete()
-            
+            deleted_count, _ = project.classification_tags.all().delete()
+            # 디버깅: 기존 태그 삭제 확인
+            print(f"[DEBUG][import_tags] Deleted {deleted_count} existing tags.")
+
             # 파일에서 새 태그를 읽어 생성합니다.
             decoded_file = tag_file.read().decode('utf-8').splitlines()
             reader = csv.reader(decoded_file)
             next(reader, None) # 헤더 건너뛰기
+            created_count = 0
             for row in reader:
                 if row:
                     name = row[0]
                     description = row[1] if len(row) > 1 else ""
                     QuantityClassificationTag.objects.create(project=project, name=name, description=description)
-            
+                    created_count += 1
+            # 디버깅: 새 태그 생성 확인
+            print(f"[DEBUG][import_tags] Created {created_count} new tags from CSV.")
+
             # [수정] 변경된 태그 목록과 영향을 받은 객체 정보를 프론트엔드로 전송합니다.
             channel_layer = get_channel_layer()
 
@@ -107,6 +145,8 @@ def import_tags(request, project_id):
                 FrontendConsumer.frontend_group_name,
                 {'type': 'broadcast_tags', 'tags': tags}
             )
+            # 디버깅: 태그 목록 브로드캐스트
+            print(f"[DEBUG][import_tags] Broadcasted updated tag list ({len(tags)} tags).")
 
             # 2. 영향을 받은 객체가 있었다면, 최신 상태를 전송
             if affected_element_ids:
@@ -117,10 +157,16 @@ def import_tags(request, project_id):
                         FrontendConsumer.frontend_group_name,
                         {'type': 'broadcast_elements', 'elements': updated_elements_data}
                     )
+                    # 디버깅: 영향 받은 객체 정보 브로드캐스트
+                    print(f"[DEBUG][import_tags] Broadcasted updates for {len(updated_elements_data)} affected elements.")
 
             return JsonResponse({'status': 'success'})
         except Exception as e:
+            # 디버깅: 오류 발생
+            print(f"[ERROR][import_tags] Error during import: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    # 디버깅: 잘못된 요청
+    print("[ERROR][import_tags] Invalid request method or missing file.")
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
 
@@ -131,6 +177,8 @@ def import_tags(request, project_id):
 
 @require_http_methods(["GET", "POST", "DELETE"])
 def classification_rules_api(request, project_id, rule_id=None):
+    # 디버깅: API 요청 수신
+    print(f"[DEBUG][classification_rules_api] Method: {request.method}, Project: {project_id}, Rule: {rule_id}")
     if request.method == 'GET':
         rules = ClassificationRule.objects.filter(project_id=project_id).select_related('target_tag')
         rules_data = [{
@@ -141,42 +189,64 @@ def classification_rules_api(request, project_id, rule_id=None):
             'priority': rule.priority,
             'description': rule.description
         } for rule in rules]
+        # 디버깅: 조회 결과
+        print(f"[DEBUG][classification_rules_api] GET: Found {len(rules_data)} rules.")
         return JsonResponse(rules_data, safe=False)
 
     elif request.method == 'POST':
         data = json.loads(request.body)
+        # 디버깅: POST 데이터 확인
+        print(f"[DEBUG][classification_rules_api] POST data: {data}")
         try:
             project = Project.objects.get(id=project_id)
             target_tag = QuantityClassificationTag.objects.get(id=data.get('target_tag_id'), project=project)
             rule_id_from_data = data.get('id')
-            if rule_id_from_data:
+            if rule_id_from_data and rule_id_from_data != 'new': # 'new' 문자열 처리 추가
+                # 디버깅: 규칙 수정
+                print(f"[DEBUG][classification_rules_api] Updating rule ID: {rule_id_from_data}")
                 rule = ClassificationRule.objects.get(id=rule_id_from_data, project=project)
             else:
+                # 디버깅: 새 규칙 생성
+                print("[DEBUG][classification_rules_api] Creating new rule.")
                 rule = ClassificationRule(project=project)
             rule.target_tag = target_tag
             rule.conditions = data.get('conditions', [])
             rule.priority = data.get('priority', 0)
             rule.description = data.get('description', '')
             rule.save()
+            # 디버깅: 저장 성공
+            print(f"[DEBUG][classification_rules_api] Rule saved successfully. ID: {rule.id}")
             return JsonResponse({'status': 'success', 'message': '규칙이 저장되었습니다.', 'rule_id': rule.id})
         except (Project.DoesNotExist, QuantityClassificationTag.DoesNotExist, ClassificationRule.DoesNotExist) as e:
+            # 디버깅: 관련 객체 못 찾음
+            print(f"[ERROR][classification_rules_api] POST Error - Not Found: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=404)
         except Exception as e:
+            # 디버깅: 기타 저장 오류
+            print(f"[ERROR][classification_rules_api] POST Error - Exception: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
     elif request.method == 'DELETE':
         if not rule_id:
+            # 디버깅: Rule ID 누락
+            print("[ERROR][classification_rules_api] DELETE Error: Rule ID is required.")
             return JsonResponse({'status': 'error', 'message': 'Rule ID가 필요합니다.'}, status=400)
         try:
+            # 디버깅: 규칙 삭제 시도
+            print(f"[DEBUG][classification_rules_api] Attempting to delete rule ID: {rule_id}")
             rule = ClassificationRule.objects.get(id=rule_id, project_id=project_id)
             rule.delete()
+            # 디버깅: 삭제 성공
+            print(f"[DEBUG][classification_rules_api] Rule ID: {rule_id} deleted successfully.")
             return JsonResponse({'status': 'success', 'message': '규칙이 삭제되었습니다.'})
         except ClassificationRule.DoesNotExist:
+            # 디버깅: 삭제할 규칙 못 찾음
+            print(f"[ERROR][classification_rules_api] DELETE Error: Rule ID {rule_id} not found.")
             return JsonResponse({'status': 'error', 'message': '규칙을 찾을 수 없습니다.'}, status=404)
         except Exception as e:
+            # 디버깅: 기타 삭제 오류
+            print(f"[ERROR][classification_rules_api] DELETE Error - Exception: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-
 
 # ▼▼▼ [추가] 이 함수를 아래에 추가해주세요 ▼▼▼
 @require_http_methods(["GET", "POST", "DELETE"])
@@ -3463,3 +3533,782 @@ def update_cost_item_unit_price_type(request, project_id):
         print(traceback.format_exc())
         return JsonResponse({'status': 'error', 'message': f'업데이트 중 오류 발생: {str(e)}'}, status=500)
 # ▲▲▲ [추가] 여기까지 입니다 ▲▲▲
+
+# ▼▼▼ [추가] AI 모델 관리 API 뷰 함수들 ▼▼▼
+@require_http_methods(["GET", "POST", "DELETE", "PUT"])
+def ai_models_api(request, project_id, model_id=None):
+    """AI 모델(.h5, .json) CRUD API"""
+    print(f"\n[DEBUG][ai_models_api] Request: {request.method}, Project: {project_id}, Model: {model_id}")
+
+    # --- GET: 모델 목록 또는 상세 정보 조회 ---
+    if request.method == 'GET':
+        try:
+            if model_id: # 상세 조회
+                model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+                data = {
+                    'id': str(model_obj.id),
+                    'name': model_obj.name,
+                    'description': model_obj.description,
+                    'metadata': model_obj.metadata,
+                    'created_at': model_obj.created_at.isoformat(),
+                    'updated_at': model_obj.updated_at.isoformat(),
+                }
+                print(f"[DEBUG][ai_models_api] GET Details for model ID: {model_id}")
+                return JsonResponse(data)
+            else: # 목록 조회
+                models = AIModel.objects.filter(project_id=project_id)
+                data = [{
+                    'id': str(m.id),
+                    'name': m.name,
+                    'description': m.description,
+                    'input_features': m.metadata.get('input_features', []), # 메타데이터에서 정보 추출
+                    'output_features': m.metadata.get('output_features', []),
+                    'performance': m.metadata.get('performance', {}),
+                    'created_at': m.created_at.isoformat(),
+                } for m in models]
+                print(f"[DEBUG][ai_models_api] GET List: Found {len(data)} models.")
+                return JsonResponse(data, safe=False)
+        except Exception as e:
+            print(f"[ERROR][ai_models_api] GET Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # --- POST: 새 모델 업로드 ---
+    elif request.method == 'POST':
+        try:
+            project = get_object_or_404(Project, id=project_id)
+            name = request.POST.get('name')
+            description = request.POST.get('description', '')
+            h5_file = request.FILES.get('h5_file')
+            json_file = request.FILES.get('json_file')
+            metadata_manual = request.POST.get('metadata_manual') # 수동 입력 메타데이터 (JSON 문자열)
+
+            print(f"[DEBUG][ai_models_api] POST Upload: name='{name}', h5_file={'Yes' if h5_file else 'No'}, json_file={'Yes' if json_file else 'No'}, metadata_manual={'Yes' if metadata_manual else 'No'}")
+
+            if not name or not h5_file:
+                print("[ERROR][ai_models_api] POST Error: Name and h5_file are required.")
+                return JsonResponse({'status': 'error', 'message': '모델 이름과 .h5 파일은 필수입니다.'}, status=400)
+
+            metadata = {}
+            if json_file:
+                try:
+                    metadata = json.load(json_file)
+                    print("[DEBUG][ai_models_api] Metadata loaded from json_file.")
+                except json.JSONDecodeError:
+                    print("[ERROR][ai_models_api] POST Error: Invalid JSON file format.")
+                    return JsonResponse({'status': 'error', 'message': '.json 파일 형식이 올바르지 않습니다.'}, status=400)
+            elif metadata_manual:
+                try:
+                    metadata = json.loads(metadata_manual)
+                    print("[DEBUG][ai_models_api] Metadata loaded from manual input.")
+                except json.JSONDecodeError:
+                    print("[ERROR][ai_models_api] POST Error: Invalid manual metadata JSON format.")
+                    return JsonResponse({'status': 'error', 'message': '수동 입력한 메타데이터 형식이 올바르지 않습니다.'}, status=400)
+            else: # 메타데이터가 없으면 기본값 사용 또는 오류 처리 (여기선 기본값)
+                print("[WARN][ai_models_api] No metadata provided, using default empty dict.")
+                metadata = {'input_features': [], 'output_features': [], 'performance': {}} # 기본 구조
+
+            # .h5 파일 내용 읽기
+            h5_content = h5_file.read()
+            print(f"[DEBUG][ai_models_api] Read h5_file content ({len(h5_content)} bytes).")
+
+            new_model = AIModel.objects.create(
+                project=project,
+                name=name,
+                description=description,
+                h5_file_content=h5_content,
+                metadata=metadata
+            )
+            print(f"[DEBUG][ai_models_api] New AIModel created successfully (ID: {new_model.id}).")
+            return JsonResponse({'status': 'success', 'message': 'AI 모델이 성공적으로 업로드되었습니다.', 'model_id': str(new_model.id)})
+
+        except Project.DoesNotExist:
+            print(f"[ERROR][ai_models_api] POST Error: Project '{project_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][ai_models_api] POST Error: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # --- PUT: 모델 정보 수정 (파일 제외) ---
+    elif request.method == 'PUT':
+        if not model_id: return JsonResponse({'status': 'error', 'message': '모델 ID가 필요합니다.'}, status=400)
+        try:
+            model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+            data = json.loads(request.body)
+            print(f"[DEBUG][ai_models_api] PUT Update for model ID {model_id}: {data}")
+
+            updated = False
+            if 'name' in data and data['name'] != model_obj.name:
+                # 이름 중복 체크
+                if AIModel.objects.filter(project_id=project_id, name=data['name']).exclude(id=model_id).exists():
+                    return JsonResponse({'status': 'error', 'message': '이미 사용 중인 모델 이름입니다.'}, status=409)
+                model_obj.name = data['name']
+                updated = True
+                print(f"[DEBUG][ai_models_api]   - Name updated to '{data['name']}'.")
+            if 'description' in data and data['description'] != model_obj.description:
+                model_obj.description = data['description']
+                updated = True
+                print(f"[DEBUG][ai_models_api]   - Description updated.")
+            if 'metadata' in data and data['metadata'] != model_obj.metadata:
+                model_obj.metadata = data['metadata']
+                updated = True
+                print(f"[DEBUG][ai_models_api]   - Metadata updated.")
+
+            if updated:
+                model_obj.save()
+                print(f"[DEBUG][ai_models_api] Model ID {model_id} updated successfully.")
+                return JsonResponse({'status': 'success', 'message': '모델 정보가 업데이트되었습니다.'})
+            else:
+                print(f"[INFO][ai_models_api] No changes detected for model ID {model_id}.")
+                return JsonResponse({'status': 'info', 'message': '변경된 내용이 없습니다.'})
+
+        except AIModel.DoesNotExist:
+            print(f"[ERROR][ai_models_api] PUT Error: Model ID '{model_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '모델을 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][ai_models_api] PUT Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    # --- DELETE: 모델 삭제 ---
+    elif request.method == 'DELETE':
+        if not model_id: return JsonResponse({'status': 'error', 'message': '모델 ID가 필요합니다.'}, status=400)
+        try:
+            model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+            model_name = model_obj.name
+            model_obj.delete()
+            print(f"[DEBUG][ai_models_api] DELETE: Model '{model_name}' (ID: {model_id}) deleted successfully.")
+            return JsonResponse({'status': 'success', 'message': f"모델 '{model_name}'이(가) 삭제되었습니다."})
+        except AIModel.DoesNotExist:
+            print(f"[ERROR][ai_models_api] DELETE Error: Model ID '{model_id}' not found.")
+            return JsonResponse({'status': 'error', 'message': '모델을 찾을 수 없습니다.'}, status=404)
+        except Exception as e:
+            print(f"[ERROR][ai_models_api] DELETE Error: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@require_http_methods(["GET"])
+def download_ai_model(request, project_id, model_id):
+    """AI 모델(.h5)과 메타데이터(.json) 파일을 각각 다운로드하는 API"""
+    try:
+        model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+        print(f"[DEBUG][download_ai_model] Request to download model '{model_obj.name}' (ID: {model_id})")
+
+        file_type = request.GET.get('type', 'h5') # 기본은 h5, json 요청 가능
+
+        if file_type == 'h5':
+            print("[DEBUG][download_ai_model] Preparing .h5 file for download.")
+            response = HttpResponse(model_obj.h5_file_content, content_type='application/octet-stream')
+            response['Content-Disposition'] = f'attachment; filename="{model_obj.name}.h5"'
+            return response
+        elif file_type == 'json':
+            print("[DEBUG][download_ai_model] Preparing .json metadata file for download.")
+            response = HttpResponse(json.dumps(model_obj.metadata, indent=2, ensure_ascii=False), content_type='application/json')
+            response['Content-Disposition'] = f'attachment; filename="{model_obj.name}_metadata.json"'
+            return response
+        else:
+            print(f"[ERROR][download_ai_model] Invalid file type requested: {file_type}")
+            return JsonResponse({'status': 'error', 'message': '잘못된 파일 타입입니다 (h5 또는 json).'}, status=400)
+
+    except AIModel.DoesNotExist:
+        print(f"[ERROR][download_ai_model] Model ID '{model_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '모델을 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        print(f"[ERROR][download_ai_model] Error: {e}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+# ▲▲▲ [추가] 여기까지 ▲▲▲
+
+
+# ▼▼▼ [추가] AI 모델 학습 관련 API 뷰 함수들 ▼▼▼
+
+# 임시 파일 저장 경로 (settings.py에 정의하는 것이 더 좋음)
+TEMP_UPLOAD_DIR = os.path.join(settings.BASE_DIR, 'temp_uploads')
+os.makedirs(TEMP_UPLOAD_DIR, exist_ok=True)
+
+@require_http_methods(["POST"])
+def upload_training_csv(request, project_id):
+    """학습용 CSV 파일을 임시 저장하고 헤더 정보를 반환"""
+    print(f"\n[DEBUG][upload_training_csv] Received CSV upload request for project: {project_id}")
+    if not request.FILES.get('training_csv'):
+        print("[ERROR][upload_training_csv] No CSV file found in request.")
+        return JsonResponse({'status': 'error', 'message': '학습용 CSV 파일이 필요합니다.'}, status=400)
+
+    try:
+        project = get_object_or_404(Project, id=project_id)
+        csv_file = request.FILES['training_csv']
+
+        # 파일 이름에 프로젝트 ID와 타임스탬프를 포함하여 충돌 방지
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        temp_filename = f"proj_{project_id}_train_{timestamp}.csv"
+        temp_filepath = os.path.join(TEMP_UPLOAD_DIR, temp_filename)
+
+        # 파일을 임시 경로에 저장
+        with open(temp_filepath, 'wb+') as destination:
+            for chunk in csv_file.chunks():
+                destination.write(chunk)
+        print(f"[DEBUG][upload_training_csv] CSV file saved temporarily to: {temp_filepath}")
+
+        # Pandas로 CSV를 읽어 헤더(컬럼명) 추출
+        df = pd.read_csv(temp_filepath)
+        headers = df.columns.tolist()
+        print(f"[DEBUG][upload_training_csv] Extracted headers: {headers}")
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'CSV 파일 업로드 성공. 헤더 정보를 반환합니다.',
+            'temp_filename': temp_filename, # 나중에 학습 시작 시 파일 식별용
+            'headers': headers
+        })
+
+    except Project.DoesNotExist:
+        print(f"[ERROR][upload_training_csv] Project '{project_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except pd.errors.EmptyDataError:
+        print("[ERROR][upload_training_csv] Uploaded CSV file is empty.")
+        if os.path.exists(temp_filepath): os.remove(temp_filepath) # 빈 파일 삭제
+        return JsonResponse({'status': 'error', 'message': '업로드된 CSV 파일이 비어 있습니다.'}, status=400)
+    except Exception as e:
+        print(f"[ERROR][upload_training_csv] Error processing CSV: {e}")
+        import traceback
+        print(traceback.format_exc())
+        if 'temp_filepath' in locals() and os.path.exists(temp_filepath): os.remove(temp_filepath) # 오류 시 임시 파일 삭제
+        return JsonResponse({'status': 'error', 'message': f'CSV 처리 중 오류 발생: {str(e)}'}, status=500)
+
+# 학습 진행 상태를 저장할 딕셔너리 (간단한 인메모리 방식)
+training_progress = {}
+
+# WebSocket으로 진행률 전송하는 함수
+def send_training_progress(project_id, task_id, progress_data):
+    """WebSocket을 통해 특정 프로젝트의 학습 진행률 브로드캐스트"""
+    print(f"[DEBUG][WebSocket Send] Sending progress for task {task_id}: {progress_data}")
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        FrontendConsumer.frontend_group_name,
+        {
+            'type': 'broadcast_training_progress', # consumers.py에 핸들러 추가 필요
+            'project_id': str(project_id),
+            'task_id': task_id,
+            'progress': progress_data,
+        }
+    )
+
+# Keras 학습 콜백 정의 (진행률 업데이트용)
+class ProgressCallback(keras.callbacks.Callback):
+    def __init__(self, project_id, task_id):
+        super().__init__()
+        self.project_id = project_id
+        self.task_id = task_id
+        self.epoch_data = [] # 에포크별 손실/정확도 저장
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current_progress = {
+            'epoch': epoch + 1,
+            'loss': logs.get('loss'),
+            'val_loss': logs.get('val_loss'), # 검증 손실 추가 (있을 경우)
+            # 필요 시 다른 메트릭 추가 (accuracy 등)
+        }
+        self.epoch_data.append(current_progress)
+        progress_update = {
+            'status': 'running',
+            'current_epoch': epoch + 1,
+            'total_epochs': self.params['epochs'],
+            'loss': logs.get('loss'),
+            'val_loss': logs.get('val_loss'),
+            'epoch_history': self.epoch_data # 전체 히스토리 전송 (그래프용)
+        }
+        # WebSocket으로 전송 (1초마다 보내므로 여기서는 매 에포크마다 전송)
+        send_training_progress(self.project_id, self.task_id, progress_update)
+        # 터미널에도 출력
+        print(f"  [Train Task {self.task_id}] Epoch {epoch+1}/{self.params['epochs']} - loss: {logs.get('loss'):.4f}, val_loss: {logs.get('val_loss'):.4f}")
+
+# 실제 학습 로직 함수 (백그라운드 스레드에서 실행됨)
+def run_ai_training_task(project_id, task_id, temp_filename, config):
+    print(f"\n[DEBUG][Training Task {task_id}] Background training started for project: {project_id}")
+    temp_filepath = os.path.join(TEMP_UPLOAD_DIR, temp_filename)
+
+    try:
+        # 0. 초기 상태 전송
+        send_training_progress(project_id, task_id, {'status': 'starting', 'message': '학습 데이터 로딩 중...'})
+
+        # 1. 데이터 로드 및 전처리
+        print(f"  [Train Task {task_id}] Loading data from: {temp_filepath}")
+        df = pd.read_csv(temp_filepath)
+        print(f"  [Train Task {task_id}] Data loaded successfully. Shape: {df.shape}")
+
+        input_features = config['input_features']
+        output_features = config['output_features']
+        print(f"  [Train Task {task_id}] Input features: {input_features}")
+        print(f"  [Train Task {task_id}] Output features: {output_features}")
+
+        # 입력/출력 데이터 분리 및 NaN 처리 (여기서는 간단히 0으로 채움)
+        X = df[input_features].fillna(0).values
+        y = df[output_features].fillna(0).values
+        print(f"  [Train Task {task_id}] Features (X) shape: {X.shape}")
+        print(f"  [Train Task {task_id}] Targets (y) shape: {y.shape}")
+
+        # 데이터 분할 (학습/검증)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        print(f"  [Train Task {task_id}] Data split: Train={X_train.shape[0]}, Validation={X_val.shape[0]}")
+
+        # 정규화 (StandardScaler 사용) - 설정에 따라 적용
+        scaler_X = None
+        if config.get('normalize_inputs', False):
+            print(f"  [Train Task {task_id}] Normalizing input features...")
+            scaler_X = StandardScaler()
+            X_train = scaler_X.fit_transform(X_train)
+            X_val = scaler_X.transform(X_val)
+        scaler_y = None # 출력값 정규화는 일반적으로 회귀 문제에서 필요할 수 있음 (선택 사항)
+        # if config.get('normalize_outputs', False):
+        #     scaler_y = StandardScaler()
+        #     y_train = scaler_y.fit_transform(y_train)
+        #     y_val = scaler_y.transform(y_val)
+
+        send_training_progress(project_id, task_id, {'status': 'preprocessing_done', 'message': '모델 구성 중...'})
+
+        # 2. Keras 모델 구성
+        print(f"  [Train Task {task_id}] Building Keras model...")
+        model = keras.Sequential()
+        # 입력 레이어
+        model.add(keras.layers.Input(shape=(len(input_features),)))
+        # 은닉 레이어
+        hidden_layers = config.get('hidden_layers', 1)
+        nodes_per_layer = config.get('nodes_per_layer', 64)
+        for _ in range(hidden_layers):
+            model.add(keras.layers.Dense(nodes_per_layer, activation='relu')) # 기본 활성화 함수: ReLU
+        # 출력 레이어 (활성화 함수 없음 - 회귀 문제 가정)
+        model.add(keras.layers.Dense(len(output_features)))
+        print(f"  [Train Task {task_id}] Model summary:")
+        model.summary(print_fn=lambda x: print(f"    {x}"))
+
+        # 3. 모델 컴파일
+        optimizer_name = config.get('optimizer', 'adam').lower()
+        learning_rate = config.get('learning_rate', 0.001)
+        print(f"  [Train Task {task_id}] Compiling model with optimizer={optimizer_name}, lr={learning_rate}...")
+        if optimizer_name == 'adam':
+            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        else: # 기본값 또는 다른 옵티마이저 추가 가능
+            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+
+        model.compile(optimizer=optimizer, loss='mse') # 기본 손실 함수: Mean Squared Error
+
+        # 4. 모델 학습
+        epochs = config.get('epochs', 10)
+        print(f"  [Train Task {task_id}] Starting training for {epochs} epochs...")
+        send_training_progress(project_id, task_id, {'status': 'training_started', 'message': f'총 {epochs} 에포크 학습 시작...'})
+
+        progress_callback = ProgressCallback(project_id, task_id)
+        history = model.fit(
+            X_train, y_train,
+            epochs=epochs,
+            validation_data=(X_val, y_val),
+            callbacks=[progress_callback],
+            verbose=0 # 콜백에서 로그를 처리하므로 여기서는 끔
+        )
+        print(f"  [Train Task {task_id}] Training finished.")
+
+        # 5. 최종 성능 평가 (간단히 마지막 에포크의 검증 손실 사용)
+        final_val_loss = history.history['val_loss'][-1]
+        print(f"  [Train Task {task_id}] Final validation loss: {final_val_loss:.4f}")
+
+        # 6. 모델 저장 준비 (임시 파일)
+        trained_model_filename = f"proj_{project_id}_trained_{task_id}.h5"
+        trained_model_filepath = os.path.join(TEMP_UPLOAD_DIR, trained_model_filename)
+        model.save(trained_model_filepath)
+        print(f"  [Train Task {task_id}] Trained model saved temporarily to: {trained_model_filepath}")
+
+        # 7. 메타데이터 생성
+        metadata = {
+            'input_features': input_features,
+            'output_features': output_features,
+            'training_config': config,
+            'performance': {'final_validation_loss': final_val_loss},
+            'scaler_X_params': scaler_X.get_params() if scaler_X else None, # 정규화 파라미터 저장
+            # 'scaler_y_params': scaler_y.get_params() if scaler_y else None,
+        }
+        print(f"  [Train Task {task_id}] Metadata generated.")
+
+        # 최종 상태 전송 (성공)
+        final_progress = {
+            'status': 'completed',
+            'message': f'학습 완료! 최종 검증 손실: {final_val_loss:.4f}',
+            'final_val_loss': final_val_loss,
+            'trained_model_filename': trained_model_filename, # 다운로드 또는 DB 저장에 사용
+            'metadata': metadata,
+            'epoch_history': progress_callback.epoch_data # 최종 그래프 데이터
+        }
+        send_training_progress(project_id, task_id, final_progress)
+        training_progress[task_id] = final_progress # 최종 결과 저장
+
+    except Exception as e:
+        error_message = f"학습 중 오류 발생: {str(e)}"
+        print(f"[ERROR][Training Task {task_id}] {error_message}")
+        import traceback
+        print(traceback.format_exc())
+        error_progress = {'status': 'error', 'message': error_message}
+        send_training_progress(project_id, task_id, error_progress)
+        training_progress[task_id] = error_progress # 오류 상태 저장
+    finally:
+        # 임시 CSV 파일 삭제
+        if os.path.exists(temp_filepath):
+            try:
+                os.remove(temp_filepath)
+                print(f"  [Train Task {task_id}] Temporary CSV file deleted: {temp_filepath}")
+            except Exception as e:
+                print(f"[ERROR][Training Task {task_id}] Failed to delete temporary CSV file {temp_filepath}: {e}")
+        print(f"[DEBUG][Training Task {task_id}] Background training finished.")
+
+@require_http_methods(["POST"])
+def start_ai_training(request, project_id):
+    """백그라운드에서 AI 모델 학습 시작"""
+    print(f"\n[DEBUG][start_ai_training] Received training start request for project: {project_id}")
+    try:
+        project = get_object_or_404(Project, id=project_id)
+        config = json.loads(request.body)
+        temp_filename = config.get('temp_filename')
+
+        if not temp_filename or not os.path.exists(os.path.join(TEMP_UPLOAD_DIR, temp_filename)):
+            print(f"[ERROR][start_ai_training] Invalid or missing temp_filename: {temp_filename}")
+            return JsonResponse({'status': 'error', 'message': '유효하지 않은 학습 데이터 파일입니다.'}, status=400)
+
+        # ▼▼▼ [확인] 이 부분이 올바르게 있는지 확인 ▼▼▼
+        # 고유한 작업 ID 생성
+        task_id = str(uuid.uuid4())
+        # ▲▲▲ [확인] 여기까지 ▲▲▲
+        print(f"[DEBUG][start_ai_training] Generated Task ID: {task_id}")
+        print(f"[DEBUG][start_ai_training] Training Config: {config}")
+
+        # 초기 진행 상태 설정
+        training_progress[task_id] = {'status': 'queued', 'message': '학습 대기 중...'}
+
+        # 백그라운드 스레드 생성 및 시작
+        thread = threading.Thread(target=run_ai_training_task, args=(project_id, task_id, temp_filename, config))
+        thread.start()
+        print(f"[DEBUG][start_ai_training] Background training thread started for Task ID: {task_id}")
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'AI 모델 학습이 시작되었습니다. 진행률은 실시간으로 업데이트됩니다.',
+            'task_id': task_id
+        })
+
+    except Project.DoesNotExist:
+        print(f"[ERROR][start_ai_training] Project '{project_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except json.JSONDecodeError:
+        print("[ERROR][start_ai_training] Invalid JSON data in request body.")
+        return JsonResponse({'status': 'error', 'message': '잘못된 요청 데이터 형식입니다.'}, status=400)
+    except Exception as e:
+        print(f"[ERROR][start_ai_training] Error starting training: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': f'학습 시작 중 오류 발생: {str(e)}'}, status=500)
+
+# ▲▲▲ [추가] 여기까지 ▲▲▲
+
+# ▼▼▼ [추가] 개산견적(SD) 관련 API 뷰 함수들 ▼▼▼
+@require_http_methods(["GET"])
+def get_sd_cost_codes_with_quantity(request, project_id):
+    """개산견적(SD)용으로 활성화된 공사코드 목록과 현재 프로젝트에서의 총 수량 합계를 반환"""
+    print(f"\n[DEBUG][get_sd_cost_codes_with_quantity] Request for project: {project_id}")
+    try:
+        project = get_object_or_404(Project, id=project_id)
+
+        # ai_sd_enabled=True 인 공사코드 필터링
+        sd_codes = CostCode.objects.filter(project=project, ai_sd_enabled=True)
+
+        # 해당 공사코드를 사용하는 CostItem들의 수량 합계 계산
+        cost_item_quantities = CostItem.objects.filter(
+            project=project,
+            cost_code__in=sd_codes
+        ).values('cost_code_id').annotate(total_quantity=Sum('quantity'))
+
+        # 결과를 딕셔너리로 변환 (Key: cost_code_id, Value: total_quantity)
+        quantity_map = {str(item['cost_code_id']): item['total_quantity'] for item in cost_item_quantities}
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Calculated quantity sums for {len(quantity_map)} cost codes.")
+
+        # 최종 응답 데이터 구성
+        data = []
+        for code in sd_codes:
+            code_id_str = str(code.id)
+            total_quantity = quantity_map.get(code_id_str, 0.0) # 합계가 없으면 0
+            data.append({
+                'id': code_id_str,
+                'code': code.code,
+                'name': code.name,
+                'unit': code.unit,
+                'total_quantity': total_quantity if total_quantity is not None else 0.0 # None 방지
+            })
+        print(f"[DEBUG][get_sd_cost_codes_with_quantity] Returning {len(data)} SD-enabled cost codes.")
+        return JsonResponse(data, safe=False)
+
+    except Project.DoesNotExist:
+        print(f"[ERROR][get_sd_cost_codes_with_quantity] Project '{project_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        print(f"[ERROR][get_sd_cost_codes_with_quantity] Error: {e}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@require_http_methods(["POST"])
+def predict_sd_cost(request, project_id, model_id):
+    """선택된 AI 모델과 사용자 입력을 사용하여 개산견적 비용 예측"""
+    print(f"\n[DEBUG][predict_sd_cost] Prediction request for project: {project_id}, model: {model_id}")
+    try:
+        model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
+        input_data_dict = json.loads(request.body)
+        print(f"[DEBUG][predict_sd_cost] Input data received: {input_data_dict}")
+
+        metadata = model_obj.metadata
+        input_features = metadata.get('input_features')
+        output_features = metadata.get('output_features')
+
+        if not input_features or not output_features:
+            print("[ERROR][predict_sd_cost] Model metadata is incomplete (missing features).")
+            return JsonResponse({'status': 'error', 'message': '선택된 모델의 메타데이터(입력/출력 정보)가 완전하지 않습니다.'}, status=400)
+
+        # 입력 데이터 준비 (메타데이터 순서에 맞게)
+        input_values = []
+        for feature in input_features:
+            value = input_data_dict.get(feature)
+            if value is None:
+                print(f"[ERROR][predict_sd_cost] Missing input value for feature: {feature}")
+                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'이(가) 누락되었습니다."}, status=400)
+            try:
+                input_values.append(float(value))
+            except ValueError:
+                print(f"[ERROR][predict_sd_cost] Invalid numeric value for feature '{feature}': {value}")
+                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'은(는) 숫자여야 합니다."}, status=400)
+
+        input_array = np.array([input_values]) # 모델 입력 형식 (2D 배열)
+        print(f"[DEBUG][predict_sd_cost] Prepared input array: {input_array}")
+
+        # 입력 정규화 (학습 시 사용된 경우)
+        scaler_X_params = metadata.get('scaler_X_params')
+        if scaler_X_params:
+            print("[DEBUG][predict_sd_cost] Applying input scaler...")
+            scaler_X = StandardScaler()
+            # fit은 하지 않고 저장된 mean/scale 사용 (주의: 실제 구현 시 scaler 객체 저장/로드 필요)
+            scaler_X.mean_ = np.array(scaler_X_params.get('mean_', [0.0] * len(input_features)))
+            scaler_X.scale_ = np.array(scaler_X_params.get('scale_', [1.0] * len(input_features)))
+            input_array = scaler_X.transform(input_array)
+            print(f"[DEBUG][predict_sd_cost] Scaled input array: {input_array}")
+
+        # 모델 로드 (DB의 바이너리 데이터로부터)
+        print("[DEBUG][predict_sd_cost] Loading Keras model from database binary data...")
+        with open('temp_model.h5', 'wb') as f: # 임시 파일 사용
+            f.write(model_obj.h5_file_content)
+        model = keras.models.load_model('temp_model.h5')
+        os.remove('temp_model.h5') # 임시 파일 삭제
+        print("[DEBUG][predict_sd_cost] Model loaded successfully.")
+
+        # 예측 수행
+        predictions = model.predict(input_array)
+        print(f"[DEBUG][predict_sd_cost] Raw predictions: {predictions}")
+
+        # 예측 결과 후처리 (정규화 역변환 등 - 여기서는 생략)
+
+        # 결과 딕셔너리 생성
+        results = {}
+        for i, feature in enumerate(output_features):
+            results[feature] = predictions[0][i]
+        print(f"[DEBUG][predict_sd_cost] Formatted prediction results: {results}")
+
+        return JsonResponse({'status': 'success', 'predictions': results})
+
+    except (AIModel.DoesNotExist, Project.DoesNotExist):
+        print(f"[ERROR][predict_sd_cost] Model or Project not found.")
+        return JsonResponse({'status': 'error', 'message': '모델 또는 프로젝트를 찾을 수 없습니다.'}, status=404)
+    except json.JSONDecodeError:
+        print("[ERROR][predict_sd_cost] Invalid JSON input data.")
+        return JsonResponse({'status': 'error', 'message': '잘못된 입력 데이터 형식입니다.'}, status=400)
+    except Exception as e:
+        print(f"[ERROR][predict_sd_cost] Prediction error: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': f'예측 중 오류 발생: {str(e)}'}, status=500)
+
+@require_http_methods(["GET"])
+def get_sd_cost_items(request, project_id):
+    """개산견적(SD) 탭 하단 테이블에 표시할 CostItem 목록 반환 (generate_boq_report_api 와 유사)"""
+    print(f"\n[DEBUG][get_sd_cost_items] Request for project: {project_id}")
+    try:
+        project = get_object_or_404(Project, id=project_id)
+
+        # SD용 공사코드 필터 적용
+        items_qs = CostItem.objects.filter(project=project, cost_code__ai_sd_enabled=True).select_related(
+            'cost_code',
+            'quantity_member__raw_element', # BIM 연동 위해 필요
+            'quantity_member__member_mark',
+            'quantity_member__classification_tag',
+        )
+        print(f"[DEBUG][get_sd_cost_items] Found {items_qs.count()} SD-enabled cost items.")
+
+        # 데이터 가공 (기존 cost_items_api 와 유사하게 필요한 정보 포함)
+        data = []
+        for item in items_qs:
+            item_data = {
+                'id': str(item.id),
+                'quantity': item.quantity,
+                'cost_code_name': f"{item.cost_code.code} - {item.cost_code.name}",
+                'cost_code_unit': item.cost_code.unit,
+                'quantity_member_id': str(item.quantity_member_id) if item.quantity_member_id else None,
+                'quantity_member_name': item.quantity_member.name if item.quantity_member else None,
+                'classification_tag_name': item.quantity_member.classification_tag.name if item.quantity_member and item.quantity_member.classification_tag else None,
+                'member_mark_name': item.quantity_member.member_mark.mark if item.quantity_member and item.quantity_member.member_mark else None,
+                'raw_element_id': str(item.quantity_member.raw_element_id) if item.quantity_member and item.quantity_member.raw_element else None,
+                'raw_element_unique_id': item.quantity_member.raw_element.element_unique_id if item.quantity_member and item.quantity_member.raw_element else None,
+                # 필요 시 추가 속성 포함
+            }
+            data.append(item_data)
+
+        print(f"[DEBUG][get_sd_cost_items] Returning {len(data)} items for SD table.")
+        return JsonResponse(data, safe=False)
+
+    except Project.DoesNotExist:
+        print(f"[ERROR][get_sd_cost_items] Project '{project_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        print(f"[ERROR][get_sd_cost_items] Error: {e}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    
+
+@require_http_methods(["POST"])
+@transaction.atomic # DB 저장 및 임시 파일 삭제를 원자적으로 처리
+def save_trained_model_api(request, project_id):
+    """
+    백그라운드 학습 후 임시 저장된 .h5 파일과 메타데이터를
+    AIModel 데이터베이스 레코드로 저장합니다.
+    """
+    print(f"\n[DEBUG][save_trained_model_api] Received request to save trained model for project: {project_id}")
+    try:
+        data = json.loads(request.body)
+        temp_h5_filename = data.get('temp_h5_filename')
+        model_name = data.get('name')
+        metadata = data.get('metadata')
+        description = data.get('description', '')
+
+        print(f"[DEBUG][save_trained_model_api] Payload: name='{model_name}', temp_file='{temp_h5_filename}'")
+
+        if not all([temp_h5_filename, model_name, metadata is not None]):
+            print("[ERROR][save_trained_model_api] Missing required fields in request.")
+            return JsonResponse({'status': 'error', 'message': '저장에 필요한 정보(임시 파일명, 모델 이름, 메타데이터)가 누락되었습니다.'}, status=400)
+
+        project = get_object_or_404(Project, id=project_id)
+
+        # 이름 중복 검사 (DB 측에서 다시 확인)
+        if AIModel.objects.filter(project=project, name=model_name).exists():
+            print(f"[ERROR][save_trained_model_api] Model name '{model_name}' already exists in DB.")
+            return JsonResponse({'status': 'error', 'message': f"모델 이름 '{model_name}'이(가) 이미 존재합니다."}, status=409)
+
+        # 임시 h5 파일 경로 확인 및 내용 읽기
+        temp_h5_filepath = os.path.join(TEMP_UPLOAD_DIR, temp_h5_filename)
+        print(f"[DEBUG][save_trained_model_api] Reading content from temporary file: {temp_h5_filepath}")
+        if not os.path.exists(temp_h5_filepath):
+            print(f"[ERROR][save_trained_model_api] Temporary file not found: {temp_h5_filepath}")
+            return JsonResponse({'status': 'error', 'message': '학습된 모델 파일(임시)을 찾을 수 없습니다.'}, status=404)
+
+        with open(temp_h5_filepath, 'rb') as f:
+            h5_content = f.read()
+        print(f"[DEBUG][save_trained_model_api] Read {len(h5_content)} bytes from temporary file.")
+
+        # 새 AIModel 객체 생성 및 저장
+        new_model = AIModel.objects.create(
+            project=project,
+            name=model_name,
+            description=description,
+            h5_file_content=h5_content,
+            metadata=metadata
+        )
+        print(f"[DEBUG][save_trained_model_api] New AIModel created in DB (ID: {new_model.id})")
+
+        # 임시 h5 파일 삭제
+        try:
+            os.remove(temp_h5_filepath)
+            print(f"[DEBUG][save_trained_model_api] Temporary file deleted: {temp_h5_filepath}")
+        except Exception as e:
+            # 파일 삭제 실패는 치명적 오류는 아니므로 경고만 로깅
+            print(f"[WARN][save_trained_model_api] Failed to delete temporary file {temp_h5_filepath}: {e}")
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f"학습된 모델 '{model_name}'이(가) 성공적으로 저장되었습니다.",
+            'model_id': str(new_model.id)
+        })
+
+    except Project.DoesNotExist:
+        print(f"[ERROR][save_trained_model_api] Project '{project_id}' not found.")
+        return JsonResponse({'status': 'error', 'message': '프로젝트를 찾을 수 없습니다.'}, status=404)
+    except json.JSONDecodeError:
+        print("[ERROR][save_trained_model_api] Invalid JSON data in request body.")
+        return JsonResponse({'status': 'error', 'message': '잘못된 요청 데이터 형식입니다.'}, status=400)
+    except Exception as e:
+        print(f"[ERROR][save_trained_model_api] Error saving trained model: {e}")
+        import traceback
+        print(traceback.format_exc())
+        transaction.set_rollback(True) # 오류 발생 시 롤백
+        return JsonResponse({'status': 'error', 'message': f'모델 저장 중 오류 발생: {str(e)}'}, status=500)
+    
+
+@require_http_methods(["GET"])
+def download_temp_file_api(request):
+    """
+    GET 파라미터로 전달된 임시 파일(주로 학습된 .h5)을 다운로드합니다.
+    보안을 위해 파일명 검증을 수행합니다.
+    """
+    print(f"\n[DEBUG][download_temp_file_api] Received request to download temporary file.")
+    try:
+        filename = request.GET.get('filename')
+        file_type = request.GET.get('type') # 'h5' or 'json' (json은 현재 프론트에서 처리)
+        download_name = request.GET.get('download_name', filename) # 다운로드 시 사용할 파일명
+
+        print(f"[DEBUG][download_temp_file_api] Params: filename='{filename}', type='{file_type}', download_name='{download_name}'")
+
+        if not filename or not file_type:
+            print("[ERROR][download_temp_file_api] Missing 'filename' or 'type' parameter.")
+            raise Http404("필수 파라미터가 누락되었습니다.")
+
+        # 보안: 파일명이 .. 등을 포함하지 않는지, TEMP_UPLOAD_DIR 내에 있는지 확인
+        if '..' in filename or filename.startswith('/'):
+            print(f"[ERROR][download_temp_file_api] Invalid filename detected: {filename}")
+            raise Http404("잘못된 파일명입니다.")
+
+        temp_filepath = os.path.join(TEMP_UPLOAD_DIR, filename)
+        # 실제 파일 경로 확인 (os.path.abspath 사용 권장)
+        abs_filepath = os.path.abspath(temp_filepath)
+        abs_temp_dir = os.path.abspath(TEMP_UPLOAD_DIR)
+
+        print(f"[DEBUG][download_temp_file_api] Attempting to access file: {abs_filepath}")
+        if not abs_filepath.startswith(abs_temp_dir):
+             print(f"[ERROR][download_temp_file_api] Directory traversal attempt detected: {abs_filepath}")
+             raise Http404("접근 권한이 없습니다.")
+
+        if not os.path.exists(abs_filepath):
+            print(f"[ERROR][download_temp_file_api] Temporary file not found: {abs_filepath}")
+            raise Http404("요청한 임시 파일을 찾을 수 없습니다.")
+
+        # 파일 타입에 따라 처리
+        if file_type == 'h5':
+            content_type = 'application/octet-stream'
+        elif file_type == 'json': # JSON 다운로드도 여기서 처리 가능하게 확장
+            content_type = 'application/json'
+        else:
+             print(f"[ERROR][download_temp_file_api] Unsupported file type: {file_type}")
+             raise Http404("지원하지 않는 파일 타입입니다.")
+
+        # FileResponse를 사용하여 대용량 파일도 효율적으로 처리
+        response = FileResponse(open(abs_filepath, 'rb'), content_type=content_type)
+        # Content-Disposition 설정 (urlquote 사용하여 UTF-8 파일명 처리)
+        response['Content-Disposition'] = f'attachment; filename="{urlquote(download_name)}"'
+        print(f"[DEBUG][download_temp_file_api] Sending file '{download_name}' ({os.path.getsize(abs_filepath)} bytes)")
+        return response
+
+    except Http404 as e:
+         print(f"[ERROR][download_temp_file_api] 404 Error: {e}")
+         # 404 오류는 Django가 기본 HTML 페이지를 반환하도록 그대로 둡니다.
+         # JsonResponse 대신 Http404를 raise하면 Django가 처리합니다.
+         raise e
+    except Exception as e:
+        print(f"[ERROR][download_temp_file_api] Error downloading temp file: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': f'파일 다운로드 중 오류 발생: {str(e)}'}, status=500)

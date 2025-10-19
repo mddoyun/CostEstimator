@@ -136,13 +136,13 @@
                     >
                         💲 단가 관리
                     </button>
+                    <button class="sub-nav-button" data-tab="ai-model-manager">
+                        🧠 AI 모델 관리
+                    </button>
                 </nav>
                 <nav id="secondary-nav-takeoff" class="secondary-nav">
-                    <button
-                        class="sub-nav-button active"
-                        data-tab="data-management"
-                    >
-                        🗂️ BIM 원본데이터
+                    <button class="sub-nav-button" data-tab="data-management">
+                        📊 BIM원본데이터
                     </button>
                     <button class="sub-nav-button" data-tab="quantity-members">
                         🧱 수량산출부재
@@ -151,7 +151,7 @@
                         class="sub-nav-button"
                         data-tab="cost-item-management"
                     >
-                        📦 수량산출
+                        🧱 수량산출
                     </button>
                 </nav>
                 <nav
@@ -1412,6 +1412,320 @@
                         </main>
                     </div>
                 </div>
+                <div id="ai-model-manager" class="tab-content">
+                    <nav class="inner-tab-nav">
+                        <button
+                            class="inner-tab-button active"
+                            data-inner-tab="ai-model-list"
+                        >
+                            📊 모델 목록/업로드
+                        </button>
+                        <button
+                            class="inner-tab-button"
+                            data-inner-tab="ai-model-training"
+                        >
+                            🎓 모델 학습
+                        </button>
+                    </nav>
+
+                    <div class="inner-tab-content-container">
+                        <div
+                            id="ai-model-list"
+                            class="inner-tab-content active"
+                        >
+                            <div class="ai-model-list-section panel-box">
+                                <div class="panel-header">
+                                    <h3>AI 모델 목록</h3>
+                                    <div class="ai-model-actions">
+                                        <input
+                                            type="file"
+                                            id="ai-model-h5-input"
+                                            accept=".h5"
+                                            style="display: none"
+                                        />
+                                        <input
+                                            type="file"
+                                            id="ai-model-json-input"
+                                            accept=".json"
+                                            style="display: none"
+                                        />
+                                        <input
+                                            type="text"
+                                            id="new-ai-model-name"
+                                            placeholder="새 모델 이름"
+                                        />
+                                        <button
+                                            id="upload-ai-model-files-btn"
+                                            title="모델 파일(.h5)과 메타데이터 파일(.json) 선택"
+                                        >
+                                            파일 선택
+                                        </button>
+                                        <textarea
+                                            id="ai-model-metadata-manual"
+                                            placeholder="메타데이터(.json) 파일 대신 직접 입력 (JSON 형식)"
+                                            rows="3"
+                                            style="
+                                                display: none;
+                                                width: 100%;
+                                                margin-top: 5px;
+                                            "
+                                        ></textarea>
+                                        <button
+                                            id="confirm-upload-ai-model-btn"
+                                        >
+                                            모델 업로드
+                                        </button>
+                                    </div>
+                                </div>
+                                <div
+                                    id="ai-model-list-container"
+                                    class="panel-content"
+                                >
+                                    <p>
+                                        프로젝트를 선택하면 AI 모델 목록이
+                                        표시됩니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="ai-model-training" class="inner-tab-content">
+                            <div class="ai-model-training-section panel-box">
+                                <div class="panel-header">
+                                    <h3>AI 모델 학습</h3>
+                                </div>
+                                <div class="panel-content ai-training-content">
+                                    <div
+                                        class="training-step"
+                                        id="training-step-1"
+                                    >
+                                        <h4>1단계: 학습 데이터 업로드 (CSV)</h4>
+                                        <input
+                                            type="file"
+                                            id="training-csv-input"
+                                            accept=".csv"
+                                        />
+                                        <button id="upload-csv-btn">
+                                            CSV 업로드 및 분석
+                                        </button>
+                                        <div
+                                            id="csv-info"
+                                            style="margin-top: 10px"
+                                        ></div>
+                                    </div>
+                                    <div
+                                        class="training-step"
+                                        id="training-step-2"
+                                        style="display: none"
+                                    >
+                                        <h4>
+                                            2단계: 입력/출력 피처 선택 및 모델
+                                            설정
+                                        </h4>
+                                        <div
+                                            class="feature-selection-container"
+                                        >
+                                            <div class="feature-box">
+                                                <label
+                                                    >입력 피처 (Input
+                                                    Features):</label
+                                                >
+                                                <div
+                                                    id="input-feature-list"
+                                                    class="feature-list"
+                                                ></div>
+                                            </div>
+                                            <div class="feature-box">
+                                                <label
+                                                    >출력 피처 (Output
+                                                    Features):</label
+                                                >
+                                                <div
+                                                    id="output-feature-list"
+                                                    class="feature-list"
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        <div class="model-config-container">
+                                            <label
+                                                >모델 이름:
+                                                <input
+                                                    type="text"
+                                                    id="training-model-name"
+                                                    placeholder="학습된 모델 이름"
+                                            /></label>
+                                            <label
+                                                >은닉층 수:
+                                                <input
+                                                    type="number"
+                                                    id="hidden-layers"
+                                                    value="2"
+                                                    min="1"
+                                            /></label>
+                                            <label
+                                                >레이어당 노드 수:
+                                                <input
+                                                    type="number"
+                                                    id="nodes-per-layer"
+                                                    value="64"
+                                                    min="8"
+                                            /></label>
+                                            <label
+                                                >학습률(Learning Rate):
+                                                <input
+                                                    type="number"
+                                                    id="learning-rate"
+                                                    value="0.001"
+                                                    step="0.0001"
+                                            /></label>
+                                            <label
+                                                >에포크(Epochs):
+                                                <input
+                                                    type="number"
+                                                    id="epochs"
+                                                    value="50"
+                                                    min="1"
+                                            /></label>
+                                            <label
+                                                >옵티마이저:
+                                                <select id="optimizer">
+                                                    <option
+                                                        value="adam"
+                                                        selected
+                                                    >
+                                                        Adam
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label
+                                                ><input
+                                                    type="checkbox"
+                                                    id="normalize-inputs"
+                                                    checked
+                                                />
+                                                입력값 정규화</label
+                                            >
+                                        </div>
+                                        <button id="start-training-btn">
+                                            학습 시작
+                                        </button>
+                                    </div>
+                                    <div
+                                        class="training-step"
+                                        id="training-step-3"
+                                        style="display: none"
+                                    >
+                                        <h4>3단계: 학습 진행률 및 결과</h4>
+                                        <div id="training-progress-info">
+                                            학습 대기 중...
+                                        </div>
+                                        <canvas
+                                            id="training-progress-chart"
+                                            width="400"
+                                            height="200"
+                                        ></canvas>
+                                        <div
+                                            id="training-results"
+                                            style="margin-top: 15px"
+                                        ></div>
+                                        <div
+                                            id="training-actions"
+                                            style="
+                                                margin-top: 10px;
+                                                display: none;
+                                            "
+                                        >
+                                            <button id="save-trained-model-btn">
+                                                학습된 모델 저장
+                                            </button>
+                                            <button
+                                                id="download-trained-model-h5-btn"
+                                            >
+                                                모델 파일(.h5) 다운로드
+                                            </button>
+                                            <button
+                                                id="download-trained-model-json-btn"
+                                            >
+                                                메타데이터(.json) 다운로드
+                                            </button>
+                                            <button id="reset-training-btn">
+                                                새 학습 시작
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="schematic-estimation-sd" class="tab-content">
+                    <div class="sd-container">
+                        <div class="sd-top-panel">
+                            <div class="sd-input-section panel-box">
+                                <div class="panel-header">
+                                    <h4>개산견적 입력</h4>
+                                </div>
+                                <div class="panel-content sd-input-content">
+                                    <div class="sd-model-selector">
+                                        <label for="sd-model-select"
+                                            >AI 모델 선택:</label
+                                        >
+                                        <select id="sd-model-select">
+                                            <option value="">
+                                                -- 모델 선택 --
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div
+                                        id="sd-input-fields"
+                                        class="sd-input-fields"
+                                    >
+                                        <p>
+                                            모델을 선택하면 입력 항목이
+                                            표시됩니다.
+                                        </p>
+                                    </div>
+                                    <button id="sd-predict-btn" disabled>
+                                        예측 실행
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="sd-output-section panel-box">
+                                <div class="panel-header">
+                                    <h4>예측 결과</h4>
+                                </div>
+                                <div class="panel-content sd-output-content">
+                                    <div id="sd-prediction-results-table">
+                                        <p>예측 결과가 여기에 표시됩니다.</p>
+                                    </div>
+                                    <canvas
+                                        id="sd-prediction-chart"
+                                        height="150"
+                                    ></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sd-bottom-panel panel-box">
+                            <div class="panel-header">
+                                <h4>개산견적(SD) 대상 산출항목</h4>
+                                <button id="sd-select-in-client-btn">
+                                    연동 프로그램에서 선택 확인
+                                </button>
+                            </div>
+                            <div class="panel-content sd-table-content">
+                                <div
+                                    id="sd-cost-item-table-container"
+                                    class="table-container"
+                                >
+                                    <p>
+                                        개산견적(SD)에 사용되는 산출항목 목록이
+                                        여기에 표시됩니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <div
@@ -1485,6 +1799,7 @@
             </div>
         </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="{% static 'connections/ui.js' %}"></script>
         <script src="{% static 'connections/websocket.js' %}"></script>
         <script src="{% static 'connections/main.js' %}"></script>

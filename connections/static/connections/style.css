@@ -2355,3 +2355,319 @@ div[id$='-grouping-controls'] {
     flex-direction: column;
     gap: 15px;
 }
+/* ▼▼▼ [수정] AI 모델 관리 탭 스타일 (내부 탭 구조 반영) ▼▼▼ */
+#ai-model-manager.tab-content.active {
+    display: flex;
+    flex-direction: column; /* 내부 탭과 컨텐츠를 세로로 배치 */
+    padding: 0; /* 내부에서 패딩 관리 */
+    overflow: hidden; /* 내부 스크롤 관리 */
+}
+
+/* AI 모델 관리 탭 내부 탭 네비게이션 */
+.inner-tab-nav {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 20px; /* 좌우 여백 */
+    background-color: #f8f9fa; /* 배경색 */
+    flex-shrink: 0;
+}
+
+.inner-tab-button {
+    padding: 12px 18px;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: none;
+    font-size: 14px;
+    cursor: pointer;
+    color: #555;
+    transition: all 0.2s ease-in-out;
+}
+.inner-tab-button:hover {
+    background-color: #e9ecef;
+}
+.inner-tab-button.active {
+    font-weight: bold;
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* AI 모델 관리 탭 내부 컨텐츠 컨테이너 */
+.inner-tab-content-container {
+    flex-grow: 1;
+    overflow-y: auto; /* 내용 많으면 스크롤 */
+    padding: 20px; /* 컨텐츠 영역 패딩 */
+    background-color: #fff; /* 컨텐츠 배경색 */
+}
+
+/* AI 모델 관리 탭 내부 컨텐츠 (기본 숨김) */
+.inner-tab-content {
+    display: none;
+}
+.inner-tab-content.active {
+    display: block;
+} /* 활성화 시 보임 */
+
+/* 모델 목록/업로드 섹션 (panel-box 스타일 상속) */
+.ai-model-list-section {
+    max-width: 800px; /* 최대 너비 제한 (선택 사항) */
+    margin: 0 auto; /* 중앙 정렬 (선택 사항) */
+}
+.ai-model-list-section .panel-header {
+    /* 헤더 내부 요소 정렬 */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ai-model-list-section .ai-model-actions {
+    /* 업로드 관련 요소 정렬 */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    max-width: 300px; /* 액션 영역 너비 제한 */
+}
+
+/* 모델 학습 섹션 (panel-box 스타일 상속) */
+.ai-model-training-section {
+    max-width: 1000px; /* 최대 너비 제한 (선택 사항) */
+    margin: 0 auto; /* 중앙 정렬 (선택 사항) */
+}
+/* 나머지 학습 관련 스타일은 이전 제안과 동일하게 사용 */
+.ai-training-content {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+.training-step {
+    border: 1px dashed var(--border-color);
+    padding: 15px;
+    border-radius: 4px;
+}
+.training-step h4 {
+    margin-top: 0;
+    color: var(--primary-color);
+}
+#csv-info p {
+    margin: 5px 0;
+    font-size: 13px;
+}
+.feature-selection-container {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+.feature-box {
+    flex: 1;
+}
+.feature-list {
+    border: 1px solid #ccc;
+    padding: 10px;
+    height: 150px;
+    overflow-y: auto;
+    border-radius: 4px;
+}
+.feature-list label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.feature-list label:hover {
+    background-color: #f0f0f0;
+}
+.model-config-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+.model-config-container label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+}
+.model-config-container input[type='number'],
+.model-config-container select {
+    flex-grow: 1;
+    max-width: 100px;
+}
+#training-progress-info {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+#training-progress-chart {
+    max-width: 100%;
+    border: 1px solid #eee;
+    margin-bottom: 15px;
+}
+#training-results ul {
+    list-style: none;
+    padding-left: 0;
+    font-size: 13px;
+}
+#training-actions button {
+    margin-right: 10px;
+}
+
+/* ▲▲▲ [수정] AI 모델 관리 탭 스타일 끝 ▲▲▲ */
+
+/* ▼▼▼ [수정 없음] 개산견적(SD) 탭 스타일 (이전 제안과 동일) ▼▼▼ */
+#schematic-estimation-sd.tab-content.active {
+    display: flex;
+}
+.sd-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    gap: 20px;
+    padding: 20px;
+}
+.sd-top-panel {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+}
+.panel-box {
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.panel-box .panel-header {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.panel-box .panel-header h4 {
+    margin: 0;
+    font-size: 16px;
+}
+.panel-box .panel-content {
+    flex-grow: 1;
+    overflow: auto;
+    padding: 15px;
+}
+.sd-input-section {
+    flex: 1;
+    min-width: 300px;
+}
+.sd-input-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.sd-model-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+#sd-model-select {
+    flex-grow: 1;
+}
+.sd-input-fields {
+    border-top: 1px dashed #eee;
+    padding-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.sd-input-fields .input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sd-input-fields label {
+    flex-basis: 120px;
+    text-align: right;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.sd-input-fields input[type='number'] {
+    flex-grow: 1;
+    max-width: 150px;
+}
+.sd-input-fields select {
+    flex-grow: 1;
+    max-width: 200px;
+    font-size: 12px;
+}
+#sd-predict-btn {
+    align-self: center;
+    padding: 10px 20px;
+}
+.sd-output-section {
+    flex: 1.2;
+    min-width: 350px;
+}
+.sd-output-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+#sd-prediction-results-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+#sd-prediction-results-table th,
+#sd-prediction-results-table td {
+    border: 1px solid #eee;
+    padding: 8px;
+    text-align: left;
+}
+#sd-prediction-results-table th {
+    background-color: #f8f8f8;
+}
+#sd-prediction-results-table td:last-child {
+    text-align: right;
+    font-weight: bold;
+}
+#sd-prediction-chart {
+    max-width: 100%;
+    border: 1px solid #eee;
+}
+.sd-bottom-panel {
+    flex: 1.5;
+    min-height: 0;
+}
+.sd-table-content {
+    padding: 0;
+}
+#sd-cost-item-table-container {
+    height: 100%;
+}
+#sd-cost-item-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#sd-cost-item-table-container th,
+#sd-cost-item-table-container td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    font-size: 13px;
+    white-space: nowrap;
+}
+#sd-cost-item-table-container th {
+    background-color: #f2f2f2;
+    position: sticky;
+    top: 0;
+}
+#sd-cost-item-table-container .group-header td {
+    cursor: pointer;
+    font-weight: bold;
+    background-color: #e9ecef;
+}
+#sd-cost-item-table-container .selected-row td {
+    background-color: #d4edda !important;
+}
+
+/* ▲▲▲ [수정 없음] 개산견적(SD) 탭 끝 ▲▲▲ */
