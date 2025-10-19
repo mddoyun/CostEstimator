@@ -3429,3 +3429,138 @@ function renderUnitPricesTable(prices, editId = null) {
     container.innerHTML = tableHtml;
     console.log('[DEBUG][Render] renderUnitPricesTable - End');
 }
+/**
+ * 상세견적(DD) 탭의 UI 요소들(패널 토글 버튼, 상세 정보 탭)에 이벤트 리스너를 설정합니다.
+ */
+function initializeBoqUI() {
+    // 상세견적(DD) 탭의 메인 컨테이너 찾기
+    const ddTabContainer = document.getElementById('detailed-estimation-dd');
+    if (!ddTabContainer) {
+        console.warn(
+            "[WARN] Detailed Estimation (DD) tab container '#detailed-estimation-dd' not found. UI initialization skipped."
+        );
+        return; // 탭 컨테이너가 없으면 함수 종료
+    }
+    console.log(
+        '[DEBUG] Initializing UI elements for Detailed Estimation (DD) tab...'
+    );
+
+    // UI 요소들 선택 (탭 컨테이너 내부에서 찾음)
+    const leftToggleBtn = ddTabContainer.querySelector(
+        '#boq-left-panel-toggle-btn'
+    );
+    const bottomToggleBtn = ddTabContainer.querySelector(
+        '#boq-bottom-panel-toggle-btn'
+    );
+    const boqContainer = ddTabContainer.querySelector('.boq-container'); // 내부 클래스는 그대로 사용
+    const bottomPanel = ddTabContainer.querySelector('.boq-details-wrapper'); // 내부 클래스는 그대로 사용
+    const boqDetailsPanel = ddTabContainer.querySelector(
+        '#boq-item-details-panel'
+    ); // 왼쪽 상세 정보 패널 (탭 포함)
+
+    // --- 1. 왼쪽 패널 접기/펴기 기능 ---
+    if (leftToggleBtn && boqContainer) {
+        // 이벤트 리스너 중복 방지
+        if (!leftToggleBtn.dataset.listenerAttached) {
+            leftToggleBtn.addEventListener('click', () => {
+                boqContainer.classList.toggle('left-panel-collapsed');
+                // 버튼 아이콘 변경
+                leftToggleBtn.textContent = boqContainer.classList.contains(
+                    'left-panel-collapsed'
+                )
+                    ? '▶'
+                    : '◀';
+                console.log(
+                    `[DEBUG] Left panel toggled. Collapsed: ${boqContainer.classList.contains(
+                        'left-panel-collapsed'
+                    )}`
+                );
+            });
+            leftToggleBtn.dataset.listenerAttached = 'true'; // 리스너 추가됨 표시
+            console.log('[DEBUG] Left panel toggle listener attached.');
+        }
+    } else {
+        console.warn('[WARN] Left toggle button or BOQ container not found.');
+    }
+
+    // --- 2. 하단 패널 접기/펴기 기능 ---
+    if (bottomToggleBtn && bottomPanel) {
+        // 이벤트 리스너 중복 방지
+        if (!bottomToggleBtn.dataset.listenerAttached) {
+            bottomToggleBtn.addEventListener('click', () => {
+                const isCollapsing =
+                    !bottomPanel.classList.contains('collapsed');
+                bottomPanel.classList.toggle('collapsed');
+                // 버튼 아이콘 변경
+                bottomToggleBtn.textContent = isCollapsing ? '▲' : '▼';
+                console.log(
+                    `[DEBUG] Bottom panel toggled. Collapsed: ${isCollapsing}`
+                );
+            });
+            bottomToggleBtn.dataset.listenerAttached = 'true';
+            console.log('[DEBUG] Bottom panel toggle listener attached.');
+        }
+    } else {
+        console.warn(
+            '[WARN] Bottom toggle button or bottom panel wrapper not found.'
+        );
+    }
+
+    // --- 3. 왼쪽 상세 정보 패널 탭 클릭 기능 ---
+    if (boqDetailsPanel) {
+        const tabsContainer = boqDetailsPanel.querySelector(
+            '.details-panel-tabs'
+        );
+        if (tabsContainer && !tabsContainer.dataset.listenerAttached) {
+            tabsContainer.addEventListener('click', (e) => {
+                const clickedButton = e.target.closest('.detail-tab-button');
+                // 클릭된 요소가 탭 버튼이고, 이미 활성화된 상태가 아니며, 탭 버튼 컨테이너(.details-panel-tabs) 안에 있는지 확인
+                if (
+                    !clickedButton ||
+                    clickedButton.classList.contains('active')
+                ) {
+                    return;
+                }
+
+                const targetTab = clickedButton.dataset.tab; // 클릭된 탭의 data-tab 값 (예: "boq-member-prop")
+                console.log(`[DEBUG] Detail tab clicked: ${targetTab}`);
+
+                // 모든 탭 버튼과 컨텐츠에서 'active' 클래스 제거 (현재 패널 내에서만)
+                boqDetailsPanel
+                    .querySelectorAll('.detail-tab-button.active')
+                    .forEach((btn) => btn.classList.remove('active'));
+                boqDetailsPanel
+                    .querySelectorAll('.detail-tab-content.active')
+                    .forEach((content) => content.classList.remove('active'));
+
+                // 클릭된 버튼과 그에 맞는 컨텐츠에 'active' 클래스 추가
+                clickedButton.classList.add('active');
+                const targetContent = boqDetailsPanel.querySelector(
+                    `.detail-tab-content[data-tab="${targetTab}"]`
+                );
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                    console.log(
+                        `[DEBUG] Detail tab content activated: ${targetTab}`
+                    );
+                } else {
+                    console.warn(
+                        `[WARN] Detail tab content for '${targetTab}' not found.`
+                    );
+                }
+            });
+            tabsContainer.dataset.listenerAttached = 'true'; // 탭 컨테이너에 리스너 추가됨 표시
+            console.log('[DEBUG] Detail panel tab click listener attached.');
+        } else if (!tabsContainer) {
+            console.warn(
+                '[WARN] Detail panel tabs container not found within #boq-item-details-panel.'
+            );
+        }
+    } else {
+        console.warn(
+            "[WARN] Left detail panel '#boq-item-details-panel' not found."
+        );
+    }
+
+    console.log('[DEBUG] Detailed Estimation (DD) UI initialization complete.');
+}

@@ -91,11 +91,17 @@
                 <button class="nav-button" data-primary-tab="takeoff">
                     🧱 산출
                 </button>
-                <button class="nav-button" data-primary-tab="boq">
-                    🧾 집계
+                <button
+                    class="nav-button"
+                    data-primary-tab="detailed-estimation-dd"
+                >
+                    🧾 상세견적(DD)
                 </button>
-                <button class="nav-button" data-primary-tab="estimation">
-                    🪙 견적
+                <button
+                    class="nav-button"
+                    data-primary-tab="schematic-estimation-sd"
+                >
+                    🪙 개산견적(SD)
                 </button>
             </nav>
             <div class="secondary-nav-container">
@@ -148,17 +154,10 @@
                         📦 수량산출
                     </button>
                 </nav>
-                <nav id="secondary-nav-estimation" class="secondary-nav">
-                    <button class="sub-nav-button" data-tab="ai-estimation">
-                        🤖 AI 개략견적(SD)
-                    </button>
-                    <button
-                        class="sub-nav-button active"
-                        data-tab="detailed-estimation"
-                    >
-                        📝 상세 내역 작성(DD)
-                    </button>
-                </nav>
+                <nav
+                    id="secondary-nav-schematic-estimation-sd"
+                    class="secondary-nav"
+                ></nav>
             </div>
 
             <div class="main-content">
@@ -1134,7 +1133,7 @@
                     </div>
                 </div>
 
-                <div id="boq" class="tab-content">
+                <div id="detailed-estimation-dd" class="tab-content">
                     <div class="boq-container">
                         <button
                             id="boq-left-panel-toggle-btn"
@@ -1350,14 +1349,9 @@
                         </aside>
                     </div>
                 </div>
-                <div id="ai-estimation" class="tab-content">
+                <div id="schematic-estimation-sd" class="tab-content">
                     <h2 style="margin: 20px">
-                        AI 개략견적(SD) 기능이 여기에 구현될 예정입니다.
-                    </h2>
-                </div>
-                <div id="detailed-estimation" class="tab-content">
-                    <h2 style="margin: 20px">
-                        상세 내역 작성(DD) 기능이 여기에 구현될 예정입니다.
+                        개산견적(SD) 기능이 여기에 구현될 예정입니다.
                     </h2>
                 </div>
 

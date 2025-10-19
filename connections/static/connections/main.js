@@ -1086,8 +1086,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function handleProjectChange(e) {
     currentProjectId = e.target.value;
-    allRevitData = [];
+    console.log(
+        `[DEBUG][handleProjectChange] Project changed to: ${currentProjectId}`
+    );
 
+    // --- 기존 상태 초기화 로직 ---
+    allRevitData = []; // BIM 데이터 초기화
+    // 각 뷰어 상태 초기화
     Object.keys(viewerStates).forEach((context) => {
         const state = viewerStates[context];
         state.selectedElementIds.clear();
@@ -1096,27 +1101,27 @@ function handleProjectChange(e) {
         state.isFilterToSelectionActive = false;
         state.collapsedGroups = {};
         state.currentGroupByFields = [];
+        state.lastSelectedRowIndex = -1; // 각 컨텍스트별 last index 초기화
     });
-
-    const groupingControls = document.getElementById('grouping-controls');
-    if (groupingControls) groupingControls.innerHTML = '';
-
-    const clearSelectionBtn = document.getElementById(
-        'clear-selection-filter-btn'
-    );
-    if (clearSelectionBtn) clearSelectionBtn.style.display = 'none';
-
-    // ▼▼▼ [수정] renderDataTable 호출 시 올바른 컨테이너 ID를 전달합니다. ▼▼▼
-    // 기존: "data-table-container" -> 수정: "data-management-data-table-container"
-    renderDataTable('data-management-data-table-container', 'data-management');
-    renderBimPropertiesTable('data-management');
-    renderAssignedTagsTable('data-management');
-    // ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
-
-    const tagList = document.getElementById('tag-list');
-    if (tagList) tagList.innerHTML = '프로젝트를 선택하세요.';
-
-    allTags = [];
+    // qm, ci 관련 상태 초기화
+    selectedQmIds.clear();
+    qmCollapsedGroups = {};
+    currentQmGroupByFields = [];
+    lastSelectedQmRowIndex = -1;
+    activeQmView = 'quantity-member-view';
+    selectedCiIds.clear();
+    ciCollapsedGroups = {};
+    currentCiGroupByFields = [];
+    lastSelectedCiRowIndex = -1;
+    // boq 관련 상태 초기화
+    boqFilteredRawElementIds.clear();
+    currentBoqColumns = [];
+    boqColumnAliases = {};
+    lastBoqItemIds = [];
+    currentBoqDetailItemId = null;
+    document.getElementById('boq-clear-selection-filter-btn').style.display =
+        'none';
+    // --- 상태 초기화 끝 ---
 
     if (currentProjectId) {
         showToast(
@@ -1125,18 +1130,42 @@ function handleProjectChange(e) {
             }' 선택됨.`,
             'info'
         );
-        frontendSocket.send(
-            JSON.stringify({
-                type: 'get_tags',
-                payload: { project_id: currentProjectId },
-            })
+        // --- 초기 웹소켓 요청 ---
+        if (frontendSocket && frontendSocket.readyState === WebSocket.OPEN) {
+            console.log(
+                '[DEBUG][handleProjectChange] Sending initial WebSocket requests (get_tags, get_all_elements)...'
+            );
+            frontendSocket.send(
+                JSON.stringify({
+                    type: 'get_tags',
+                    payload: { project_id: currentProjectId },
+                })
+            );
+            frontendSocket.send(
+                JSON.stringify({
+                    type: 'get_all_elements',
+                    payload: { project_id: currentProjectId },
+                })
+            );
+        } else {
+            console.error(
+                '[ERROR][handleProjectChange] WebSocket not open. Cannot send initial requests.'
+            );
+            showToast('웹소켓 연결 오류. 페이지 새로고침 필요.', 'error');
+        }
+        // --- 초기 웹소켓 요청 끝 ---
+
+        // --- [핵심 수정] 현재 활성화된 탭의 데이터를 로드합니다. ---
+        loadDataForActiveTab();
+        // --- [핵심 수정] 여기까지 ---
+    } else {
+        // --- [핵심 수정] 프로젝트 선택 해제 시 UI 초기화 ---
+        console.log(
+            '[DEBUG][handleProjectChange] Project deselected. Clearing UI.'
         );
-        frontendSocket.send(
-            JSON.stringify({
-                type: 'get_all_elements',
-                payload: { project_id: currentProjectId },
-            })
-        );
+        showToast('프로젝트 선택이 해제되었습니다.', 'info');
+        clearAllTabData(); // 새로운 헬퍼 함수 호출
+        // --- [핵심 수정] 여기까지 ---
     }
 }
 
@@ -1204,18 +1233,25 @@ function handleMainNavClick(e) {
     // 클릭된 주 탭 활성화
     clickedButton.classList.add('active');
 
-    if (primaryTabId === 'boq') {
-        // '집계' 탭은 보조 탭이 없으므로 바로 컨텐츠 표시
-        document.getElementById('boq').classList.add('active');
-        activeTab = 'boq';
-        // '집계' 탭에 필요한 데이터 로드 함수 호출
-        if (activeTab === 'boq') {
-            loadCostItems();
-            loadQuantityMembers();
-            if (allRevitData.length === 0) {
-                fetchDataFromClient();
-            }
-            loadBoqGroupingFields();
+    if (
+        primaryTabId === 'detailed-estimation-dd' ||
+        primaryTabId === 'schematic-estimation-sd'
+    ) {
+        // 개산견적 탭도 보조 탭 없음
+        // '상세견적(DD)' 또는 '개산견적(SD)' 탭은 보조 탭이 없으므로 바로 컨텐츠 표시
+        const contentToShow = document.getElementById(primaryTabId); // primaryTabId와 content ID가 동일해야 함
+        if (contentToShow) {
+            contentToShow.classList.add('active');
+            activeTab = primaryTabId; // activeTab을 주 탭 ID로 설정
+            console.log(
+                `[DEBUG][handleMainNavClick] Switched to primary tab without secondary nav: ${activeTab}`
+            );
+            // 해당 탭 데이터 로드
+            loadDataForActiveTab(); // activeTab 기준으로 데이터 로드
+        } else {
+            console.warn(
+                `[WARN][handleMainNavClick] Content for primary tab '${primaryTabId}' not found.`
+            );
         }
     } else {
         // '관리', '산출', '견적' 탭 처리
@@ -1576,38 +1612,29 @@ function handleTableClick(event, contextPrefix) {
 }
 function handleRulesetNavClick(e) {
     const targetButton = e.currentTarget;
-    if (targetButton.classList.contains('active')) {
-        return; // 이미 활성화된 버튼이면 아무것도 안함
-    }
+    if (targetButton.classList.contains('active')) return;
 
-    // [수정] 이전에 활성화된 버튼이 없을 수도 있는 경우를 대비하여 null 체크를 추가합니다.
+    // 현재 활성화된 버튼/컨텐츠 비활성화
     const currentActiveButton = document.querySelector(
         '.ruleset-nav-button.active'
     );
-    if (currentActiveButton) {
-        currentActiveButton.classList.remove('active');
-    }
-
-    // 클릭된 버튼 활성화
-    targetButton.classList.add('active');
-
-    const targetRulesetId = targetButton.dataset.ruleset;
-
-    // 모든 룰셋 컨텐츠 숨기기
+    if (currentActiveButton) currentActiveButton.classList.remove('active');
     document
-        .querySelectorAll('.ruleset-content')
+        .querySelectorAll('.ruleset-content.active')
         .forEach((content) => content.classList.remove('active'));
 
-    // [수정] 보여줄 컨텐츠가 존재하는지 확인 후 active 클래스를 추가합니다.
+    // 클릭된 버튼/컨텐츠 활성화
+    targetButton.classList.add('active');
+    const targetRulesetId = targetButton.dataset.ruleset; // e.g., "classification-ruleset"
     const targetContent = document.getElementById(targetRulesetId);
-    if (targetContent) {
-        targetContent.classList.add('active');
-    }
+    if (targetContent) targetContent.classList.add('active');
 
-    // [수정] strong 태그가 없는 경우를 대비하여 null 체크를 추가합니다.
     const buttonText =
         targetButton.querySelector('strong')?.innerText || '선택된 룰셋';
     showToast(`${buttonText} 탭으로 전환합니다.`, 'info');
+
+    // --- [핵심] 여기서 해당 룰셋 데이터 로드 함수 호출 ---
+    loadSpecificRuleset(targetRulesetId);
 }
 let loadedClassificationRules = []; // 전역 변수는 그대로 둡니다.
 
@@ -5855,12 +5882,13 @@ async function handleCostCodeActions(event) {
 function handleSubNavClick(e) {
     console.log('[DEBUG][handleSubNavClick] Start');
     const clickedButton = e.currentTarget;
-    const targetTabId = clickedButton.dataset.tab;
+    const targetTabId = clickedButton.dataset.tab; // 클릭된 보조 탭 ID (예: "ruleset-management", "cost-code-management")
     const targetContent = document.getElementById(targetTabId);
     console.log(
         `[DEBUG][handleSubNavClick] Clicked button for tab: ${targetTabId}`
     );
 
+    // --- 이미 활성화된 탭이면 중복 로드 방지 ---
     if (targetContent && targetContent.classList.contains('active')) {
         console.log(
             `[DEBUG][handleSubNavClick] Tab '${targetTabId}' is already active. Preventing re-load.`
@@ -5868,9 +5896,10 @@ function handleSubNavClick(e) {
         return;
     }
 
+    // --- 탭 UI 활성화/비활성화 처리 ---
     const parentNav = clickedButton.closest('.secondary-nav');
     if (parentNav) {
-        // parentNav가 null일 수 있는 경우 방지
+        // 같은 보조 네비게이션 내 다른 활성 버튼 비활성화
         parentNav
             .querySelector('.sub-nav-button.active')
             ?.classList.remove('active');
@@ -5879,19 +5908,21 @@ function handleSubNavClick(e) {
             `[WARN][handleSubNavClick] Could not find parent .secondary-nav for button.`
         );
     }
-    clickedButton.classList.add('active');
+    clickedButton.classList.add('active'); // 클릭된 버튼 활성화
 
-    activeTab = clickedButton.dataset.tab;
+    activeTab = clickedButton.dataset.tab; // 전역 activeTab 변수 업데이트
     console.log(
         `[DEBUG][handleSubNavClick] Active tab changed to: ${activeTab}`
     );
 
+    // 모든 메인 컨텐츠 영역 숨기기
     document
-        .querySelectorAll('.tab-content.active')
+        .querySelectorAll('.main-content > .tab-content.active') // '.main-content >' 추가하여 정확도 향상
         .forEach((c) => c.classList.remove('active'));
-    const activeContent = document.getElementById(activeTab);
-    if (activeContent) {
-        activeContent.classList.add('active');
+
+    // 클릭된 탭에 해당하는 컨텐츠 영역 보이기
+    if (targetContent) {
+        targetContent.classList.add('active');
         console.log(
             `[DEBUG][handleSubNavClick] Content for tab '${activeTab}' displayed.`
         );
@@ -5900,49 +5931,86 @@ function handleSubNavClick(e) {
             `[WARN][handleSubNavClick] Content element with ID '${activeTab}' not found.`
         );
     }
+    // --- 탭 UI 처리 끝 ---
 
-    // --- 각 탭 로딩 로직 ---
-    console.log(
-        `[DEBUG][handleSubNavClick] Loading data for active tab '${activeTab}'...`
-    );
-    // ... (룰셋, 수량산출부재 등 다른 탭 로딩 로직은 동일하게 유지) ...
-    if (activeTab === 'ruleset-management') {
-        /* ... */
-    } else if (activeTab === 'quantity-members') {
-        /* ... */
-    } else if (activeTab === 'cost-item-management') {
-        /* ... */
-    } else if (activeTab === 'cost-code-management') {
-        loadCostCodes();
-    } // 공사코드 관리 탭
-    else if (activeTab === 'member-mark-management') {
-        loadMemberMarks();
-    } // 일람부호 관리 탭
-    // ▼▼▼ [수정] 단가 관리 탭 로딩 로직 ▼▼▼
-    else if (activeTab === 'unit-price-management') {
+    // --- [핵심] '룰셋 관리' 탭 진입 시 기본 하위 탭 활성화 로직 ---
+    if (targetTabId === 'ruleset-management') {
         console.log(
-            '[DEBUG][handleSubNavClick] Loading data for Unit Price Management tab...'
+            "[DEBUG][handleSubNavClick] Entering 'ruleset-management' tab."
         );
-        // 공사코드 목록은 필요 시 항상 다시 로드 (다른 탭에서 변경될 수 있으므로)
-        loadCostCodesForUnitPrice();
-        // 단가 구분 목록도 필요 시 항상 다시 로드
-        loadUnitPriceTypes();
-        // 단가 리스트는 공사코드 선택 시 로드되므로 여기서는 초기화만
-        selectedCostCodeIdForUnitPrice = null; // 선택된 공사코드 초기화
-        document.getElementById('add-unit-price-btn').disabled = true; // '새 단가 추가' 버튼 비활성화
-        document.getElementById('unit-price-list-header').textContent =
-            '단가 리스트 (공사코드를 선택하세요)';
-        renderUnitPricesTable([]); // 빈 테이블 표시
-        console.log(
-            '[DEBUG][handleSubNavClick] Initial data loaded for Unit Price Management tab.'
-        );
+        const rulesetNavContainer =
+            targetContent?.querySelector('.ruleset-nav'); // 룰셋 종류 버튼 컨테이너
+
+        if (rulesetNavContainer) {
+            let activeRulesetButton = rulesetNavContainer.querySelector(
+                '.ruleset-nav-button.active'
+            );
+
+            // 만약 현재 활성화된 룰셋 종류 버튼이 없다면 (첫 진입 시)
+            if (!activeRulesetButton) {
+                console.log(
+                    "[DEBUG][handleSubNavClick] No active ruleset type found. Activating default ('classification-ruleset')."
+                );
+                // 기본값인 '분류 할당 룰셋' 버튼 찾기
+                const defaultRulesetButton = rulesetNavContainer.querySelector(
+                    '[data-ruleset="classification-ruleset"]'
+                );
+                if (defaultRulesetButton) {
+                    // 기본 룰셋 종류 버튼 활성화
+                    defaultRulesetButton.classList.add('active');
+                    // 해당 룰셋 종류 컨텐츠 활성화
+                    const defaultRulesetContentId =
+                        defaultRulesetButton.dataset.ruleset;
+                    const defaultRulesetContent = document.getElementById(
+                        defaultRulesetContentId
+                    );
+                    if (defaultRulesetContent) {
+                        defaultRulesetContent.classList.add('active');
+                    } else {
+                        console.warn(
+                            `[WARN][handleSubNavClick] Default ruleset content ('${defaultRulesetContentId}') not found.`
+                        );
+                    }
+                } else {
+                    console.warn(
+                        "[WARN][handleSubNavClick] Default ruleset button ('classification-ruleset') not found."
+                    );
+                }
+            } else {
+                console.log(
+                    `[DEBUG][handleSubNavClick] Active ruleset type already set to: ${activeRulesetButton.dataset.ruleset}`
+                );
+                // 이미 활성화된 룰셋 종류가 있다면, 해당 컨텐츠도 활성화 상태인지 확인하고 필요시 활성화
+                const activeRulesetContentId =
+                    activeRulesetButton.dataset.ruleset;
+                const activeRulesetContent = document.getElementById(
+                    activeRulesetContentId
+                );
+                if (
+                    activeRulesetContent &&
+                    !activeRulesetContent.classList.contains('active')
+                ) {
+                    // 다른 룰셋 컨텐츠 비활성화
+                    targetContent
+                        .querySelectorAll('.ruleset-content.active')
+                        .forEach((c) => c.classList.remove('active'));
+                    // 현재 룰셋 컨텐츠 활성화
+                    activeRulesetContent.classList.add('active');
+                }
+            }
+        } else {
+            console.warn(
+                "[WARN][handleSubNavClick] Ruleset navigation container not found inside 'ruleset-management' tab content."
+            );
+        }
     }
-    // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
-    else if (activeTab === 'space-management') {
-        /* ... */
-    } else if (activeTab === 'boq') {
-        /* ... */
-    } // BOQ 탭 로딩 로직 추가 필요 시 여기에
+    // --- '룰셋 관리' 탭 초기화 로직 끝 ---
+
+    // --- 활성화된 탭에 필요한 데이터 로드 ---
+    console.log(
+        `[DEBUG][handleSubNavClick] Calling loadDataForActiveTab() for tab '${activeTab}'...`
+    );
+    loadDataForActiveTab(); // 이 함수가 activeTab 값을 보고 필요한 데이터를 로드합니다.
 
     console.log('[DEBUG][handleSubNavClick] End');
 }
@@ -6062,23 +6130,20 @@ async function runBatchAutoUpdate() {
         console.log('[DEBUG] (6/6) 집계표 생성 준비...');
         showToast('6/6: 최종 집계표를 생성합니다...', 'info');
 
-        // BOQ 탭으로 강제 전환 (UI 업데이트 및 필드 로드 유도)
-        const boqPrimaryButton = document.querySelector(
-            '.main-nav .nav-button[data-primary-tab="boq"]'
+        // 상세견적(DD) 탭으로 강제 전환
+        // ▼▼▼ [수정] 셀렉터 변경 ▼▼▼
+        const ddTabButton = document.querySelector(
+            '.main-nav .nav-button[data-primary-tab="detailed-estimation-dd"]'
         );
-        if (
-            boqPrimaryButton &&
-            !boqPrimaryButton.classList.contains('active')
-        ) {
+        // ▲▲▲ 수정 끝 ▲▲▲
+        if (ddTabButton && !ddTabButton.classList.contains('active')) {
             console.log(
-                '[DEBUG] Switching to BOQ tab for report generation...'
+                '[DEBUG] Switching to Detailed Estimation (DD) tab for report generation...'
             );
-            boqPrimaryButton.click();
-            // 탭 전환 및 관련 데이터 로드(loadBoqGroupingFields 등)가 완료될 시간을 약간 기다립니다.
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            ddTabButton.click(); // 탭 클릭 이벤트 실행 (내부적으로 loadDataForActiveTab 호출됨)
+            await new Promise((resolve) => setTimeout(resolve, 1500)); // 데이터 로드 시간 대기
         } else {
-            // 이미 BOQ 탭이면 필드 로드가 완료되었는지 확인하고 기다릴 수 있습니다.
-            // 간단하게 하기 위해 짧은 지연 시간만 줍니다.
+            // 이미 해당 탭이면 짧은 지연 시간만 줌
             await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
@@ -6126,9 +6191,9 @@ async function runBatchAutoUpdate() {
             );
         }
 
-        // 이제 그룹핑 기준이 설정되었으므로 집계표 생성
+        // 집계표 생성 함수 호출 (함수 이름은 그대로 사용)
         generateBoqReport();
-        showToast('✅ (6/6) 집계표 생성 완료.', 'success');
+        showToast('✅ (6/6) 상세견적(DD) 집계표 생성 완료.', 'success');
         // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 
         showToast('🎉 모든 자동화 프로세스가 완료되었습니다.', 'success', 5000);
@@ -6756,4 +6821,326 @@ function handleUnitPriceInputChange(event) {
             totalOutput.textContent = total.toFixed(4);
         }
     }
+}
+// --- [신규 추가] 현재 활성화된 탭에 따라 데이터 로드 함수를 호출하는 헬퍼 ---
+function loadDataForActiveTab() {
+    // activeTab 전역 변수는 handleMainNavClick, handleSubNavClick에서 업데이트됨
+    console.log(
+        `[DEBUG][loadDataForActiveTab] Loading data for active tab: ${activeTab}`
+    );
+    if (!currentProjectId) {
+        console.warn(
+            '[WARN][loadDataForActiveTab] No project selected. Aborting data load.'
+        );
+        return; // 프로젝트 ID가 없으면 로드 중단
+    }
+
+    switch (activeTab) {
+        case 'ruleset-management':
+            // 룰셋 관리 탭일 경우, 활성화된 하위 룰셋 종류를 찾아 로드
+            const activeRulesetButton = document.querySelector(
+                '#ruleset-management .ruleset-nav-button.active'
+            );
+            // 만약 활성화된 버튼이 없다면 기본값으로 'classification-ruleset'을 사용
+            const rulesetType = activeRulesetButton
+                ? activeRulesetButton.dataset.ruleset
+                : 'classification-ruleset';
+            console.log(
+                `[DEBUG][loadDataForActiveTab] Loading specific ruleset: ${rulesetType}`
+            );
+            loadSpecificRuleset(rulesetType);
+            break;
+        case 'cost-code-management':
+            loadCostCodes();
+            break;
+        case 'member-mark-management':
+            loadMemberMarks();
+            break;
+        case 'tag-management':
+            // 태그는 get_tags 메시지 수신 시 로드되므로 여기서 별도 호출 불필요
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Tags are loaded via WebSocket message.'
+            );
+            break;
+        case 'space-management':
+            loadSpaceClassifications();
+            populateFieldSelection(); // 공간 탭용 필드 목록도 채워야 함
+            // 테이블/트리 렌더링은 loadSpaceClassifications 함수 내부 또는 이후에 처리
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Initializing Space Management UI.'
+            );
+            renderDataTable(
+                'space-management-data-table-container',
+                'space-management'
+            ); // 초기 빈 테이블 표시
+            break;
+        case 'unit-price-management':
+            loadCostCodesForUnitPrice(); // 공사코드 목록 로드 (단가 관리용)
+            loadUnitPriceTypes(); // 단가 구분 목록 로드
+            selectedCostCodeIdForUnitPrice = null; // 선택된 공사코드 초기화
+            // UI 초기화
+            const addPriceBtn = document.getElementById('add-unit-price-btn');
+            if (addPriceBtn) addPriceBtn.disabled = true;
+            const priceListHeader = document.getElementById(
+                'unit-price-list-header'
+            );
+            if (priceListHeader)
+                priceListHeader.textContent =
+                    '단가 리스트 (공사코드를 선택하세요)';
+            renderUnitPricesTable([]); // 빈 단가 테이블 표시
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Initialized Unit Price Management UI.'
+            );
+            break;
+        case 'data-management':
+            // BIM 원본 데이터는 get_all_elements 메시지 수신 시 로드됨
+            populateFieldSelection(); // 필드 목록 채움
+            renderDataTable(
+                'data-management-data-table-container',
+                'data-management'
+            ); // 초기 빈 테이블 표시
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Initialized Data Management UI.'
+            );
+            break;
+        case 'quantity-members':
+            // 수량산출부재 탭에 필요한 모든 데이터 로드
+            loadQuantityMembers();
+            loadCostCodes();
+            loadMemberMarks();
+            loadSpaceClassifications(); // 공간분류 목록도 필요
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Loading data for Quantity Members tab.'
+            );
+            break;
+        case 'cost-item-management':
+            // 수량산출 탭에 필요한 모든 데이터 로드
+            loadCostItems();
+            loadQuantityMembers();
+            loadCostCodes();
+            loadMemberMarks();
+            // loadSpaceClassifications(); // 필요 시 추가
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Loading data for Cost Items tab.'
+            );
+            break;
+        case 'detailed-estimation-dd':
+            // 상세견적(DD) 탭에 필요한 데이터 로드 (기존 BOQ 로직과 동일)
+            loadCostItems();
+            loadQuantityMembers();
+            if (allRevitData.length === 0) {
+                console.log(
+                    "[DEBUG][loadDataForActiveTab] Requesting BIM data for Detailed Estimation (DD) tab as it's empty."
+                );
+                fetchDataFromClient();
+            }
+            loadBoqGroupingFields(); // 그룹핑 필드 로드 함수 이름은 그대로 사용
+            loadUnitPriceTypes(); // 단가 구분 로드 함수 이름은 그대로 사용
+            initializeBoqUI(); // 상세견적(DD) 탭의 UI 초기화 (버튼 등)
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Loading data for Detailed Estimation (DD) tab.'
+            );
+            break;
+        case 'schematic-estimation-sd':
+            // 개산견적(SD) 탭 로딩 로직 (현재는 비어있음)
+            console.log(
+                '[DEBUG][loadDataForActiveTab] Loading data for Schematic Estimation (SD) tab (placeholder).'
+            );
+            break;
+        // 'ai-estimation', 'detailed-estimation' 등 다른 미구현 탭 로딩 로직
+        default:
+            console.log(
+                `[DEBUG][loadDataForActiveTab] No specific data loading function defined for tab: ${activeTab}`
+            );
+    }
+}
+
+// --- [신규 추가] 룰셋 종류에 따라 로드 함수를 호출하는 헬퍼 함수 ---
+function loadSpecificRuleset(rulesetType) {
+    console.log(`[DEBUG][loadSpecificRuleset] Loading ruleset: ${rulesetType}`);
+    if (!currentProjectId) return; // 프로젝트 ID 없으면 중단
+
+    switch (rulesetType) {
+        case 'classification-ruleset':
+            loadClassificationRules();
+            break;
+        case 'mapping-ruleset':
+            loadPropertyMappingRules();
+            break;
+        case 'costcode-ruleset':
+            loadCostCodeRules();
+            break;
+        case 'member-mark-assignment-ruleset':
+            loadMemberMarkAssignmentRules();
+            break;
+        case 'cost-code-assignment-ruleset':
+            loadCostCodeAssignmentRules();
+            break;
+        case 'space-classification-ruleset':
+            loadSpaceClassificationRules();
+            break;
+        case 'space-assignment-ruleset':
+            loadSpaceAssignmentRules();
+            break;
+        default:
+            console.error(
+                `[ERROR][loadSpecificRuleset] Unknown ruleset type: ${rulesetType}`
+            );
+    }
+}
+
+// --- [신규 추가] 프로젝트 선택 해제 시 모든 탭 데이터/UI 초기화 헬퍼 ---
+function clearAllTabData() {
+    console.log('[DEBUG][clearAllTabData] Clearing all tab data and UI.');
+    // --- 전역 데이터 배열 초기화 ---
+    allRevitData = [];
+    loadedQuantityMembers = [];
+    loadedCostItems = [];
+    loadedClassificationRules = [];
+    loadedPropertyMappingRules = [];
+    loadedCostCodeRules = [];
+    loadedMemberMarkAssignmentRules = [];
+    loadedCostCodeAssignmentRules = [];
+    loadedSpaceClassificationRules = [];
+    loadedSpaceAssignmentRules = [];
+    loadedCostCodes = [];
+    loadedMemberMarks = [];
+    loadedSpaceClassifications = [];
+    loadedUnitPriceTypes = [];
+    loadedUnitPrices = [];
+    allTags = [];
+    availableBoqFields = [];
+
+    // --- 각 탭별 UI 요소 초기화 ---
+    const clearContainer = (id, message = '<p>프로젝트를 선택하세요.</p>') => {
+        const container = document.getElementById(id);
+        if (container) container.innerHTML = message;
+        else console.warn(`[WARN][clearAllTabData] Container not found: ${id}`);
+    };
+
+    // Ruleset Management
+    document
+        .querySelectorAll('.ruleset-table-container')
+        .forEach(
+            (c) =>
+                (c.innerHTML = '<p>프로젝트를 선택하고 규칙을 추가하세요.</p>')
+        );
+    // Cost Code Management
+    clearContainer('cost-codes-table-container');
+    // Member Mark Management
+    clearContainer('member-marks-table-container');
+    // Tag Management
+    clearContainer('tag-list');
+    const tagAssignSelect = document.getElementById('tag-assign-select');
+    if (tagAssignSelect)
+        tagAssignSelect.innerHTML = '<option value="">-- 분류 선택 --</option>';
+    // Space Management
+    clearContainer('space-tree-container');
+    clearContainer(
+        'space-management-data-table-container',
+        '데이터가 여기에 표시됩니다...'
+    );
+    clearContainer('sm-system-field-container');
+    clearContainer('sm-revit-field-container');
+    clearContainer(
+        'sm-selected-bim-properties-container',
+        '<p>테이블에서 항목을 선택하면 BIM 속성이 여기에 표시됩니다.</p>'
+    );
+    // Unit Price Management
+    clearContainer(
+        'unit-price-cost-code-list',
+        '<p>프로젝트를 선택하면 공사코드가 표시됩니다.</p>'
+    );
+    clearContainer(
+        'unit-price-type-table-container',
+        '<p>단가 구분을 추가하세요.</p>'
+    );
+    clearContainer(
+        'unit-price-table-container',
+        '<p>왼쪽에서 공사코드를 선택하세요.</p>'
+    );
+    const priceListHeader = document.getElementById('unit-price-list-header');
+    if (priceListHeader)
+        priceListHeader.textContent = '단가 리스트 (공사코드를 선택하세요)';
+    const addPriceBtn = document.getElementById('add-unit-price-btn');
+    if (addPriceBtn) addPriceBtn.disabled = true;
+    // Data Management
+    clearContainer(
+        'data-management-data-table-container',
+        '데이터가 여기에 표시됩니다...'
+    );
+    clearContainer('system-field-container');
+    clearContainer('revit-field-container');
+    clearContainer(
+        'selected-bim-properties-container',
+        '<p>테이블에서 항목을 선택하면 BIM 속성이 여기에 표시됩니다.</p>'
+    );
+    clearContainer('selected-tags-list', '항목을 선택하세요.');
+    // Quantity Members
+    clearContainer('qm-table-container');
+    clearContainer('qm-properties-container', '부재를 하나만 선택하세요.');
+    clearContainer(
+        'qm-cost-codes-list',
+        '공사코드를 보려면 부재를 선택하세요.'
+    );
+    clearContainer(
+        'qm-member-mark-details-container',
+        '부재를 하나만 선택하세요.'
+    );
+    clearContainer(
+        'qm-linked-raw-element-properties-container',
+        '<p>부재를 하나만 선택하면 원본 데이터가 표시됩니다.</p>'
+    );
+    clearContainer('qm-spaces-list', '공간분류를 보려면 부재를 선택하세요.');
+    const qmCostCodeSelect = document.getElementById(
+        'qm-cost-code-assign-select'
+    );
+    if (qmCostCodeSelect)
+        qmCostCodeSelect.innerHTML =
+            '<option value="">-- 공사코드 선택 --</option>';
+    const qmMarkSelect = document.getElementById(
+        'qm-member-mark-assign-select'
+    );
+    if (qmMarkSelect)
+        qmMarkSelect.innerHTML =
+            '<option value="">-- 일람부호 선택 --</option>';
+    const qmSpaceSelect = document.getElementById('qm-space-assign-select');
+    if (qmSpaceSelect)
+        qmSpaceSelect.innerHTML =
+            '<option value="">-- 공간분류 선택 --</option>';
+    // Cost Items
+    clearContainer('ci-table-container');
+    clearContainer(
+        'ci-linked-member-info-header',
+        '<p>산출항목을 선택하면 정보가 표시됩니다.</p>'
+    );
+    clearContainer('ci-linked-member-properties-container');
+    clearContainer('ci-linked-mark-properties-container');
+    clearContainer('ci-linked-raw-element-properties-container');
+    // BOQ
+    clearContainer(
+        'boq-table-container',
+        '<p style="padding: 20px;">프로젝트를 선택하고 집계 기준을 설정 후 \'집계표 생성\' 버튼을 눌러주세요.</p>'
+    );
+    clearContainer(
+        'boq-item-list-container',
+        '<p style="padding: 10px;">상단 집계표의 행을 선택하세요.</p>'
+    );
+    clearContainer(
+        'boq-bim-object-cost-summary',
+        '<p style="padding: 10px;">하단 목록에서 산출항목을 선택하면...</p>'
+    );
+    clearContainer('boq-details-member-container', '<p>항목을 선택하세요.</p>');
+    clearContainer('boq-details-mark-container', '<p>항목을 선택하세요.</p>');
+    clearContainer('boq-details-raw-container', '<p>항목을 선택하세요.</p>');
+    clearContainer(
+        'boq-display-fields-container',
+        '<small>프로젝트를 선택하세요.</small>'
+    );
+    clearContainer('boq-grouping-controls'); // 그룹핑 컨트롤 내용 비우기
+    // Reset BOQ columns state
+    currentBoqColumns = [];
+    boqColumnAliases = {};
+
+    console.log('[DEBUG][clearAllTabData] UI cleared.');
 }
