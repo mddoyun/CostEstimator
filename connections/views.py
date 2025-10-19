@@ -3543,7 +3543,7 @@ def ai_models_api(request, project_id, model_id=None):
     # --- GET: 모델 목록 또는 상세 정보 조회 ---
     if request.method == 'GET':
         try:
-            if model_id: # 상세 조회
+            if model_id: # 상세 조회 (이 부분은 변경 없음)
                 model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
                 data = {
                     'id': str(model_obj.id),
@@ -3556,20 +3556,33 @@ def ai_models_api(request, project_id, model_id=None):
                 print(f"[DEBUG][ai_models_api] GET Details for model ID: {model_id}")
                 return JsonResponse(data)
             else: # 목록 조회
-                models = AIModel.objects.filter(project_id=project_id)
-                data = [{
-                    'id': str(m.id),
-                    'name': m.name,
-                    'description': m.description,
-                    'input_features': m.metadata.get('input_features', []), # 메타데이터에서 정보 추출
-                    'output_features': m.metadata.get('output_features', []),
-                    'performance': m.metadata.get('performance', {}),
-                    'created_at': m.created_at.isoformat(),
-                } for m in models]
+                models = AIModel.objects.filter(project_id=project_id).order_by('-created_at') # 정렬 추가
+                data = []
+                for m in models:
+                    # 메타데이터 안전하게 접근 및 기본값 설정
+                    metadata = m.metadata if isinstance(m.metadata, dict) else {}
+                    input_features = metadata.get('input_features', []) # 기본값 빈 리스트
+                    output_features = metadata.get('output_features', []) # 기본값 빈 리스트
+                    performance = metadata.get('performance', {}) # 기본값 빈 딕셔너리
+
+                    model_data = {
+                        'id': str(m.id),
+                        'name': m.name,
+                        'description': m.description,
+                        # [핵심 수정] 메타데이터 내부 필드를 직접 포함
+                        'input_features': input_features if isinstance(input_features, list) else [],
+                        'output_features': output_features if isinstance(output_features, list) else [],
+                        'performance': performance if isinstance(performance, dict) else {},
+                        'created_at': m.created_at.isoformat(),
+                    }
+                    data.append(model_data)
+
                 print(f"[DEBUG][ai_models_api] GET List: Found {len(data)} models.")
                 return JsonResponse(data, safe=False)
         except Exception as e:
             print(f"[ERROR][ai_models_api] GET Error: {e}")
+            import traceback
+            print(traceback.format_exc()) # 상세 에러 로그 추가
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
     # --- POST: 새 모델 업로드 ---

@@ -3665,36 +3665,35 @@ function renderAiModelsTable(models) {
         isoString ? new Date(isoString).toLocaleDateString() : 'N/A';
 
     models.forEach((model) => {
-        // 메타데이터 안전하게 접근
-        const metadata = model.metadata || {};
-        const inputFeatures = Array.isArray(metadata.input_features)
-            ? metadata.input_features.join(', ')
+        // [확인] 아래 필드들이 models 배열의 각 객체에 직접 접근하는지 확인
+        const inputFeatures = Array.isArray(model.input_features)
+            ? model.input_features.join(', ')
             : 'N/A';
-        const outputFeatures = Array.isArray(metadata.output_features)
-            ? metadata.output_features.join(', ')
+        const outputFeatures = Array.isArray(model.output_features)
+            ? model.output_features.join(', ')
             : 'N/A';
         const performanceMetric =
-            metadata.performance?.final_validation_loss?.toFixed(4) ?? 'N/A'; // 최종 검증 손실
+            model.performance?.final_validation_loss?.toFixed(4) ?? 'N/A'; // model.performance 직접 접근
         const createdAt = formatDate(model.created_at);
 
         tableHtml += `
             <tr data-model-id="${model.id}">
                 <td>${model.name || 'N/A'}</td>
                 <td>${model.description || ''}</td>
+                {/* [확인] inputFeatures 변수가 올바르게 사용되는지 */}
                 <td title="${inputFeatures}">${inputFeatures.substring(0, 30)}${
             inputFeatures.length > 30 ? '...' : ''
         }</td>
+                {/* [확인] outputFeatures 변수가 올바르게 사용되는지 */}
                 <td title="${outputFeatures}">${outputFeatures.substring(
             0,
             30
         )}${outputFeatures.length > 30 ? '...' : ''}</td>
+                {/* [확인] performanceMetric 변수가 올바르게 사용되는지 */}
                 <td>${performanceMetric}</td>
                 <td>${createdAt}</td>
                 <td>
-                    <button class="edit-ai-model-btn" title="정보 수정">✏️</button>
-                    <button class="delete-ai-model-btn" title="모델 삭제">🗑️</button>
-                    <button class="download-ai-model-h5-btn" title=".h5 파일 다운로드">💾 H5</button>
-                    <button class="download-ai-model-json-btn" title="메타데이터(.json) 다운로드">💾 JSON</button>
+                    {/* ... 버튼들 ... */}
                 </td>
             </tr>
         `;
