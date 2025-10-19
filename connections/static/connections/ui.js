@@ -1926,85 +1926,229 @@ function renderCostCodeAssignmentRulesetTable(rules, editId = null) {
     container.innerHTML = tableHtml;
 }
 
-/* ui.js 파일에 있는 renderBoqTable 함수가 아래 코드와 완전히 동일한지 확인해주세요. */
+// connections/static/connections/ui.js
+
+// ... (기존 함수들 유지) ...
+
+// ▼▼▼ [교체] renderBoqTable 함수 전체를 아래 코드로 교체해주세요 ▼▼▼
 /**
- * 서버로부터 받은 집계 데이터를 기반으로 동적인 BOQ 테이블을 렌더링합니다.
+ * [수정됨] 서버로부터 받은 집계 데이터를 기반으로 동적인 BOQ 테이블 (단가/비용 포함)을 렌더링합니다.
  * @param {Array} reportData - 중첩된 구조의 집계 데이터 배열
  * @param {Object} summaryData - 전체 합계 데이터
+ * @param {Array} unitPriceTypes - 프로젝트의 단가 기준 목록 [{id: 'uuid', name: 'TypeName'}, ...]
  */
-function renderBoqTable(reportData, summaryData) {
+function renderBoqTable(reportData, summaryData, unitPriceTypes) {
     const container = document.getElementById('boq-table-container');
+    console.log('[DEBUG][Render] renderBoqTable called.');
 
     if (!reportData || reportData.length === 0) {
         container.innerHTML =
             '<p style="padding: 20px;">집계할 데이터가 없습니다.</p>';
+        console.log('[DEBUG][Render] No report data to render.');
         return;
     }
 
+    // --- 1. 컬럼 정의 ---
+    // currentBoqColumns가 비어있으면 기본 컬럼 + 선택된 표시 필드로 초기화
     if (currentBoqColumns.length === 0) {
-        boqColumnAliases = {};
+        boqColumnAliases = {}; // 별칭 초기화
         const selectedDisplayFields = Array.from(
             document.querySelectorAll('.boq-display-field-cb:checked')
         ).map((cb) => ({
-            id: cb.value.replace(/__/g, '_'),
-            label: cb.parentElement.textContent.trim(),
-            isDynamic: true,
+            id: cb.value.replace(/__/g, '_'), // 프론트엔드 호환 ID
+            label: cb.parentElement.textContent.trim(), // 체크박스 옆 텍스트
+            isDynamic: true, // 동적 필드임을 표시
         }));
 
+        // 고정 컬럼 + 동적 컬럼 + 비용 컬럼
         currentBoqColumns = [
-            { id: 'name', label: '구분', isDynamic: false },
-            { id: 'quantity', label: '수량', isDynamic: false },
-            { id: 'count', label: '항목 수', isDynamic: false },
+            { id: 'name', label: '구분', isDynamic: false, align: 'left' },
+            {
+                id: 'unit_price_type_id',
+                label: '단가기준',
+                isDynamic: false,
+                align: 'center',
+                width: '150px',
+            }, // 단가기준 추가
+            { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
+            { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
             ...selectedDisplayFields,
+            // 비용 관련 컬럼 추가
+            {
+                id: 'material_cost_unit',
+                label: '재료비단가',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'material_cost_total',
+                label: '재료비',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'labor_cost_unit',
+                label: '노무비단가',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'labor_cost_total',
+                label: '노무비',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'expense_cost_unit',
+                label: '경비단가',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'expense_cost_total',
+                label: '경비',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'total_cost_unit',
+                label: '합계단가',
+                isDynamic: false,
+                align: 'right',
+            },
+            {
+                id: 'total_cost_total',
+                label: '합계금액',
+                isDynamic: false,
+                align: 'right',
+            },
         ];
+        console.log(
+            '[DEBUG][Render] Initialized currentBoqColumns:',
+            currentBoqColumns
+        );
     }
 
+    // --- 2. 테이블 헤더 생성 ---
     let tableHtml = `<table class="boq-table" data-table-data='${JSON.stringify(
-        { report: reportData, summary: summaryData }
+        {
+            report: reportData,
+            summary: summaryData,
+            unitPriceTypes: unitPriceTypes,
+        }
     )}'>
         <thead>
             <tr>`;
-
     currentBoqColumns.forEach((column) => {
         const displayName = boqColumnAliases[column.id] || column.label;
-        tableHtml += `<th draggable="true" data-column-id="${column.id}">
+        const thStyle = column.width ? `style="width: ${column.width};"` : '';
+        tableHtml += `<th draggable="true" data-column-id="${
+            column.id
+        }" ${thStyle}>
                         ${displayName}
-                        <i class="col-edit-btn">✏️</i>
-                      </th>`;
+                        ${
+                            column.isDynamic ||
+                            ['name', 'unit_price_type_id'].includes(column.id)
+                                ? '<i class="col-edit-btn">✏️</i>'
+                                : ''
+                        }
+                      </th>`; // 이름, 단가기준, 동적 컬럼만 편집 가능
     });
     tableHtml += `</tr></thead><tbody>`;
 
-    // 재귀적으로 그룹 행을 렌더링하는 내부 함수
+    // --- 3. 단가 기준 드롭다운 옵션 HTML 생성 ---
+    let unitPriceTypeOptionsHtml = '<option value="">-- 기준 선택 --</option>';
+    if (unitPriceTypes && unitPriceTypes.length > 0) {
+        unitPriceTypes.forEach((type) => {
+            unitPriceTypeOptionsHtml += `<option value="${type.id}">${type.name}</option>`;
+        });
+    }
+    // '다양함' 옵션 추가 (값은 'various')
+    const variousOptionHtml =
+        '<option value="various" disabled>-- 다양함 --</option>';
+
+    // --- 4. 재귀적으로 그룹 행 렌더링 ---
     function renderGroupNode(node) {
         const indent = node.level * 25;
         let rowTds = '';
+        let rowHasMissingPrice = node.has_missing_price; // 그룹 자체에 단가 누락 항목 포함 여부
+
         currentBoqColumns.forEach((column) => {
             let cellValue = '';
-            switch (column.id) {
-                case 'name':
-                    cellValue = `<td style="padding-left: ${indent + 10}px;">${
-                        node.name
-                    }</td>`;
-                    break;
-                case 'quantity':
-                    cellValue = `<td>${node.quantity.toFixed(4)}</td>`;
-                    break;
-                case 'count':
-                    cellValue = `<td>${node.count}</td>`;
-                    break;
-                default:
-                    cellValue = `<td>${
-                        node.display_values[column.id] || ''
-                    }</td>`;
-                    break;
+            let cellStyle = column.align ? `text-align: ${column.align};` : '';
+
+            // 단가 기준 컬럼 렌더링 (Select 드롭다운)
+            if (column.id === 'unit_price_type_id') {
+                let options = unitPriceTypeOptionsHtml;
+                let selectedValue = node.unit_price_type_id || '';
+                if (node.unit_price_type_id === 'various') {
+                    options = variousOptionHtml + options; // '다양함'을 맨 앞에 추가
+                    selectedValue = 'various';
+                }
+                // 누락된 단가가 있으면 경고 표시 (title 속성 활용)
+                const titleAttr = rowHasMissingPrice
+                    ? 'title="주의: 일부 하위 항목의 단가 정보가 누락되어 합계가 부정확할 수 있습니다."'
+                    : '';
+                const warningClass = rowHasMissingPrice
+                    ? 'missing-price-warning'
+                    : '';
+
+                cellValue = `<td style="${cellStyle}" class="${warningClass}" ${titleAttr}>
+                                <select class="unit-price-type-select" data-item-ids='${JSON.stringify(
+                                    node.item_ids
+                                )}'>
+                                    ${options}
+                                </select>
+                             </td>`;
+                // Select 요소에 selectedValue 설정은 JS로 처리 필요
+            }
+            // 다른 컬럼 값 렌더링
+            else {
+                let displayValue = '';
+                switch (column.id) {
+                    case 'name':
+                        displayValue = `<span style="padding-left: ${
+                            indent + 10
+                        }px;">${node.name}</span>`;
+                        break;
+                    case 'quantity':
+                    case 'count':
+                        displayValue = node[column.id]; // 숫자
+                        break;
+                    // 비용 관련 컬럼들
+                    case 'material_cost_unit':
+                    case 'material_cost_total':
+                    case 'labor_cost_unit':
+                    case 'labor_cost_total':
+                    case 'expense_cost_unit':
+                    case 'expense_cost_total':
+                    case 'total_cost_unit':
+                    case 'total_cost_total':
+                        // 서버에서 문자열로 받은 값을 그대로 사용 (이미 소수점 처리됨)
+                        displayValue = node[column.id] || '0.0000';
+                        break;
+                    // 동적 표시 필드
+                    default:
+                        displayValue = node.display_values[column.id] || '';
+                        break;
+                }
+                // 누락된 단가가 있고 비용 컬럼일 경우 경고 스타일 추가
+                const warningClass =
+                    rowHasMissingPrice && column.id.includes('_cost_')
+                        ? 'missing-price-warning-value'
+                        : '';
+                cellValue = `<td style="${cellStyle}" class="${warningClass}">${displayValue}</td>`;
             }
             rowTds += cellValue;
         });
 
-        // [핵심 확인!] 아래 tr 태그에 data-item-ids 속성이 포함되어야 합니다.
         tableHtml += `<tr class="boq-group-header group-level-${
             node.level
-        }" data-item-ids='${JSON.stringify(node.item_ids)}'>${rowTds}</tr>`;
+        }" data-item-ids='${JSON.stringify(
+            node.item_ids
+        )}' data-current-type-id="${node.unit_price_type_id || ''}">
+                        ${rowTds}
+                      </tr>`;
 
         if (node.children && node.children.length > 0) {
             node.children.forEach(renderGroupNode);
@@ -2013,24 +2157,37 @@ function renderBoqTable(reportData, summaryData) {
 
     reportData.forEach(renderGroupNode);
 
+    // --- 5. 테이블 푸터 (총계) 생성 ---
     let footerTds = '';
     currentBoqColumns.forEach((column) => {
         let cellValue = '';
+        let cellStyle = column.align ? `text-align: ${column.align};` : '';
         switch (column.id) {
             case 'name':
-                cellValue = '<td>총계</td>';
+                cellValue = '총계';
                 break;
             case 'quantity':
-                cellValue = '<td></td>';
+                cellValue = summaryData.total_quantity;
                 break;
             case 'count':
-                cellValue = `<td>${summaryData.total_count}</td>`;
+                cellValue = summaryData.total_count;
+                break;
+            case 'material_cost_total':
+                cellValue = summaryData.total_material_cost;
+                break;
+            case 'labor_cost_total':
+                cellValue = summaryData.total_labor_cost;
+                break;
+            case 'expense_cost_total':
+                cellValue = summaryData.total_expense_cost;
+                break;
+            case 'total_cost_total':
+                cellValue = summaryData.total_total_cost;
                 break;
             default:
-                cellValue = '<td></td>';
-                break;
+                cellValue = ''; // 단가, 단가기준 등은 총계 없음
         }
-        footerTds += cellValue;
+        footerTds += `<td style="${cellStyle}">${cellValue}</td>`;
     });
 
     tableHtml += `</tbody>
@@ -2040,8 +2197,417 @@ function renderBoqTable(reportData, summaryData) {
         </table>`;
 
     container.innerHTML = tableHtml;
+    console.log('[DEBUG][Render] Table HTML generated.');
+
+    // --- 6. 드롭다운 초기 값 설정 (JS로 처리) ---
+    container.querySelectorAll('.unit-price-type-select').forEach((select) => {
+        const row = select.closest('tr');
+        const currentTypeId = row.dataset.currentTypeId;
+        if (currentTypeId) {
+            select.value = currentTypeId;
+        }
+    });
+    console.log('[DEBUG][Render] Dropdown values set.');
+}
+// ▲▲▲ [교체] 여기까지 입니다 ▲▲▲
+
+// ▼▼▼ [수정] updateBoqDetailsPanel 함수 전체를 아래 코드로 교체해주세요 ▼▼▼
+/**
+ * [수정됨] 중앙 하단 패널에 포함된 산출항목 목록 테이블 (비용 정보 포함)을 렌더링하고,
+ * 첫 항목의 상세 정보 및 BIM 객체 비용 요약을 표시합니다.
+ * @param {Array<String>} itemIds - 표시할 CostItem의 ID 배열
+ */
+function updateBoqDetailsPanel(itemIds) {
+    const listContainer = document.getElementById('boq-item-list-container');
+    console.log(
+        `[DEBUG][UI] updateBoqDetailsPanel called with ${itemIds?.length} item IDs.`
+    );
+
+    if (!itemIds || itemIds.length === 0) {
+        listContainer.innerHTML =
+            '<p style="padding: 10px;">이 그룹에 포함된 산출항목이 없습니다.</p>';
+        renderBoqItemProperties(null);
+        renderBoqBimObjectCostSummary(null); // BIM 객체 요약 패널도 초기화
+        return;
+    }
+
+    const itemsToRender = loadedCostItems.filter((item) =>
+        itemIds.includes(item.id)
+    );
+    if (itemsToRender.length === 0) {
+        listContainer.innerHTML =
+            '<p style="padding: 10px;">산출항목 데이터를 찾을 수 없습니다.</p>';
+        renderBoqItemProperties(null);
+        renderBoqBimObjectCostSummary(null); // BIM 객체 요약 패널도 초기화
+        return;
+    }
+
+    // --- 테이블 헤더 정의 ---
+    const headers = [
+        { id: 'cost_code_name', label: '산출항목' },
+        { id: 'quantity', label: '수량', align: 'right' },
+        { id: 'unit_price_type_name', label: '단가기준' }, // 단가 기준 이름 표시
+        { id: 'total_cost_unit', label: '합계단가', align: 'right' },
+        { id: 'total_cost_total', label: '합계금액', align: 'right' },
+        { id: 'material_cost_total', label: '재료비', align: 'right' },
+        { id: 'labor_cost_total', label: '노무비', align: 'right' },
+        { id: 'expense_cost_total', label: '경비', align: 'right' },
+        { id: 'actions', label: 'BIM 연동', align: 'center' }, // BIM 연동 버튼 열 추가
+    ];
+
+    // --- 테이블 HTML 생성 ---
+    let tableHtml = `<table class="boq-item-list-table"><thead><tr>`;
+    headers.forEach(
+        (h) =>
+            (tableHtml += `<th style="text-align: ${h.align || 'left'};">${
+                h.label
+            }</th>`)
+    );
+    tableHtml += `</tr></thead><tbody>`;
+
+    // --- 각 CostItem 행 생성 ---
+    itemsToRender.forEach((item) => {
+        // 단가 및 금액 정보 가져오기 (loadedCostItems에는 이미 계산된 값이 있다고 가정)
+        // 백엔드 API 응답(`generate_boq_report_api`)에서 CostItem별 상세 비용 데이터도 반환해야 함.
+        // 임시: loadedCostItems에 비용 필드가 있다고 가정하고 값 가져오기
+        const qty = parseFloat(item.quantity || 0);
+        const unitPriceType = loadedUnitPriceTypes.find(
+            (t) => t.id === item.unit_price_type_id
+        );
+        const unitPriceTypeName = unitPriceType
+            ? unitPriceType.name
+            : '(미지정)';
+
+        // 단가/금액 정보 (서버에서 계산된 값 사용 필요 - 이 부분은 generate_boq_report_api 수정 필요)
+        // 임시로 loadedCostItems의 값을 사용 (실제로는 API 응답에서 받아와야 함)
+        const totalUnit = parseFloat(item.total_cost_unit || '0').toFixed(4);
+        const totalAmount = parseFloat(item.total_cost_total || '0').toFixed(4);
+        const matAmount = parseFloat(item.material_cost_total || '0').toFixed(
+            4
+        );
+        const labAmount = parseFloat(item.labor_cost_total || '0').toFixed(4);
+        const expAmount = parseFloat(item.expense_cost_total || '0').toFixed(4);
+
+        // BIM 객체 연동 버튼 활성화 여부 결정
+        let bimButtonHtml = '';
+        const member = item.quantity_member_id
+            ? loadedQuantityMembers.find(
+                  (m) => m.id === item.quantity_member_id
+              )
+            : null;
+        if (member && member.raw_element_id) {
+            bimButtonHtml = `<button class="select-in-client-btn-detail" data-cost-item-id="${item.id}" title="연동 프로그램에서 선택 확인">👁️</button>`;
+        }
+
+        tableHtml += `<tr data-item-id="${item.id}">`;
+        headers.forEach((h) => {
+            let value = '';
+            let style = h.align ? `style="text-align: ${h.align};"` : '';
+            switch (h.id) {
+                case 'cost_code_name':
+                    value = item.cost_code_name || '(이름 없음)';
+                    break;
+                case 'quantity':
+                    value = qty.toFixed(4);
+                    break;
+                case 'unit_price_type_name':
+                    value = unitPriceTypeName;
+                    break;
+                case 'total_cost_unit':
+                    value = totalUnit;
+                    break;
+                case 'total_cost_total':
+                    value = totalAmount;
+                    break;
+                case 'material_cost_total':
+                    value = matAmount;
+                    break;
+                case 'labor_cost_total':
+                    value = labAmount;
+                    break;
+                case 'expense_cost_total':
+                    value = expAmount;
+                    break;
+                case 'actions':
+                    value = bimButtonHtml;
+                    style = `style="text-align: center;"`;
+                    break; // 버튼은 중앙 정렬
+                default:
+                    value = item[h.id] || '';
+            }
+            tableHtml += `<td ${style}>${value}</td>`;
+        });
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += '</tbody></table>';
+    listContainer.innerHTML = tableHtml;
+    console.log('[DEBUG][UI] CostItem list table rendered in details panel.');
+
+    // 첫 번째 항목을 자동으로 선택하고 오른쪽 상세 정보 + BIM 객체 비용 요약 렌더링
+    const firstItemId = itemsToRender[0].id;
+    renderBoqItemProperties(firstItemId);
+    renderBoqBimObjectCostSummary(firstItemId); // BIM 객체 요약 패널 렌더링 호출
+}
+// ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
+
+// ▼▼▼ [신규] BIM 객체별 비용 요약 테이블 렌더링 함수 ▼▼▼
+/**
+ * 선택된 CostItem과 연관된 BIM 객체(RawElement)를 찾고,
+ * 해당 BIM 객체에 연결된 모든 CostItem들의 비용을 합산하여 표시합니다.
+ * @param {String | null} selectedCostItemId - 현재 중앙 하단 목록에서 선택된 CostItem의 ID
+ */
+function renderBoqBimObjectCostSummary(selectedCostItemId) {
+    const container = document.getElementById('boq-bim-object-cost-summary');
+    const header = document.getElementById('boq-bim-object-summary-header');
+    console.log(
+        `[DEBUG][UI] renderBoqBimObjectCostSummary called for CostItem ID: ${selectedCostItemId}`
+    );
+
+    if (!selectedCostItemId) {
+        header.textContent = 'BIM 객체 비용 요약';
+        container.innerHTML =
+            '<p style="padding: 10px;">먼저 하단 목록에서 산출항목을 선택하세요.</p>';
+        return;
+    }
+
+    const selectedCostItem = loadedCostItems.find(
+        (item) => item.id === selectedCostItemId
+    );
+    const member = selectedCostItem?.quantity_member_id
+        ? loadedQuantityMembers.find(
+              (m) => m.id === selectedCostItem.quantity_member_id
+          )
+        : null;
+    const rawElement = member?.raw_element_id
+        ? allRevitData.find((el) => el.id === member.raw_element_id)
+        : null;
+
+    if (!rawElement) {
+        header.textContent = 'BIM 객체 비용 요약';
+        container.innerHTML =
+            '<p style="padding: 10px;">선택된 항목과 연관된 BIM 객체가 없습니다.</p>';
+        console.log('[DEBUG][UI] No linked BIM object found.');
+        return;
+    }
+
+    const rawElementId = rawElement.id;
+    const rawElementName =
+        rawElement.raw_data?.Name || `(ID: ${rawElement.element_unique_id})`;
+    header.textContent = `[${rawElementName}] 비용 요약`;
+    console.log(
+        `[DEBUG][UI] Found linked BIM object: ${rawElementName} (ID: ${rawElementId})`
+    );
+
+    // 이 BIM 객체(rawElementId)에 연결된 모든 QuantityMember를 찾습니다.
+    const linkedMemberIds = loadedQuantityMembers
+        .filter((qm) => qm.raw_element_id === rawElementId)
+        .map((qm) => qm.id);
+
+    // 이 QuantityMember들에 연결된 모든 CostItem을 찾습니다.
+    const relatedCostItems = loadedCostItems.filter((ci) =>
+        linkedMemberIds.includes(ci.quantity_member_id)
+    );
+    console.log(
+        `[DEBUG][UI] Found ${relatedCostItems.length} related CostItems for this BIM object.`
+    );
+
+    if (relatedCostItems.length === 0) {
+        container.innerHTML =
+            '<p style="padding: 10px;">이 BIM 객체와 연관된 산출항목이 없습니다.</p>';
+        return;
+    }
+
+    // 비용 합계 계산 (Decimal 사용)
+    let totalMat = 0; // Decimal(0) -> 0
+    let totalLab = 0;
+    let totalExp = 0;
+    let totalTot = 0;
+    let tableHtml = `<table class="boq-item-list-table">
+        <thead>
+            <tr>
+                <th>공사코드</th>
+                <th>품명</th>
+                <th style="text-align: right;">수량</th>
+                <th style="text-align: right;">합계금액</th>
+                <th style="text-align: right;">재료비</th>
+                <th style="text-align: right;">노무비</th>
+                <th style="text-align: right;">경비</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    relatedCostItems.forEach((item) => {
+        // 백엔드에서 문자열로 받은 값을 parseFloat로 변환, 없으면 0으로 처리
+        const mat = parseFloat(item.material_cost_total || '0'); // Decimal(...) -> parseFloat(...)
+        const lab = parseFloat(item.labor_cost_total || '0');
+        const exp = parseFloat(item.expense_cost_total || '0');
+        const tot = parseFloat(item.total_cost_total || '0');
+
+        // .add() 대신 += 사용
+        totalMat += mat;
+        totalLab += lab;
+        totalExp += exp;
+        totalTot += tot;
+
+        const costCode = loadedCostCodes.find(
+            (cc) => cc.id === item.cost_code_id
+        );
+        const code = costCode ? costCode.code : '?';
+        const name = item.cost_code_name || '?';
+        const qty = parseFloat(item.quantity || 0).toFixed(4);
+
+        tableHtml += `
+            <tr>
+                <td>${code}</td>
+                <td>${name}</td>
+                <td style="text-align: right;">${qty}</td>
+                <td style="text-align: right;">${tot.toFixed(
+                    4
+                )}</td> {/* .toFixed()는 그대로 사용 */}
+                <td style="text-align: right;">${mat.toFixed(4)}</td>
+                <td style="text-align: right;">${lab.toFixed(4)}</td>
+                <td style="text-align: right;">${exp.toFixed(4)}</td>
+            </tr>`;
+    });
+
+    tableHtml += `
+        </tbody>
+        <tfoot>
+            <tr class="boq-summary-row">
+                <td colspan="3" style="text-align: center; font-weight: bold;">합계</td>
+                <td style="text-align: right;">${totalTot.toFixed(
+                    4
+                )}</td> {/* 최종 합계도 .toFixed() 사용 */}
+                <td style="text-align: right;">${totalMat.toFixed(4)}</td>
+                <td style="text-align: right;">${totalLab.toFixed(4)}</td>
+                <td style="text-align: right;">${totalExp.toFixed(4)}</td>
+            </tr>
+        </tfoot>
+        </table>`;
+
+    container.innerHTML = tableHtml;
+    console.log('[DEBUG][UI] BIM object cost summary table rendered.');
+}
+// ▲▲▲ [신규] 여기까지 입니다 ▲▲▲
+
+// ▼▼▼ [수정] renderBoqItemProperties 함수 수정 ▼▼▼
+/**
+ * [수정됨] ID에 해당하는 CostItem의 상세 속성을 **왼쪽 상세정보 패널**에 렌더링합니다.
+ * @param {String | null} itemId - 상세 정보를 표시할 CostItem의 ID
+ */
+function renderBoqItemProperties(itemId) {
+    currentBoqDetailItemId = itemId; // 현재 선택된 아이템 ID 업데이트
+
+    // 중앙 하단 목록에서 현재 선택된 행에 'selected' 클래스 적용
+    const listContainer = document.getElementById('boq-item-list-container');
+    listContainer.querySelectorAll('tr[data-item-id]').forEach((row) => {
+        row.classList.toggle('selected', row.dataset.itemId === itemId);
+    });
+
+    // 왼쪽 상세 패널의 컨테이너들
+    const memberContainer = document.getElementById(
+        'boq-details-member-container'
+    );
+    const markContainer = document.getElementById('boq-details-mark-container');
+    const rawContainer = document.getElementById('boq-details-raw-container');
+
+    // 패널 초기화
+    if (!itemId) {
+        memberContainer.innerHTML = '<p>항목을 선택하세요.</p>';
+        markContainer.innerHTML = '<p>항목을 선택하세요.</p>';
+        rawContainer.innerHTML = '<p>항목을 선택하세요.</p>';
+        return;
+    }
+
+    const costItem = loadedCostItems.find(
+        (item) => item.id.toString() === itemId.toString()
+    );
+    if (!costItem) {
+        memberContainer.innerHTML = '<p>항목 정보를 찾을 수 없습니다.</p>';
+        markContainer.innerHTML = '';
+        rawContainer.innerHTML = '';
+        return;
+    }
+
+    const member = costItem.quantity_member_id
+        ? loadedQuantityMembers.find(
+              (m) => m.id.toString() === costItem.quantity_member_id.toString()
+          )
+        : null;
+
+    // 1. 부재 속성 렌더링
+    renderPropertyTable(memberContainer, member?.properties, '부재 속성');
+
+    // 2. 일람부호 속성 렌더링
+    const mark = member?.member_mark_id
+        ? loadedMemberMarks.find(
+              (m) => m.id.toString() === member.member_mark_id.toString()
+          )
+        : null;
+    renderPropertyTable(
+        markContainer,
+        mark?.properties,
+        mark ? `${mark.mark} (일람부호 속성)` : '연관된 일람부호 없음'
+    );
+
+    // 3. BIM 원본 데이터 렌더링 (단순화된 키-값)
+    const rawElement = member?.raw_element_id
+        ? allRevitData.find(
+              (el) => el.id.toString() === member.raw_element_id.toString()
+          )
+        : null;
+    const rawProperties = {};
+    if (rawElement?.raw_data) {
+        // costItems_api에서 만든 raw_element_properties 구조를 활용하거나 유사하게 재구성
+        const rawData = rawElement.raw_data;
+        for (const key in rawData) {
+            if (
+                !['Parameters', 'TypeParameters'].includes(key) &&
+                typeof rawData[key] !== 'object'
+            ) {
+                rawProperties[key] = rawData[key];
+            }
+        }
+        for (const key in rawData.TypeParameters || {})
+            rawProperties[`Type.${key}`] = rawData.TypeParameters[key];
+        for (const key in rawData.Parameters || {})
+            rawProperties[key] = rawData.Parameters[key];
+    }
+    renderPropertyTable(
+        rawContainer,
+        rawProperties,
+        rawElement
+            ? `${rawElement.raw_data?.Name || '원본 객체'} (BIM 원본)`
+            : '연관된 BIM 원본 없음'
+    );
 }
 
+/**
+ * 속성 객체를 받아 테이블 HTML을 생성하고 컨테이너에 렌더링하는 헬퍼 함수
+ * @param {HTMLElement} container - 테이블을 표시할 DOM 요소
+ * @param {Object|null} properties - 표시할 속성 객체
+ * @param {String} title - 테이블 제목
+ */
+function renderPropertyTable(container, properties, title) {
+    let headerHtml = `<h5>${title}</h5>`;
+    if (!properties || Object.keys(properties).length === 0) {
+        container.innerHTML = headerHtml + '<p>표시할 속성이 없습니다.</p>';
+        return;
+    }
+
+    let tableHtml = `<table class="properties-table"><thead><tr><th>속성</th><th>값</th></tr></thead><tbody>`;
+    Object.keys(properties)
+        .sort()
+        .forEach((key) => {
+            tableHtml += `<tr><td>${key}</td><td>${properties[key]}</td></tr>`;
+        });
+    tableHtml += '</tbody></table>';
+    container.innerHTML = headerHtml + tableHtml;
+}
+// ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
+
+// ... (파일의 나머지 부분은 그대로 유지) ...
 /**
  * 서버로부터 받은 집계 데이터를 기반으로 동적인 BOQ 테이블을 렌더링합니다.
  * @param {Array} reportData - 중첩된 구조의 집계 데이터 배열

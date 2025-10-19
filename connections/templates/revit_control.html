@@ -1158,7 +1158,6 @@
                                 >
                                     🔄 열 순서/이름 초기화
                                 </button>
-
                                 <button
                                     id="export-boq-btn"
                                     style="width: 100%; margin-top: 10px"
@@ -1166,7 +1165,6 @@
                                     📄 Excel 내보내기
                                 </button>
                             </div>
-
                             <div class="control-box">
                                 <h3>프로그램 연동</h3>
                                 <div class="io-buttons">
@@ -1193,22 +1191,22 @@
                                         gap: 8px;
                                     "
                                 >
-                                    <label>
-                                        <input
+                                    <label
+                                        ><input
                                             type="checkbox"
                                             id="boq-filter-ai"
                                             checked
                                         />
-                                        AI 개략견적 (SD)
-                                    </label>
-                                    <label>
-                                        <input
+                                        AI 개략견적 (SD)</label
+                                    >
+                                    <label
+                                        ><input
                                             type="checkbox"
                                             id="boq-filter-dd"
                                             checked
                                         />
-                                        상세 견적 (DD)
-                                    </label>
+                                        상세 견적 (DD)</label
+                                    >
                                 </div>
                             </div>
                             <div class="control-box">
@@ -1336,6 +1334,20 @@
                                 </div>
                             </div>
                         </main>
+
+                        <aside class="boq-bim-object-summary-panel">
+                            <div class="control-box">
+                                <h4 id="boq-bim-object-summary-header">
+                                    BIM 객체 비용 요약
+                                </h4>
+                                <div id="boq-bim-object-cost-summary">
+                                    <p style="padding: 10px">
+                                        하단 목록에서 산출항목을 선택하면 연관된
+                                        BIM 객체의 비용 요약이 표시됩니다.
+                                    </p>
+                                </div>
+                            </div>
+                        </aside>
                     </div>
                 </div>
                 <div id="ai-estimation" class="tab-content">

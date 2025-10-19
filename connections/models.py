@@ -230,6 +230,15 @@ class CostItem(models.Model):
     
     quantity_mapping_expression = models.JSONField(default=dict, blank=True, verbose_name="수량 맵핑식(json)")
 
+    unit_price_type = models.ForeignKey(
+            UnitPriceType,
+            on_delete=models.SET_NULL, # UnitPriceType 삭제 시 이 필드를 null로 설정
+            null=True,                 # DB에서 null 허용
+            blank=True,                # Django Admin 등에서 빈 값 허용
+            related_name='cost_items',
+            help_text="이 산출항목에 적용할 단가 기준"
+        )
+
     description = models.TextField(blank=True, null=True, help_text="수동 생성 시 특이사항 기록")
     created_at = models.DateTimeField(auto_now_add=True)
 

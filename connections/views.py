@@ -15,8 +15,9 @@ from .consumers import RevitConsumer, FrontendConsumer, serialize_specific_eleme
 from django.db import transaction
 from django.core import serializers
 import datetime
+from decimal import Decimal, InvalidOperation # [추가] Decimal 임포트
 import decimal # <--- decimal 임포트 추가
-
+from django.db.models import Case, When, Value, IntegerField # [추가] Case, When 임포트
 from .models import (
     Project,
     RawElement,
@@ -33,8 +34,8 @@ from .models import (
     SpaceClassification,
     SpaceClassificationRule,
     SpaceAssignmentRule, # <--- 이 부분을 추가해주세요.
-    UnitPrice,
-    UnitPriceType,
+    UnitPriceType, # <--- 추가 확인
+    UnitPrice      # <--- 추가 확인
 
 )
 # --- Project & Revit Data Views ---
@@ -1787,16 +1788,13 @@ def get_boq_grouping_fields_api(request, project_id):
 
 @require_http_methods(["GET"])
 def generate_boq_report_api(request, project_id):
-    """(개선된 버전 + 필터링 추가) 사용자가 요청한 모든 종류의 그룹핑/표시 기준 및 필터에 따라 CostItem을 집계합니다."""
-    # ▼▼▼ [수정] 함수 시작점에 디버깅 및 필터 파라미터 처리 추가 ▼▼▼
+    """(개선된 버전 + 비용 계산 추가) 사용자가 요청한 모든 종류의 그룹핑/표시 기준 및 필터에 따라 CostItem을 집계하고 비용을 계산합니다."""
     print(f"\n[DEBUG] --- '집계표 생성(generate_boq_report_api)' API 요청 수신 (Project ID: {project_id}) ---")
     print(f"[DEBUG] Raw GET parameters: {request.GET}")
 
     group_by_fields = request.GET.getlist('group_by')
     display_by_fields = request.GET.getlist('display_by')
     raw_element_ids = request.GET.getlist('raw_element_ids')
-
-    # 필터 파라미터 가져오기 (기본값은 True, 문자열 'true'/'false'를 boolean으로 변환)
     filter_ai = request.GET.get('filter_ai', 'true').lower() == 'true'
     filter_dd = request.GET.get('filter_dd', 'true').lower() == 'true'
 
@@ -1806,22 +1804,20 @@ def generate_boq_report_api(request, project_id):
     print(f"  - raw_element_ids: {raw_element_ids}")
     print(f"  - filter_ai: {filter_ai}")
     print(f"  - filter_dd: {filter_dd}")
-    # ▲▲▲ [수정] 여기까지 입니다. ▲▲▲
 
     if not group_by_fields:
         print("[ERROR] 그룹핑 기준이 선택되지 않았습니다.")
         return JsonResponse({'status': 'error', 'message': '하나 이상의 그룹핑 기준을 선택해야 합니다.'}, status=400)
 
-    # --- 1. 필드 유형 분리 (DB 직접 조회 필드 vs JSON 파싱 필드) ---
-    # (이 부분은 변경 없음)
-    direct_fields = set(['id', 'quantity'])
+    # --- 1. 필드 유형 분리 ---
+    direct_fields = set(['id', 'quantity', 'cost_code_id', 'unit_price_type_id']) # [수정] cost_code_id, unit_price_type_id 추가
     json_fields = set()
     all_requested_fields = set(group_by_fields + display_by_fields)
 
     for field in all_requested_fields:
         if '__properties__' in field or '__raw_data__' in field:
             json_fields.add(field)
-        else:
+        elif field not in direct_fields: # 이미 direct_fields에 있는건 제외
             direct_fields.add(field)
 
     # --- 2. DB에서 필요한 모든 데이터를 한 번에 조회 ---
@@ -1834,42 +1830,43 @@ def generate_boq_report_api(request, project_id):
     items_qs = CostItem.objects.filter(project_id=project_id)
     print(f"[DEBUG] 초기 CostItem QuerySet count: {items_qs.count()}")
 
-    # ▼▼▼ [추가] Revit 선택 필터링 적용 ▼▼▼
+    # Revit 선택 필터링
     if raw_element_ids:
         items_qs = items_qs.filter(quantity_member__raw_element_id__in=raw_element_ids)
         print(f"[DEBUG] Revit ID 필터링 후 count: {items_qs.count()}")
-    # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
 
-    # ▼▼▼ [추가] AI / DD 필터링 로직 적용 ▼▼▼
-    if filter_ai and filter_dd:
-        # 둘 다 True면 OR 조건
-        items_qs = items_qs.filter(Q(cost_code__ai_sd_enabled=True) | Q(cost_code__dd_enabled=True))
-        print(f"[DEBUG] AI=True OR DD=True 필터링 후 count: {items_qs.count()}")
-    elif filter_ai:
-        # AI만 True
-        items_qs = items_qs.filter(cost_code__ai_sd_enabled=True)
-        print(f"[DEBUG] AI=True 필터링 후 count: {items_qs.count()}")
-    elif filter_dd:
-        # DD만 True
-        items_qs = items_qs.filter(cost_code__dd_enabled=True)
-        print(f"[DEBUG] DD=True 필터링 후 count: {items_qs.count()}")
-    else:
-        # 둘 다 False면 빈 쿼리셋 반환
-        items_qs = items_qs.none()
-        print(f"[DEBUG] AI=False AND DD=False 필터링 후 count: 0")
-    # ▲▲▲ [추가] 여기까지 입니다. ▲▲▲
+    # AI / DD 필터링
+    q_filter = Q()
+    if filter_ai and filter_dd: q_filter = Q(cost_code__ai_sd_enabled=True) | Q(cost_code__dd_enabled=True)
+    elif filter_ai: q_filter = Q(cost_code__ai_sd_enabled=True)
+    elif filter_dd: q_filter = Q(cost_code__dd_enabled=True)
+    else: q_filter = Q(pk__isnull=True) # 둘 다 False면 아무것도 선택 안 함
+
+    items_qs = items_qs.filter(q_filter)
+    print(f"[DEBUG] AI/DD 필터링 후 count: {items_qs.count()}")
 
     # 최종적으로 필요한 값들만 조회
-    items_from_db = items_qs.select_related(
-        'cost_code', 'quantity_member__classification_tag',
+    items_from_db = list(items_qs.select_related( # [수정] list()로 즉시 평가
+        'cost_code', 'unit_price_type', 'quantity_member__classification_tag', # unit_price_type 추가
         'quantity_member__member_mark', 'quantity_member__raw_element'
-    ).values(*set(values_to_fetch))
-    print(f"[DEBUG] 최종 DB 조회할 데이터 count: {len(items_from_db)}") # values() 호출 후에는 count() 대신 len() 사용
+    ).values(*set(values_to_fetch))) # values() 는 QuerySet을 반환하므로 list()로 변환
+    print(f"[DEBUG] 최종 DB 조회할 데이터 count: {len(items_from_db)}")
 
-    # --- 3. Python에서 JSON 필드 값 파싱 및 데이터 재가공 ---
-    # (get_value_from_path 함수 및 이후 로직은 변경 없음)
+    # --- 2.5 단가 데이터 미리 로드 ---
+    print("[DEBUG] 단가 데이터 로딩 시작...")
+    unit_prices_qs = UnitPrice.objects.filter(project_id=project_id)
+    # 키: (cost_code_id, unit_price_type_id), 값: UnitPrice 객체 (Decimal 필드 포함)
+    unit_prices_map = {
+        (str(up.cost_code_id), str(up.unit_price_type_id)): up
+        for up in unit_prices_qs
+    }
+    print(f"[DEBUG] {len(unit_prices_map)}개의 단가 정보 로드 완료.")
+
+    # --- 3. Python에서 JSON 필드 값 파싱 및 비용 계산 ---
+    ZERO_DECIMAL = Decimal('0.0000') # 비용 계산용 상수
+
     def get_value_from_path(item, path):
-        # ... (기존 코드와 동일) ...
+        # ... (이 함수는 기존 코드와 동일) ...
         if '__properties__' in path:
             parts = path.split('__properties__')
             base_path, key = parts[0], parts[1]
@@ -1879,45 +1876,150 @@ def generate_boq_report_api(request, project_id):
         if '__raw_data__' in path:
             raw_data_dict = item.get('quantity_member__raw_element__raw_data')
             if not isinstance(raw_data_dict, dict): return None
-
             key_path = path.split('__raw_data__')[1].strip('_').split('__')
+            current = raw_data_dict
+            for part in key_path:
+                if isinstance(current, dict):
+                    current = current.get(part)
+                else:
+                    return None
+            return current
 
-            return reduce(lambda d, key: d.get(key, None) if isinstance(d, dict) else None, key_path, raw_data_dict)
-
+        # 'cost_code__name' 같은 직접 필드는 이미 item 딕셔너리에 있어야 함
         return item.get(path)
 
+
     items = []
+    print("[DEBUG] 데이터 재가공 및 비용 계산 시작...")
+    processed_count = 0
     for db_item in items_from_db:
-        processed_item = {k: v for k, v in db_item.items()}
+        processed_item = {}
+
+        # 요청된 필드 값 추출 (JSON 포함)
         for field in all_requested_fields:
             processed_item[field] = get_value_from_path(db_item, field)
-        items.append(processed_item)
-    print(f"[DEBUG] 파싱 및 재가공 완료된 데이터 count: {len(items)}")
 
-    # --- 4. 데이터 집계 로직 ---
-    # (이 부분은 변경 없음)
-    root = {'name': 'Total', 'quantity': 0, 'count': 0, 'children': {}, 'display_values': {}, 'item_ids': []}
+        # 기본 정보 복사
+        processed_item['id'] = db_item['id']
+        processed_item['quantity'] = Decimal(str(db_item.get('quantity', 0.0) or 0.0)) # Float -> Decimal로 변환
+
+        # [핵심] 비용 계산 로직
+        cost_code_id = str(db_item.get('cost_code_id'))
+        unit_price_type_id = str(db_item.get('unit_price_type_id')) if db_item.get('unit_price_type_id') else None
+        processed_item['unit_price_type_id'] = db_item.get('unit_price_type_id') # 원본 UUID 저장 (프론트엔드용)
+
+        unit_price_obj = None
+        has_missing_price = False
+
+        if unit_price_type_id:
+            lookup_key = (cost_code_id, unit_price_type_id)
+            unit_price_obj = unit_prices_map.get(lookup_key)
+            if unit_price_obj is None:
+                has_missing_price = True
+                if processed_count < 10: # 너무 많은 로그 방지
+                     print(f"  [WARN] CostItem ID {db_item['id']}: UnitPrice not found for CostCode {cost_code_id} and Type {unit_price_type_id}. Costs will be 0.")
+
+        # 단가 및 금액 계산 (Decimal 사용)
+        qty = processed_item['quantity']
+        mat_unit = unit_price_obj.material_cost if unit_price_obj else ZERO_DECIMAL
+        lab_unit = unit_price_obj.labor_cost if unit_price_obj else ZERO_DECIMAL
+        exp_unit = unit_price_obj.expense_cost if unit_price_obj else ZERO_DECIMAL
+        tot_unit = unit_price_obj.total_cost if unit_price_obj else ZERO_DECIMAL
+
+        processed_item['material_cost_unit'] = mat_unit
+        processed_item['labor_cost_unit'] = lab_unit
+        processed_item['expense_cost_unit'] = exp_unit
+        processed_item['total_cost_unit'] = tot_unit
+
+        processed_item['material_cost_total'] = mat_unit * qty
+        processed_item['labor_cost_total'] = lab_unit * qty
+        processed_item['expense_cost_total'] = exp_unit * qty
+        processed_item['total_cost_total'] = tot_unit * qty
+
+        processed_item['has_missing_price'] = has_missing_price
+
+        items.append(processed_item)
+        processed_count += 1
+        if processed_count % 1000 == 0:
+             print(f"  ... processed {processed_count} items")
+
+    print(f"[DEBUG] 파싱 및 비용 계산 완료. 총 {len(items)}개 항목.")
+
+    # --- 4. 데이터 집계 로직 (비용 필드 합산 추가) ---
+    print("[DEBUG] 데이터 집계 시작...")
+    root = {
+        'name': 'Total',
+        'quantity': ZERO_DECIMAL, # Decimal로 초기화
+        'count': 0,
+        'children': {},
+        'display_values': {},
+        'item_ids': [],
+        # 비용 합계 필드 추가
+        'material_cost_unit': ZERO_DECIMAL, 'material_cost_total': ZERO_DECIMAL,
+        'labor_cost_unit': ZERO_DECIMAL, 'labor_cost_total': ZERO_DECIMAL,
+        'expense_cost_unit': ZERO_DECIMAL, 'expense_cost_total': ZERO_DECIMAL,
+        'total_cost_unit': ZERO_DECIMAL, 'total_cost_total': ZERO_DECIMAL,
+        'unit_price_type_ids': set(), # 그룹 내 단가 기준 ID 추적
+        'has_missing_price_in_group': False # 그룹 내 누락된 단가 여부
+    }
     VARIOUS_VALUES_SENTINEL = object()
+    VARIOUS_UNIT_PRICE_TYPES = 'various' # 단가 기준이 다양할 때 사용할 값
 
     for item in items:
+        # 루트 노드에 합계 누적 (여기서는 quantity와 total_cost_total만 예시로)
+        root['quantity'] += item['quantity']
+        root['total_cost_total'] += item['total_cost_total']
         root['item_ids'].append(item['id'])
+        # [추가] 루트 노드에도 단가 기준 ID와 누락 여부 추적
+        if item['unit_price_type_id']:
+            root['unit_price_type_ids'].add(item['unit_price_type_id'])
+        if item['has_missing_price']:
+            root['has_missing_price_in_group'] = True
+
         current_level = root
 
         for i, field in enumerate(group_by_fields):
             key = item.get(field)
-            key_str = str(key) if key is not None else '(값 없음)'
+            # JSON 필드 값은 문자열화하여 키로 사용 (딕셔너리 등 비교 방지)
+            if isinstance(key, (dict, list)):
+                key_str = json.dumps(key, sort_keys=True)
+            else:
+                key_str = str(key) if key is not None else '(값 없음)'
 
             if key_str not in current_level['children']:
                 current_level['children'][key_str] = {
-                    'name': key_str, 'quantity': 0, 'count': 0, 'level': i,
-                    'children': {}, 'display_values': {}, 'item_ids': []
+                    'name': key_str, 'quantity': ZERO_DECIMAL, 'count': 0, 'level': i,
+                    'children': {}, 'display_values': {}, 'item_ids': [],
+                    # 비용 필드 초기화
+                    'material_cost_unit': ZERO_DECIMAL, 'material_cost_total': ZERO_DECIMAL,
+                    'labor_cost_unit': ZERO_DECIMAL, 'labor_cost_total': ZERO_DECIMAL,
+                    'expense_cost_unit': ZERO_DECIMAL, 'expense_cost_total': ZERO_DECIMAL,
+                    'total_cost_unit': ZERO_DECIMAL, 'total_cost_total': ZERO_DECIMAL,
+                    'unit_price_type_ids': set(),
+                    'has_missing_price_in_group': False
                 }
 
-            current_level = current_level['children'][key_str]
-            current_level['quantity'] += item.get('quantity', 0)
+            child_node = current_level['children'][key_str]
+            current_level = child_node # 다음 레벨로 이동
+
+            # 현재 레벨 노드에 값 누적
+            current_level['quantity'] += item['quantity']
             current_level['count'] += 1
             current_level['item_ids'].append(item['id'])
 
+            # 비용 누적
+            current_level['material_cost_total'] += item['material_cost_total']
+            current_level['labor_cost_total'] += item['labor_cost_total']
+            current_level['expense_cost_total'] += item['expense_cost_total']
+            current_level['total_cost_total'] += item['total_cost_total']
+
+            # [추가] 단가 기준 ID 및 누락 여부 추적
+            if item['unit_price_type_id']:
+                current_level['unit_price_type_ids'].add(item['unit_price_type_id'])
+            if item['has_missing_price']:
+                current_level['has_missing_price_in_group'] = True
+
+            # Display 필드 값 처리
             for display_field in display_by_fields:
                 current_value = item.get(display_field)
                 if display_field not in current_level['display_values']:
@@ -1926,36 +2028,109 @@ def generate_boq_report_api(request, project_id):
                      current_level['display_values'][display_field] is not VARIOUS_VALUES_SENTINEL:
                     current_level['display_values'][display_field] = VARIOUS_VALUES_SENTINEL
 
-    # --- 5. 최종 결과 포맷팅 (재귀 함수) ---
-    # (이 부분은 변경 없음)
+    print("[DEBUG] 데이터 집계 완료.")
+
+    # --- 5. 최종 결과 포맷팅 (재귀 함수 + 비용 필드 추가) ---
+    print("[DEBUG] 최종 결과 포맷팅 시작...")
+    # Decimal을 문자열로 변환하기 위한 헬퍼
+    def decimal_to_str(d):
+        return str(d.quantize(Decimal("0.0001"))) # 소수점 4자리까지
+
     def format_to_list(node):
         children_list = []
+        # 그룹 키(name) 기준으로 정렬
         for key, child_node in sorted(node['children'].items()):
             final_display_values = {}
             for field in display_by_fields:
                 value = child_node['display_values'].get(field)
-                frontend_key = field.replace('__', '_')
-                final_display_values[frontend_key] = '<다양함>' if value is VARIOUS_VALUES_SENTINEL else (value if value is not None else '')
+                frontend_key = field.replace('__', '_') # 프론트엔드 호환 키
+                # JSON 객체나 리스트면 문자열로 변환
+                if isinstance(value, (dict, list)):
+                    value_str = json.dumps(value, ensure_ascii=False)
+                else:
+                    value_str = value if value is not None else ''
+
+                final_display_values[frontend_key] = '<다양함>' if value is VARIOUS_VALUES_SENTINEL else value_str
+
+            # 그룹 노드의 평균 단가 계산 (total_cost / quantity)
+            # 0으로 나누는 경우 방지
+            avg_mat_unit = (child_node['material_cost_total'] / child_node['quantity']) if child_node['quantity'] else ZERO_DECIMAL
+            avg_lab_unit = (child_node['labor_cost_total'] / child_node['quantity']) if child_node['quantity'] else ZERO_DECIMAL
+            avg_exp_unit = (child_node['expense_cost_total'] / child_node['quantity']) if child_node['quantity'] else ZERO_DECIMAL
+            avg_tot_unit = (child_node['total_cost_total'] / child_node['quantity']) if child_node['quantity'] else ZERO_DECIMAL
+
+            # 그룹 내 단가 기준 상태 결정
+            unit_price_type_id_result = None
+            if len(child_node['unit_price_type_ids']) == 1:
+                unit_price_type_id_result = list(child_node['unit_price_type_ids'])[0]
+            elif len(child_node['unit_price_type_ids']) > 1:
+                unit_price_type_id_result = VARIOUS_UNIT_PRICE_TYPES
 
             child_list_item = {
-                'name': child_node['name'], 'quantity': child_node['quantity'],
-                'count': child_node['count'], 'level': child_node['level'],
+                'name': child_node['name'],
+                'quantity': decimal_to_str(child_node['quantity']), # Decimal -> str
+                'count': child_node['count'],
+                'level': child_node['level'],
                 'display_values': final_display_values,
-                'children': format_to_list(child_node),
-                'item_ids': child_node['item_ids']
+                'children': format_to_list(child_node), # 재귀 호출
+                'item_ids': child_node['item_ids'],
+                # 비용 필드 추가 (Decimal -> str 변환)
+                'material_cost_unit': decimal_to_str(avg_mat_unit),
+                'material_cost_total': decimal_to_str(child_node['material_cost_total']),
+                'labor_cost_unit': decimal_to_str(avg_lab_unit),
+                'labor_cost_total': decimal_to_str(child_node['labor_cost_total']),
+                'expense_cost_unit': decimal_to_str(avg_exp_unit),
+                'expense_cost_total': decimal_to_str(child_node['expense_cost_total']),
+                'total_cost_unit': decimal_to_str(avg_tot_unit),
+                'total_cost_total': decimal_to_str(child_node['total_cost_total']),
+                # 단가 기준 상태 및 누락 여부 추가
+                'unit_price_type_id': unit_price_type_id_result, # UUID, VARIOUS_UNIT_PRICE_TYPES, 또는 None
+                'has_missing_price': child_node['has_missing_price_in_group']
             }
             children_list.append(child_list_item)
         return children_list
 
     report_data = format_to_list(root)
+
+    # 전체 합계 계산 (Decimal 사용)
+    total_summary_costs = {
+        'total_material_cost': ZERO_DECIMAL,
+        'total_labor_cost': ZERO_DECIMAL,
+        'total_expense_cost': ZERO_DECIMAL,
+        'total_total_cost': ZERO_DECIMAL,
+    }
+    for item in items: # 집계 전 원본 item 리스트 순회
+        total_summary_costs['total_material_cost'] += item['material_cost_total']
+        total_summary_costs['total_labor_cost'] += item['labor_cost_total']
+        total_summary_costs['total_expense_cost'] += item['expense_cost_total']
+        total_summary_costs['total_total_cost'] += item['total_cost_total']
+
     total_summary = {
-        'total_quantity': sum(item.get('quantity', 0) for item in items),
-        'total_count': len(items)
+        # [핵심 수정] sum() 함수에 start=ZERO_DECIMAL 추가
+        'total_quantity': decimal_to_str(sum((item['quantity'] for item in items), start=ZERO_DECIMAL)),
+        'total_count': len(items),
+        # 비용 합계 추가 (Decimal -> str)
+        'total_material_cost': decimal_to_str(total_summary_costs['total_material_cost']),
+        'total_labor_cost': decimal_to_str(total_summary_costs['total_labor_cost']),
+        'total_expense_cost': decimal_to_str(total_summary_costs['total_expense_cost']),
+        'total_total_cost': decimal_to_str(total_summary_costs['total_total_cost']),
     }
 
+    print("[DEBUG] 최종 결과 포맷팅 완료.")
     print("[DEBUG] --- '집계표 생성' 완료. JSON 응답을 반환합니다. ---")
 
-    return JsonResponse({'report': report_data, 'summary': total_summary}, safe=False)
+    # 모든 단가 타입 정보도 함께 전달 (프론트엔드 드롭다운 채우기용)
+    unit_price_types = list(UnitPriceType.objects.filter(project_id=project_id).values('id', 'name'))
+    # UUID를 문자열로 변환
+    for upt in unit_price_types:
+        upt['id'] = str(upt['id'])
+
+    return JsonResponse({
+        'report': report_data,
+        'summary': total_summary,
+        'unit_price_types': unit_price_types # 단가 타입 목록 추가
+    }, safe=False)
+# ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 # 기존 space_classifications_api 함수를 찾아 아래 코드로 교체해주세요.
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def space_classifications_api(request, project_id, sc_id=None):
@@ -3215,3 +3390,57 @@ def unit_prices_api(request, project_id, cost_code_id, price_id=None):
         except Exception as e:
             print(f"[ERROR][UnitPrice API] DELETE Error: {e}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+# ▼▼▼ [추가] BOQ 항목들의 단가 기준 일괄 업데이트 API ▼▼▼
+@require_http_methods(["POST"])
+@transaction.atomic # 여러 항목 업데이트를 원자적으로 처리
+def update_cost_item_unit_price_type(request, project_id):
+    """
+    선택된 CostItem들의 unit_price_type을 일괄적으로 업데이트합니다.
+    """
+    print(f"\n[DEBUG][Update UnitPriceType API] Request received for project {project_id}")
+    try:
+        data = json.loads(request.body)
+        cost_item_ids = data.get('cost_item_ids', [])
+        unit_price_type_id = data.get('unit_price_type_id') # null일 수도 있음
+
+        if not cost_item_ids:
+            print("[WARN][Update UnitPriceType API] No cost_item_ids provided.")
+            return JsonResponse({'status': 'warning', 'message': '업데이트할 산출항목이 없습니다.'})
+
+        # 업데이트할 대상 CostItem들을 가져옵니다.
+        items_to_update = CostItem.objects.filter(project_id=project_id, id__in=cost_item_ids)
+        update_count = items_to_update.count()
+
+        if update_count == 0:
+            print("[WARN][Update UnitPriceType API] No matching CostItems found to update.")
+            return JsonResponse({'status': 'warning', 'message': '업데이트할 대상 산출항목을 찾을 수 없습니다.'})
+
+        target_type = None
+        target_type_name = "미지정"
+        if unit_price_type_id:
+            try:
+                target_type = UnitPriceType.objects.get(project_id=project_id, id=unit_price_type_id)
+                target_type_name = target_type.name
+                print(f"[DEBUG][Update UnitPriceType API] Target UnitPriceType: '{target_type_name}' (ID: {unit_price_type_id})")
+            except UnitPriceType.DoesNotExist:
+                print(f"[ERROR][Update UnitPriceType API] UnitPriceType ID '{unit_price_type_id}' not found.")
+                return JsonResponse({'status': 'error', 'message': '선택한 단가 기준을 찾을 수 없습니다.'}, status=404)
+        else:
+            print("[DEBUG][Update UnitPriceType API] Target UnitPriceType is None (clearing).")
+
+        # .update() 메서드를 사용하여 한 번의 쿼리로 업데이트합니다.
+        updated_rows = items_to_update.update(unit_price_type=target_type)
+
+        print(f"[DEBUG][Update UnitPriceType API] Successfully updated {updated_rows} CostItems.")
+        message = f"{updated_rows}개 산출항목의 단가 기준을 '{target_type_name}'(으)로 업데이트했습니다."
+        return JsonResponse({'status': 'success', 'message': message, 'updated_count': updated_rows})
+
+    except json.JSONDecodeError:
+        print("[ERROR][Update UnitPriceType API] Invalid JSON received.")
+        return JsonResponse({'status': 'error', 'message': '잘못된 요청 형식입니다.'}, status=400)
+    except Exception as e:
+        print(f"[ERROR][Update UnitPriceType API] An unexpected error occurred: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JsonResponse({'status': 'error', 'message': f'업데이트 중 오류 발생: {str(e)}'}, status=500)
+# ▲▲▲ [추가] 여기까지 입니다 ▲▲▲

@@ -62,7 +62,7 @@ urlpatterns = [
     # --- BOQ API ---
     path('api/boq/grouping-fields/<uuid:project_id>/', views.get_boq_grouping_fields_api, name='get_boq_grouping_fields'),
     path('api/boq/report/<uuid:project_id>/', views.generate_boq_report_api, name='generate_boq_report'),
-
+path('api/boq/update-unit-price-type/<uuid:project_id>/', views.update_cost_item_unit_price_type, name='update_cost_item_unit_price_type'),
     # ▼▼▼ [추가] 이 아래에 새로운 URL 경로를 추가해주세요. ▼▼▼
     # --- 공간분류 API ---
     path('api/space-classifications/<uuid:project_id>/', views.space_classifications_api, name='space_classifications_api'),
