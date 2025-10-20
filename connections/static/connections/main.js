@@ -4067,114 +4067,316 @@ async function generateBoqReport() {
  * (수정됨: 탭 클릭 리스너는 initializeBoqUI 함수로 이동)
  */
 function setupBoqTableInteractions() {
+    // 디버깅 로그 추가
+    console.log('[DEBUG] Setting up BOQ table interactions...');
     const tableContainer = document.getElementById('boq-table-container');
     const table = tableContainer.querySelector('.boq-table');
-    if (!table) return;
+    if (!table) {
+        console.warn('[WARN] BOQ table element not found for interactions.'); // 디버깅
+        return;
+    }
 
     // --- 1. 메인 BOQ 테이블 상호작용 (열 이름 변경, 드래그앤드롭 등) ---
-    // ... (기존 헤더 드래그앤드롭 및 이름 변경 로직은 동일) ...
-    const headers = table.querySelectorAll('thead th');
-    // ... (dragstart, dragend, dragover, dragleave, drop 이벤트 리스너) ...
-    table.querySelector('thead').addEventListener('click', (e) => {
-        /* ... 이름 변경 로직 ... */
-    });
+    const thead = table.querySelector('thead');
+    if (thead && !thead.dataset.interactionsAttached) {
+        // 중복 리스너 방지
+        let draggedColumn = null;
+        let startX, currentX;
 
-    // --- 2. 메인 BOQ 테이블 '행' 클릭 시 -> 중앙 하단 목록 업데이트 ---
-    table.querySelector('tbody').addEventListener('click', (e) => {
-        const row = e.target.closest('tr.boq-group-header');
-        if (row && !e.target.matches('select, button, i')) {
-            // 드롭다운, 버튼 클릭 시 행 선택 방지
-            const currentSelected = table.querySelector('tr.selected-boq-row');
-            if (currentSelected)
-                currentSelected.classList.remove('selected-boq-row');
-            row.classList.add('selected-boq-row');
+        thead.addEventListener('dragstart', (e) => {
+            draggedColumn = e.target.closest('th');
+            if (!draggedColumn || !draggedColumn.draggable) return;
+            startX = e.clientX;
+            e.dataTransfer.effectAllowed = 'move';
+            // Optional: Add a class for visual feedback
+            draggedColumn.classList.add('dragging');
+            console.log(
+                `[DEBUG] Drag start: Column "${draggedColumn.dataset.columnId}"`
+            ); // 디버깅
+        });
 
-            const itemIds = JSON.parse(row.dataset.itemIds || '[]');
-            updateBoqDetailsPanel(itemIds); // 하단 CostItem 목록 및 상세 정보 업데이트
-        }
-    });
+        thead.addEventListener('dragend', (e) => {
+            if (draggedColumn) {
+                draggedColumn.classList.remove('dragging');
+                draggedColumn = null;
+                console.log('[DEBUG] Drag end'); // 디버깅
+                // Remove visual cues from all headers
+                thead.querySelectorAll('th').forEach((th) => {
+                    th.classList.remove('drag-over-left', 'drag-over-right');
+                });
+            }
+        });
 
-    // --- 3. [신규] 메인 BOQ 테이블 '단가기준' 드롭다운 변경 시 ---
-    table.querySelector('tbody').addEventListener('change', async (e) => {
-        if (e.target.classList.contains('unit-price-type-select')) {
-            const selectElement = e.target;
-            const newTypeId = selectElement.value; // 선택된 새 UnitPriceType ID (빈 문자열 가능)
-            const itemIdsToUpdate = JSON.parse(
-                selectElement.dataset.itemIds || '[]'
-            );
+        thead.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Necessary to allow drop
+            const targetTh = e.target.closest('th');
+            if (!targetTh || !draggedColumn || targetTh === draggedColumn)
+                return;
 
-            if (itemIdsToUpdate.length === 0) return;
+            currentX = e.clientX;
+            const rect = targetTh.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+
+            // Remove previous visual cues
+            thead.querySelectorAll('th').forEach((th) => {
+                th.classList.remove('drag-over-left', 'drag-over-right');
+            });
+
+            // Add new visual cue based on cursor position
+            if (currentX < midpoint) {
+                targetTh.classList.add('drag-over-left');
+            } else {
+                targetTh.classList.add('drag-over-right');
+            }
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        thead.addEventListener('dragleave', (e) => {
+            const targetTh = e.target.closest('th');
+            if (targetTh) {
+                targetTh.classList.remove('drag-over-left', 'drag-over-right');
+            }
+        });
+
+        thead.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetTh = e.target.closest('th');
+            if (!targetTh || !draggedColumn || targetTh === draggedColumn)
+                return;
+
+            targetTh.classList.remove('drag-over-left', 'drag-over-right');
+            const rect = targetTh.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
 
             console.log(
-                `[DEBUG][Event] UnitPriceType changed for ${itemIdsToUpdate.length} items. New Type ID: ${newTypeId}`
-            );
-            showToast('단가 기준을 업데이트 중입니다...', 'info');
+                `[DEBUG] Drop on column "${
+                    targetTh.dataset.columnId
+                }". Insert ${currentX < midpoint ? 'before' : 'after'}.`
+            ); // 디버깅
 
-            try {
-                const response = await fetch(
-                    `/connections/api/boq/update-unit-price-type/${currentProjectId}/`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrftoken,
-                        },
-                        body: JSON.stringify({
-                            cost_item_ids: itemIdsToUpdate,
-                            unit_price_type_id: newTypeId || null, // 빈 문자열이면 null로 전송
-                        }),
-                    }
+            // Reorder the columns in the thead
+            if (currentX < midpoint) {
+                targetTh.parentNode.insertBefore(draggedColumn, targetTh);
+            } else {
+                targetTh.parentNode.insertBefore(
+                    draggedColumn,
+                    targetTh.nextSibling
                 );
-                const result = await response.json();
-                if (!response.ok)
-                    throw new Error(
-                        result.message || '단가 기준 업데이트 실패'
-                    );
-
-                showToast(result.message, 'success');
-                console.log(
-                    `[DEBUG][Event] UnitPriceType update successful. Refreshing BOQ table...`
-                );
-                // 중요: 업데이트 성공 후 BOQ 테이블 전체를 다시 그림
-                await generateBoqReport();
-            } catch (error) {
-                console.error(
-                    '[ERROR][Event] Failed to update UnitPriceType:',
-                    error
-                );
-                showToast(error.message, 'error');
-                // 실패 시 원래 값으로 되돌리기 (선택적)
-                const row = selectElement.closest('tr');
-                selectElement.value = row.dataset.currentTypeId || '';
             }
-        }
-    });
 
-    // --- 4. 중앙 하단 '포함된 산출항목' 목록 클릭 시 -> 왼쪽 상세 패널 업데이트 ---
-    document
-        .getElementById('boq-item-list-container')
-        .addEventListener('click', (e) => {
+            // Update the global column order based on the new DOM order
+            currentBoqColumns = Array.from(thead.querySelectorAll('th')).map(
+                (th) => {
+                    const colId = th.dataset.columnId;
+                    // Find the original column object to keep its properties
+                    return (
+                        currentBoqColumns.find((c) => c.id === colId) || {
+                            id: colId,
+                            label: colId,
+                            isDynamic: true,
+                        }
+                    ); // Fallback
+                }
+            );
+            console.log(
+                '[DEBUG] currentBoqColumns updated based on drop:',
+                currentBoqColumns
+            ); // 디버깅
+
+            // Re-render the table body with the new column order
+            generateBoqReport(); // This will use the updated currentBoqColumns
+        });
+
+        // Column name editing listener
+        thead.addEventListener('click', (e) => {
+            if (e.target.classList.contains('col-edit-btn')) {
+                const th = e.target.closest('th');
+                const colId = th.dataset.columnId;
+                const currentAlias =
+                    boqColumnAliases[colId] ||
+                    currentBoqColumns.find((c) => c.id === colId)?.label ||
+                    colId;
+                const newAlias = prompt(
+                    `'${currentAlias}' 열의 새 이름 입력:`,
+                    currentAlias
+                );
+
+                if (newAlias && newAlias.trim() !== currentAlias) {
+                    boqColumnAliases[colId] = newAlias.trim();
+                    th.childNodes[0].nodeValue = `${newAlias.trim()} `; // Update header text (keep space for icon)
+                    console.log(
+                        `[DEBUG] Column alias updated for "${colId}": "${newAlias.trim()}"`
+                    ); // 디버깅
+                    // No need to regenerate report, just update alias
+                } else if (newAlias === '') {
+                    // If user enters empty string, reset to default label
+                    const defaultLabel =
+                        currentBoqColumns.find((c) => c.id === colId)?.label ||
+                        colId;
+                    delete boqColumnAliases[colId];
+                    th.childNodes[0].nodeValue = `${defaultLabel} `;
+                    console.log(`[DEBUG] Column alias reset for "${colId}".`); // 디버깅
+                }
+            }
+        });
+
+        thead.dataset.interactionsAttached = 'true'; // Mark as attached
+        console.log(
+            '[DEBUG] BOQ table header interactions (drag/drop, edit) attached.'
+        ); // 디버깅
+    }
+
+    // --- 2. 메인 BOQ 테이블 '행' 클릭 시 -> 중앙 하단 목록 업데이트 ---
+    const tbody = table.querySelector('tbody');
+    if (tbody && !tbody.dataset.rowClickListenerAttached) {
+        // 중복 리스너 방지
+        tbody.addEventListener('click', (e) => {
+            const row = e.target.closest('tr.boq-group-header');
+            if (row && !e.target.matches('select, button, i')) {
+                // 드롭다운, 버튼 클릭 시 행 선택 방지
+                const currentSelected = table.querySelector(
+                    'tr.selected-boq-row'
+                );
+                if (currentSelected)
+                    currentSelected.classList.remove('selected-boq-row');
+                row.classList.add('selected-boq-row');
+
+                const itemIds = JSON.parse(row.dataset.itemIds || '[]');
+                console.log(
+                    `[DEBUG][Event] Main BOQ table row clicked. Item IDs: ${itemIds.length}`
+                ); // 디버깅
+                updateBoqDetailsPanel(itemIds); // 하단 CostItem 목록 및 상세 정보 업데이트 (★ 여기서 하단 테이블 그려짐)
+            }
+        });
+        tbody.dataset.rowClickListenerAttached = 'true'; // 리스너 추가됨 표시
+        console.log('[DEBUG] Main BOQ table row click listener attached.'); // 디버깅
+    }
+
+    // --- 3. 메인 BOQ 테이블 '단가기준' 드롭다운 변경 시 ---
+    // (이 리스너는 tbody에 이미 위임되어 있음, 중복 추가 불필요)
+    if (tbody && !tbody.dataset.unitPriceChangeListenerAttached) {
+        // 중복 리스너 방지
+        tbody.addEventListener('change', async (e) => {
+            if (e.target.classList.contains('unit-price-type-select')) {
+                const selectElement = e.target;
+                const newTypeId = selectElement.value; // 선택된 새 UnitPriceType ID (빈 문자열 가능)
+                const itemIdsToUpdate = JSON.parse(
+                    selectElement.dataset.itemIds || '[]'
+                );
+
+                if (itemIdsToUpdate.length === 0) return;
+
+                console.log(
+                    `[DEBUG][Event] UnitPriceType changed for ${itemIdsToUpdate.length} items. New Type ID: ${newTypeId}`
+                ); // 디버깅
+                showToast('단가 기준을 업데이트 중입니다...', 'info');
+
+                try {
+                    const response = await fetch(
+                        `/connections/api/boq/update-unit-price-type/${currentProjectId}/`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrftoken,
+                            },
+                            body: JSON.stringify({
+                                cost_item_ids: itemIdsToUpdate,
+                                unit_price_type_id: newTypeId || null, // 빈 문자열이면 null로 전송
+                            }),
+                        }
+                    );
+                    const result = await response.json();
+                    if (!response.ok)
+                        throw new Error(
+                            result.message || '단가 기준 업데이트 실패'
+                        );
+
+                    showToast(result.message, 'success');
+                    console.log(
+                        `[DEBUG][Event] UnitPriceType update successful. Refreshing BOQ table...`
+                    ); // 디버깅
+                    // 중요: 업데이트 성공 후 BOQ 테이블 전체를 다시 그림
+                    await generateBoqReport();
+                } catch (error) {
+                    console.error(
+                        '[ERROR][Event] Failed to update UnitPriceType:',
+                        error
+                    ); // 디버깅
+                    showToast(error.message, 'error');
+                    // 실패 시 원래 값으로 되돌리기 (선택적)
+                    const row = selectElement.closest('tr');
+                    selectElement.value = row.dataset.currentTypeId || '';
+                }
+            }
+        });
+        tbody.dataset.unitPriceChangeListenerAttached = 'true'; // 리스너 추가됨 표시
+        console.log(
+            '[DEBUG] Main BOQ table unit price change listener attached.'
+        ); // 디버깅
+    }
+
+    // ▼▼▼ 수정: 하단 테이블 클릭 리스너 수정 ▼▼▼
+    // --- 4. 중앙 하단 '포함된 산출항목' 목록 클릭 시 -> 선택 상태 변경 및 왼쪽/오른쪽 상세 패널 업데이트 ---
+    const itemListContainer = document.getElementById(
+        'boq-item-list-container'
+    );
+    if (itemListContainer && !itemListContainer.dataset.clickListenerAttached) {
+        // 중복 리스너 방지
+        itemListContainer.addEventListener('click', (e) => {
             const itemRow = e.target.closest('tr[data-item-id]');
             const bimButton = e.target.closest(
                 'button.select-in-client-btn-detail'
             );
 
             if (bimButton) {
-                // BIM 연동 버튼 클릭 시
+                // BIM 연동 버튼 클릭 시 (기존 로직 유지)
                 const costItemId = bimButton.dataset.costItemId;
                 console.log(
                     `[DEBUG][Event] BIM link button clicked for CostItem ID: ${costItemId}`
-                );
+                ); // 디버깅
                 handleBoqSelectInClientFromDetail(costItemId); // 상세 목록용 함수 호출
             } else if (itemRow) {
                 // 행의 다른 부분 클릭 시 (상세 정보 표시)
                 const itemId = itemRow.dataset.itemId;
-                if (itemId !== currentBoqDetailItemId) {
-                    renderBoqItemProperties(itemId); // 왼쪽 상세 정보 렌더링
-                    renderBoqBimObjectCostSummary(itemId); // 오른쪽 BIM 객체 요약 렌더링
+                console.log(
+                    `[DEBUG][Event] Bottom BOQ item row clicked. Item ID: ${itemId}`
+                ); // 디버깅
+
+                // --- 여기가 수정된 핵심 로직 ---
+                // a. 이전에 선택된 행의 'selected' 클래스 제거
+                //    (★ 'selected-boq-row'가 아니라 '.selected' 사용 확인 ★)
+                const currentSelectedRow =
+                    itemListContainer.querySelector('tr.selected');
+                if (currentSelectedRow) {
+                    currentSelectedRow.classList.remove('selected');
+                    console.log(
+                        `[DEBUG][UI] Removed 'selected' class from previous bottom row.`
+                    ); // 디버깅
                 }
+                // b. 클릭된 행에 'selected' 클래스 추가 (연두색 배경)
+                itemRow.classList.add('selected');
+                console.log(
+                    `[DEBUG][UI] Added 'selected' class to bottom table row ID: ${itemId}`
+                ); // 디버깅
+
+                // c. 상세 정보 및 BIM 객체 요약 패널 업데이트 함수 호출
+                //    (ID가 변경되었는지 여부와 관계없이 호출하여 항상 최신 상태 반영)
+                renderBoqItemProperties(itemId); // 왼쪽 상세 정보 렌더링
+                renderBoqBimObjectCostSummary(itemId); // 오른쪽 BIM 객체 요약 렌더링
+                // --- 수정된 로직 끝 ---
+            } else {
+                console.log(
+                    '[DEBUG][Event] Click inside bottom panel, but not on a data row or button.'
+                ); // 디버깅
             }
         });
+        itemListContainer.dataset.clickListenerAttached = 'true'; // 리스너 추가됨 표시
+        console.log('[DEBUG] Bottom BOQ item list click listener attached.'); // 디버깅
+    }
+    // ▲▲▲ 수정 끝 ▲▲▲
+
+    console.log('[DEBUG] BOQ table interactions setup complete.'); // 디버깅
 }
 /**
  * BOQ 하단 상세 목록 테이블의 'BIM 연동' 버튼 클릭 시 호출됩니다.
@@ -4238,69 +4440,169 @@ function handleBoqSelectInClientFromDetail(costItemId) {
  */
 function updateBoqDetailsPanel(itemIds) {
     const listContainer = document.getElementById('boq-item-list-container');
+    // 디버깅 로그 추가
+    console.log(
+        `[DEBUG][UI] updateBoqDetailsPanel called with ${itemIds?.length} item IDs. Rendering list and resetting detail panels.` // 로그 메시지 수정
+    );
 
     if (!itemIds || itemIds.length === 0) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">이 그룹에 포함된 산출항목이 없습니다.</p>';
+        // 초기 상태: 상세/요약 패널도 초기화
         renderBoqItemProperties(null);
+        renderBoqBimObjectCostSummary(null);
         return;
     }
 
-    const itemsToRender = loadedCostItems.filter((item) =>
+    // loadedCostItems에서 ID가 일치하는 항목들을 찾음 (items_detail에서 온 데이터)
+    // ▼▼▼ 수정: loadedCostItems 대신 loadedDdCostItems 사용 ▼▼▼
+    const itemsToRender = loadedDdCostItems.filter((item) =>
         itemIds.includes(item.id)
     );
+    // ▲▲▲ 수정 끝 ▲▲▲
     if (itemsToRender.length === 0) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">산출항목 데이터를 찾을 수 없습니다.</p>';
+        // 초기 상태: 상세/요약 패널도 초기화
         renderBoqItemProperties(null);
+        renderBoqBimObjectCostSummary(null);
         return;
     }
 
-    // 요청대로 3열 테이블 구조로 복원
-    let tableHtml = `<table class="boq-item-list-table">
-        <thead>
-            <tr>
-                <th>산출항목</th>
-                <th>연관 부재</th>
-                <th>BIM 원본 객체</th>
-            </tr>
-        </thead>
-        <tbody>`;
+    // --- 테이블 헤더 정의 (기존 3열 + 비용 + BIM 연동 버튼) ---
+    const headers = [
+        { id: 'cost_code_name', label: '산출항목' },
+        { id: 'quantity', label: '수량', align: 'right' },
+        { id: 'unit_price_type_name', label: '단가기준' },
+        { id: 'total_cost_unit', label: '합계단가', align: 'right' },
+        { id: 'total_cost_total', label: '합계금액', align: 'right' },
+        { id: 'material_cost_total', label: '재료비', align: 'right' },
+        { id: 'labor_cost_total', label: '노무비', align: 'right' },
+        { id: 'expense_cost_total', label: '경비', align: 'right' },
+        { id: 'linked_member_name', label: '연관 부재' }, // 연관 부재 이름 열 추가
+        { id: 'linked_raw_name', label: 'BIM 원본 객체' }, // BIM 원본 이름 열 추가
+        { id: 'actions', label: 'BIM 연동', align: 'center' },
+    ];
 
+    // --- 테이블 HTML 생성 ---
+    let tableHtml = `<table class="boq-item-list-table"><thead><tr>`;
+    headers.forEach(
+        (h) =>
+            (tableHtml += `<th style="text-align: ${h.align || 'left'};">${
+                h.label
+            }</th>`)
+    );
+    tableHtml += `</tr></thead><tbody>`;
+
+    // --- 각 CostItem 행 생성 ---
     itemsToRender.forEach((item) => {
-        let memberName = '(연관 부재 없음)';
-        let rawElementName = '(BIM 원본 없음)';
-
-        if (item.quantity_member_id) {
-            const member = loadedQuantityMembers.find(
-                (m) => m.id === item.quantity_member_id
-            );
-            if (member) {
-                memberName = member.name || '(이름 없는 부재)';
-                if (member.raw_element_id) {
-                    const rawElement = allRevitData.find(
-                        (re) => re.id === member.raw_element_id
-                    );
-                    rawElementName =
-                        rawElement?.raw_data?.Name || '(이름 없는 원본)';
-                }
-            }
-        }
+        // --- 이름 및 비용 정보 조회 로직 ---
         const costItemName = item.cost_code_name || '(이름 없는 항목)';
+        const qtyStr = item.quantity || '0.0000'; // 백엔드에서 문자열로 옴
 
-        tableHtml += `<tr data-item-id="${item.id}">
-                        <td>${costItemName}</td>
-                        <td>${memberName}</td>
-                        <td>${rawElementName}</td>
-                    </tr>`;
+        // 연관 부재 정보 찾기
+        const member = item.quantity_member_id
+            ? loadedQuantityMembers.find(
+                  (m) => m.id === item.quantity_member_id
+              )
+            : null;
+        const memberName = member
+            ? member.name || '(이름 없는 부재)'
+            : '(연관 부재 없음)';
+
+        // BIM 원본 객체 정보 찾기
+        const rawElement = member?.raw_element_id
+            ? allRevitData.find((el) => el.id === member.raw_element_id)
+            : null;
+        const rawElementName = rawElement
+            ? rawElement.raw_data?.Name || '(이름 없는 원본)'
+            : '(BIM 원본 없음)';
+
+        // 단가 기준 이름 찾기
+        const unitPriceType = loadedUnitPriceTypesForBoq.find(
+            (t) => t.id === item.unit_price_type_id
+        ); // loadedUnitPriceTypesForBoq 사용
+        const unitPriceTypeName = unitPriceType
+            ? unitPriceType.name
+            : '(미지정)';
+
+        // 비용 정보 (loadedCostItems 또는 loadedDdCostItems에 이미 문자열로 포함되어 있음)
+        const totalUnit = item.total_cost_unit || '0.0000';
+        const totalAmount = item.total_cost_total || '0.0000';
+        const matAmount = item.material_cost_total || '0.0000';
+        const labAmount = item.labor_cost_total || '0.0000';
+        const expAmount = item.expense_cost_total || '0.0000';
+
+        // BIM 객체 연동 버튼
+        let bimButtonHtml = '';
+        if (rawElement) {
+            // rawElement가 있을 때만 버튼 생성
+            bimButtonHtml = `<button class="select-in-client-btn-detail" data-cost-item-id="${item.id}" title="연동 프로그램에서 선택 확인">👁️</button>`;
+        }
+
+        // 행 생성 (selected 클래스 없음)
+        tableHtml += `<tr data-item-id="${item.id}">`; // selected 클래스 제거 확인
+        headers.forEach((h) => {
+            let value = '';
+            let style = h.align ? `style="text-align: ${h.align};"` : '';
+            switch (h.id) {
+                case 'cost_code_name':
+                    value = costItemName;
+                    break;
+                case 'quantity':
+                    value = qtyStr;
+                    break; // 문자열 그대로 사용
+                case 'unit_price_type_name':
+                    value = unitPriceTypeName;
+                    break;
+                case 'total_cost_unit':
+                    value = totalUnit;
+                    break;
+                case 'total_cost_total':
+                    value = totalAmount;
+                    break;
+                case 'material_cost_total':
+                    value = matAmount;
+                    break;
+                case 'labor_cost_total':
+                    value = labAmount;
+                    break;
+                case 'expense_cost_total':
+                    value = expAmount;
+                    break;
+                case 'linked_member_name':
+                    value = memberName;
+                    break; // 추가된 열
+                case 'linked_raw_name':
+                    value = rawElementName;
+                    break; // 추가된 열
+                case 'actions':
+                    value = bimButtonHtml;
+                    style = `style="text-align: center;"`;
+                    break;
+                default:
+                    value = item[h.id] || '';
+            }
+            tableHtml += `<td ${style}>${value}</td>`;
+        });
+        tableHtml += `</tr>`;
     });
 
     tableHtml += '</tbody></table>';
     listContainer.innerHTML = tableHtml;
+    console.log(
+        '[DEBUG][UI] CostItem list table rendered in details panel (no initial selection).'
+    );
 
-    // 첫 번째 항목을 자동으로 선택하고 오른쪽 상세 정보 렌더링
-    const firstItemId = itemsToRender[0].id;
-    renderBoqItemProperties(firstItemId);
+    // ▼▼▼ 수정: 첫 번째 항목 자동 선택 및 상세/요약 렌더링 호출 제거하고, null로 호출하여 초기화 ▼▼▼
+    // const firstItemId = itemsToRender[0].id; // 제거
+    // renderBoqItemProperties(firstItemId);    // 제거
+    // renderBoqBimObjectCostSummary(firstItemId); // 제거
+
+    // ▼▼▼ 추가: 대신 초기 상태로 상세/요약 패널 렌더링 호출 ▼▼▼
+    renderBoqItemProperties(null); // 왼쪽 패널 초기화
+    renderBoqBimObjectCostSummary(null); // 오른쪽 패널 초기화
+    // ▲▲▲ 추가 끝 ▲▲▲
 }
 
 // ▼▼▼ [수정] 이 함수 전체를 아래 코드로 교체해주세요. ▼▼▼
@@ -7043,15 +7345,7 @@ function clearAllTabData() {
      * @param {string} id - 컨테이너 요소의 ID
      * @param {string} message - 표시할 HTML 메시지 (기본값: '<p>프로젝트를 선택하세요.</p>')
      */
-    function clearContainer(id, message = '<p>프로젝트를 선택하세요.</p>') {
-        const container = document.getElementById(id);
-        if (container) {
-            container.innerHTML = message;
-            // console.log(`[DEBUG][UI] Cleared container: #${id}`); // 필요 시 디버깅 로그 활성화
-        } else {
-            console.warn(`[WARN][UI] Container not found for clearing: #${id}`); // 컨테이너 못 찾으면 경고
-        }
-    }
+
     const clearSelect = (id, defaultOptionText = '-- 선택 --') => {
         const select = document.getElementById(id);
         if (select)
@@ -7164,7 +7458,15 @@ function clearAllTabData() {
 }
 // ▲▲▲ [교체] 여기까지 ▲▲▲
 // ▼▼▼ [추가] 파일 맨 아래에 아래 함수들을 모두 추가 ▼▼▼
-
+function clearContainer(id, message = '<p>프로젝트를 선택하세요.</p>') {
+    const container = document.getElementById(id);
+    if (container) {
+        container.innerHTML = message;
+        // console.log(`[DEBUG][UI] Cleared container: #${id}`); // 필요 시 디버깅 로그 활성화
+    } else {
+        console.warn(`[WARN][UI] Container not found for clearing: #${id}`); // 컨테이너 못 찾으면 경고
+    }
+}
 // =====================================================================
 // [신규] AI 모델 관리 관련 함수들
 // =====================================================================

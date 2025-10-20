@@ -2195,13 +2195,15 @@ function renderBoqTable(
  */
 function updateBoqDetailsPanel(itemIds) {
     const listContainer = document.getElementById('boq-item-list-container');
+    // 디버깅 로그 추가
     console.log(
-        `[DEBUG][UI] updateBoqDetailsPanel called with ${itemIds?.length} item IDs.`
+        `[DEBUG][UI] updateBoqDetailsPanel called with ${itemIds?.length} item IDs. Initial rendering without selection.`
     );
 
     if (!itemIds || itemIds.length === 0) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">이 그룹에 포함된 산출항목이 없습니다.</p>';
+        // 초기 상태: 상세/요약 패널도 초기화
         renderBoqItemProperties(null);
         renderBoqBimObjectCostSummary(null);
         return;
@@ -2214,6 +2216,7 @@ function updateBoqDetailsPanel(itemIds) {
     if (itemsToRender.length === 0) {
         listContainer.innerHTML =
             '<p style="padding: 10px;">산출항목 데이터를 찾을 수 없습니다.</p>';
+        // 초기 상태: 상세/요약 패널도 초기화
         renderBoqItemProperties(null);
         renderBoqBimObjectCostSummary(null);
         return;
@@ -2246,7 +2249,7 @@ function updateBoqDetailsPanel(itemIds) {
 
     // --- 각 CostItem 행 생성 ---
     itemsToRender.forEach((item) => {
-        // --- [핵심 수정] 이름 및 비용 정보 조회 로직 ---
+        // --- 이름 및 비용 정보 조회 로직 ---
         const costItemName = item.cost_code_name || '(이름 없는 항목)';
         const qtyStr = item.quantity || '0.0000'; // 백엔드에서 문자열로 옴
 
@@ -2289,9 +2292,10 @@ function updateBoqDetailsPanel(itemIds) {
             // rawElement가 있을 때만 버튼 생성
             bimButtonHtml = `<button class="select-in-client-btn-detail" data-cost-item-id="${item.id}" title="연동 프로그램에서 선택 확인">👁️</button>`;
         }
-        // --- [핵심 수정] 여기까지 ---
 
-        tableHtml += `<tr data-item-id="${item.id}">`;
+        // ▼▼▼ 수정: selected 클래스를 초기 렌더링 시 제거 ▼▼▼
+        tableHtml += `<tr data-item-id="${item.id}">`; // selected 클래스 제거
+        // ▲▲▲ 수정 끝 ▲▲▲
         headers.forEach((h) => {
             let value = '';
             let style = h.align ? `style="text-align: ${h.align};"` : '';
@@ -2340,12 +2344,19 @@ function updateBoqDetailsPanel(itemIds) {
 
     tableHtml += '</tbody></table>';
     listContainer.innerHTML = tableHtml;
-    console.log('[DEBUG][UI] CostItem list table rendered in details panel.');
+    console.log(
+        '[DEBUG][UI] CostItem list table rendered in details panel (no initial selection).'
+    );
 
-    // 첫 번째 항목 자동 선택 및 상세/요약 렌더링 (기존과 동일)
-    const firstItemId = itemsToRender[0].id;
-    renderBoqItemProperties(firstItemId);
-    renderBoqBimObjectCostSummary(firstItemId);
+    // ▼▼▼ 수정: 첫 번째 항목 자동 선택 및 상세/요약 렌더링 호출 제거 ▼▼▼
+    // const firstItemId = itemsToRender[0].id; // 제거
+    // renderBoqItemProperties(firstItemId);    // 제거
+    // renderBoqBimObjectCostSummary(firstItemId); // 제거
+
+    // ▼▼▼ 추가: 대신 초기 상태로 상세/요약 패널 렌더링 호출 ▼▼▼
+    renderBoqItemProperties(null);
+    renderBoqBimObjectCostSummary(null);
+    // ▲▲▲ 추가 끝 ▲▲▲
 }
 // ▲▲▲ [수정] 여기까지 입니다 ▲▲▲
 
@@ -2357,16 +2368,22 @@ function updateBoqDetailsPanel(itemIds) {
 function renderBoqBimObjectCostSummary(selectedCostItemId) {
     const container = document.getElementById('boq-bim-object-cost-summary');
     const header = document.getElementById('boq-bim-object-summary-header');
+    // 디버깅 로그 추가
     console.log(
         `[DEBUG][UI] renderBoqBimObjectCostSummary called for CostItem ID: ${selectedCostItemId}`
     );
 
+    // ▼▼▼ 수정: itemId가 null일 경우 초기 메시지 명확화 ▼▼▼
     if (!selectedCostItemId) {
         header.textContent = 'BIM 객체 비용 요약';
         container.innerHTML =
-            '<p style="padding: 10px;">먼저 하단 목록에서 산출항목을 선택하세요.</p>';
+            '<p style="padding: 10px;">하단 목록에서 산출항목을 선택하면 연관된 BIM 객체의 비용 요약이 여기에 표시됩니다.</p>'; // 메시지 수정
+        console.log(
+            '[DEBUG][UI] Cleared BIM object cost summary panel as no item is selected.'
+        ); // 디버깅
         return;
     }
+    // ▲▲▲ 수정 끝 ▲▲▲
 
     // [수정] loadedCostItems 대신 loadedDdCostItems 사용
     const selectedCostItem = loadedDdCostItems.find(
@@ -2385,7 +2402,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         header.textContent = 'BIM 객체 비용 요약';
         container.innerHTML =
             '<p style="padding: 10px;">선택된 항목과 연관된 BIM 객체가 없습니다.</p>';
-        console.log('[DEBUG][UI] No linked BIM object found.');
+        console.log('[DEBUG][UI] No linked BIM object found.'); // 디버깅
         return;
     }
 
@@ -2395,7 +2412,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
     header.textContent = `[${rawElementName}] 비용 요약`;
     console.log(
         `[DEBUG][UI] Found linked BIM object: ${rawElementName} (ID: ${rawElementId})`
-    );
+    ); // 디버깅
 
     // 이 BIM 객체(rawElementId)에 연결된 모든 QuantityMember를 찾습니다.
     const linkedMemberIds = loadedQuantityMembers
@@ -2409,26 +2426,16 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
     );
     console.log(
         `[DEBUG][UI] Found ${relatedCostItems.length} related CostItems for this BIM object.`
-    );
+    ); // 디버깅
 
-    // --- [추가] 상세 로깅: 비용 합산 전 데이터 확인 ---
-    console.log(
-        '[DEBUG][UI] Data used for BIM object cost summary:',
-        JSON.stringify(relatedCostItems, null, 2)
-    );
-    // --- [추가] 여기까지 ---
+    // --- 상세 로깅: 비용 합산 전 데이터 확인 ---
+    // console.log('[DEBUG][UI] Data used for BIM object cost summary:', JSON.stringify(relatedCostItems, null, 2)); // 필요 시 주석 해제
 
     if (relatedCostItems.length === 0) {
         container.innerHTML =
             '<p style="padding: 10px;">이 BIM 객체와 연관된 산출항목이 없습니다.</p>';
         return;
     }
-    // if (relatedCostItems.length > 0) { // 로그 위치 이동
-    //     console.log(
-    //         '[DEBUG][UI] Sample related CostItem for summary:',
-    //         JSON.stringify(relatedCostItems[0])
-    //     );
-    // }
 
     // 비용 합계 계산 (parseFloat 사용 유지, || '0'으로 NaN 방지)
     let totalMat = 0;
@@ -2461,11 +2468,18 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         totalExp += exp;
         totalTot += tot;
 
+        // ▼▼▼ 수정: cost_code 정보 조회 로직 보강 ▼▼▼
+        let code = '?';
+        let name = item.cost_code_name || '?'; // cost_code_name 필드 활용
         const costCode = loadedCostCodes.find(
             (cc) => cc.id === item.cost_code_id
         );
-        const code = costCode ? costCode.code : '?';
-        const name = item.cost_code_name || '?';
+        if (costCode) {
+            code = costCode.code;
+            // name = costCode.name; // cost_code_name이 있으므로 덮어쓰지 않아도 됨
+        }
+        // ▲▲▲ 수정 끝 ▲▲▲
+
         // quantity도 문자열로 오므로 parseFloat 후 toFixed 사용
         const qty = parseFloat(item.quantity || 0).toFixed(4);
 
@@ -2474,7 +2488,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
                 <td>${escapeHtml(code)}</td>
                 <td>${escapeHtml(name)}</td>
                 <td style="text-align: right;">${qty}</td>
-                <td style="text-align: right;">${tot.toFixed(4)}</td> 
+                <td style="text-align: right;">${tot.toFixed(4)}</td>
                 <td style="text-align: right;">${mat.toFixed(4)}</td>
                 <td style="text-align: right;">${lab.toFixed(4)}</td>
                 <td style="text-align: right;">${exp.toFixed(4)}</td>
@@ -2486,7 +2500,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         <tfoot>
             <tr class="boq-summary-row">
                 <td colspan="3" style="text-align: center; font-weight: bold;">합계</td>
-                <td style="text-align: right;">${totalTot.toFixed(4)}</td> 
+                <td style="text-align: right;">${totalTot.toFixed(4)}</td>
                 <td style="text-align: right;">${totalMat.toFixed(4)}</td>
                 <td style="text-align: right;">${totalLab.toFixed(4)}</td>
                 <td style="text-align: right;">${totalExp.toFixed(4)}</td>
@@ -2495,7 +2509,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         </table>`;
 
     container.innerHTML = tableHtml;
-    console.log('[DEBUG][UI] BIM object cost summary table rendered.');
+    console.log('[DEBUG][UI] BIM object cost summary table rendered.'); // 디버깅
 }
 // ▲▲▲ [신규] 여기까지 입니다 ▲▲▲
 
@@ -2506,12 +2520,17 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
  */
 function renderBoqItemProperties(itemId) {
     currentBoqDetailItemId = itemId; // 현재 선택된 아이템 ID 업데이트
+    // 디버깅 로그 추가
+    console.log(
+        `[DEBUG][UI] renderBoqItemProperties called for Item ID: ${itemId}. Rendering left details panel ONLY.`
+    );
 
-    // 중앙 하단 목록에서 현재 선택된 행에 'selected' 클래스 적용
-    const listContainer = document.getElementById('boq-item-list-container');
-    listContainer.querySelectorAll('tr[data-item-id]').forEach((row) => {
-        row.classList.toggle('selected', row.dataset.itemId === itemId);
-    });
+    // ▼▼▼ 제거: 하단 테이블 선택 상태 업데이트 로직 제거 ▼▼▼
+    // const listContainer = document.getElementById('boq-item-list-container');
+    // listContainer.querySelectorAll('tr[data-item-id]').forEach((row) => {
+    //     row.classList.toggle('selected', row.dataset.itemId === String(itemId));
+    // });
+    // ▲▲▲ 제거 끝 ▲▲▲
 
     // 왼쪽 상세 패널의 컨테이너들
     const memberContainer = document.getElementById(
@@ -2520,11 +2539,15 @@ function renderBoqItemProperties(itemId) {
     const markContainer = document.getElementById('boq-details-mark-container');
     const rawContainer = document.getElementById('boq-details-raw-container');
 
-    // 패널 초기화
+    // 패널 초기화 (itemId가 null일 경우)
     if (!itemId) {
-        memberContainer.innerHTML = '<p>항목을 선택하세요.</p>';
-        markContainer.innerHTML = '<p>항목을 선택하세요.</p>';
-        rawContainer.innerHTML = '<p>항목을 선택하세요.</p>';
+        const initialMsg = '<p>하단 목록에서 항목을 선택하세요.</p>'; // 초기 메시지 변경
+        memberContainer.innerHTML = initialMsg;
+        markContainer.innerHTML = initialMsg;
+        rawContainer.innerHTML = initialMsg;
+        console.log(
+            '[DEBUG][UI] Cleared left details panel as no item is selected.'
+        ); // 디버깅
         return;
     }
 
@@ -2535,6 +2558,7 @@ function renderBoqItemProperties(itemId) {
         memberContainer.innerHTML = '<p>항목 정보를 찾을 수 없습니다.</p>';
         markContainer.innerHTML = '';
         rawContainer.innerHTML = '';
+        console.warn(`[WARN][UI] CostItem data not found for ID: ${itemId}`); // 디버깅
         return;
     }
 
@@ -2589,6 +2613,9 @@ function renderBoqItemProperties(itemId) {
             ? `${rawElement.raw_data?.Name || '원본 객체'} (BIM 원본)`
             : '연관된 BIM 원본 없음'
     );
+    console.log(
+        `[DEBUG][UI] Left details panel rendered for Item ID: ${itemId}`
+    ); // 디버깅
 }
 
 /**
