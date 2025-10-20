@@ -9039,8 +9039,8 @@ function addSdGroupingLevel() {
 
     newLevelDiv.innerHTML = `
         <label>${newIndex + 1}차:</label>
-        <select class="sd-group-by-select">${optionsHtml}</select> {/* 클래스 이름 변경 */}
-        <button class="remove-sd-group-level-btn" style="padding: 2px 6px; font-size: 12px;">-</button> {/* 클래스 이름 변경 */}
+        <select class="sd-group-by-select">${optionsHtml}</select> 
+        <button class="remove-sd-group-level-btn" style="padding: 2px 6px; font-size: 12px;">-</button> 
     `;
     container.appendChild(newLevelDiv);
     console.log(`[DEBUG][SD BOQ] ${newIndex + 1}차 SD grouping level added.`);

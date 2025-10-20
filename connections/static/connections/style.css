@@ -2331,9 +2331,7 @@ div[id$='-grouping-controls'] {
     min-height: 0; /* 스크롤 위해 필요 */
     padding-top: 10px; /* 헤더와 테이블 사이 간격 */
 }
-#boq-bim-object-cost-summary .boq-item-list-table {
-    /* 하단 CostItem 목록과 동일한 테이블 스타일 사용 */
-}
+
 #boq-bim-object-cost-summary .boq-summary-row td {
     background-color: #f0f0f0; /* 합계 행 배경 약간 다르게 */
 }

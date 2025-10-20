@@ -3665,20 +3665,18 @@ function renderAiModelsTable(models) {
             <tr data-model-id="${model.id}">
                 <td>${model.name || 'N/A'}</td>
                 <td>${model.description || ''}</td>
-                {/* [확인] inputFeatures 변수가 올바르게 사용되는지 */}
+                
                 <td title="${inputFeatures}">${inputFeatures.substring(0, 30)}${
             inputFeatures.length > 30 ? '...' : ''
         }</td>
-                {/* [확인] outputFeatures 변수가 올바르게 사용되는지 */}
                 <td title="${outputFeatures}">${outputFeatures.substring(
             0,
             30
         )}${outputFeatures.length > 30 ? '...' : ''}</td>
-                {/* [확인] performanceMetric 변수가 올바르게 사용되는지 */}
+                
                 <td>${performanceMetric}</td>
                 <td>${createdAt}</td>
                 <td>
-                    {/* ... 버튼들 ... */}
                 </td>
             </tr>
         `;
