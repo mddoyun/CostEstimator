@@ -9,6 +9,7 @@
             href="{% static 'connections/style.css' %}"
         />
     </head>
+
     <body>
         <div id="toast-container"></div>
         <input
@@ -1386,91 +1387,175 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="sd-bottom-panel panel-box">
-                            <div class="panel-header">
-                                <h4>개산견적(SD) 대상 산출항목 (검수용)</h4>
-                                <button id="sd-select-in-client-btn">
-                                    👁️ 연동 프로그램에서 선택 확인
-                                </button>
-                            </div>
-                            <div
-                                class="panel-content sd-table-content"
-                                style="display: flex; flex-direction: column"
-                            >
+                        <div class="sd-bottom-panel three-column-layout">
+                            <div class="left-column panel-box">
+                                <div class="panel-header">
+                                    <h4>개산견적(SD) 대상 항목</h4>
+                                    <button id="sd-select-in-client-btn">
+                                        👁️ 연동 프로그램에서 선택 확인
+                                    </button>
+                                </div>
                                 <div
-                                    class="control-box"
+                                    class="panel-content sd-table-content"
                                     style="
-                                        flex-shrink: 0;
-                                        border: none;
-                                        border-bottom: 1px solid
-                                            var(--border-color);
-                                        padding-bottom: 10px;
-                                        margin-bottom: 10px;
+                                        display: flex;
+                                        flex-direction: column;
                                     "
                                 >
                                     <div
-                                        id="sd-grouping-controls-wrapper"
+                                        class="control-box"
                                         style="
-                                            display: flex;
-                                            align-items: center;
-                                            gap: 15px;
+                                            flex-shrink: 0;
+                                            border: none;
+                                            border-bottom: 1px solid
+                                                var(--border-color);
+                                            padding-bottom: 10px;
+                                            margin-bottom: 10px;
                                         "
                                     >
-                                        <button id="add-sd-group-level-btn">
-                                            + 그룹핑 추가
-                                        </button>
                                         <div
-                                            id="sd-grouping-controls"
+                                            id="sd-grouping-controls-wrapper"
                                             style="
                                                 display: flex;
-                                                flex-wrap: nowrap;
-                                                overflow-x: auto;
-                                                gap: 10px;
                                                 align-items: center;
-                                                padding-bottom: 5px;
-                                                min-width: 0;
-                                                flex-grow: 1;
-                                            "
-                                        ></div>
-                                    </div>
-                                    <div
-                                        id="sd-display-fields-wrapper"
-                                        style="
-                                            display: none;
-                                            align-items: center;
-                                            gap: 10px;
-                                            padding-top: 10px;
-                                            border-top: 1px dashed #e0e0e0;
-                                            margin-top: 10px;
-                                        "
-                                    >
-                                        <span>표시 필드:</span>
-                                        <div
-                                            id="sd-display-fields-container"
-                                            style="
-                                                flex-grow: 1;
-                                                max-height: 80px;
-                                                overflow: auto;
-                                                border: 1px solid
-                                                    var(--border-color);
-                                                padding: 5px;
-                                                background-color: #fff;
-                                                border-radius: 4px;
+                                                gap: 15px;
                                             "
                                         >
-                                            <small>필드 로딩 중...</small>
+                                            <button id="add-sd-group-level-btn">
+                                                + 그룹핑 추가
+                                            </button>
+                                            <div
+                                                id="sd-grouping-controls"
+                                                style="
+                                                    display: flex;
+                                                    flex-wrap: nowrap;
+                                                    overflow-x: auto;
+                                                    gap: 10px;
+                                                    align-items: center;
+                                                    padding-bottom: 5px;
+                                                    min-width: 0;
+                                                    flex-grow: 1;
+                                                "
+                                            ></div>
                                         </div>
+                                        <div
+                                            id="sd-display-fields-wrapper"
+                                            style="
+                                                display: none;
+                                                align-items: center;
+                                                gap: 10px;
+                                                padding-top: 10px;
+                                                border-top: 1px dashed #e0e0e0;
+                                                margin-top: 10px;
+                                            "
+                                        >
+                                            <span>표시 필드:</span>
+                                            <div
+                                                id="sd-display-fields-container"
+                                                style="
+                                                    flex-grow: 1;
+                                                    max-height: 80px;
+                                                    overflow: auto;
+                                                    border: 1px solid
+                                                        var(--border-color);
+                                                    padding: 5px;
+                                                    background-color: #fff;
+                                                    border-radius: 4px;
+                                                "
+                                            >
+                                                <small>필드 로딩 중...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="sd-table-container"
+                                        class="table-container"
+                                        style="flex-grow: 1; overflow: auto"
+                                    >
+                                        <p style="padding: 20px">
+                                            개산견적(SD)에 사용되는 산출항목
+                                            목록이 여기에 표시됩니다.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="middle-column panel-box">
+                                <div class="panel-header">
+                                    <h4>연관 산출항목</h4>
+                                </div>
+                                <div
+                                    id="sd-item-list-container"
+                                    class="panel-content"
+                                >
+                                    <p style="padding: 15px">
+                                        왼쪽 테이블에서 그룹 행을 선택하세요.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div
+                                id="sd-item-details-panel"
+                                class="right-column panel-box"
+                            >
+                                <div class="details-panel-tabs">
+                                    <button
+                                        class="detail-tab-button active"
+                                        data-tab="sd-member-prop"
+                                    >
+                                        부재 속성
+                                    </button>
+                                    <button
+                                        class="detail-tab-button"
+                                        data-tab="sd-mark-prop"
+                                    >
+                                        일람부호
+                                    </button>
+                                    <button
+                                        class="detail-tab-button"
+                                        data-tab="sd-raw-prop"
+                                    >
+                                        BIM 원본
+                                    </button>
+                                </div>
+                                <div
+                                    class="detail-tab-content active"
+                                    data-tab="sd-member-prop"
+                                >
+                                    <div
+                                        id="sd-details-member-container"
+                                        class="panel-content properties-sub-container"
+                                    >
+                                        <p style="padding: 15px">
+                                            중간 목록에서 항목을 선택하세요.
+                                        </p>
                                     </div>
                                 </div>
                                 <div
-                                    id="sd-table-container"
-                                    class="table-container"
-                                    style="flex-grow: 1; overflow: auto"
+                                    class="detail-tab-content"
+                                    data-tab="sd-mark-prop"
                                 >
-                                    <p style="padding: 20px">
-                                        개산견적(SD)에 사용되는 산출항목 목록이
-                                        여기에 표시됩니다.
-                                    </p>
+                                    <div
+                                        id="sd-details-mark-container"
+                                        class="panel-content properties-sub-container"
+                                    >
+                                        <p style="padding: 15px">
+                                            중간 목록에서 항목을 선택하세요.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="detail-tab-content"
+                                    data-tab="sd-raw-prop"
+                                >
+                                    <div
+                                        id="sd-details-raw-container"
+                                        class="panel-content properties-sub-container"
+                                    >
+                                        <p style="padding: 15px">
+                                            중간 목록에서 항목을 선택하세요.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2115,5 +2200,12 @@
         <script src="{% static 'connections/ui.js' %}"></script>
         <script src="{% static 'connections/websocket.js' %}"></script>
         <script src="{% static 'connections/main.js' %}"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"
+            integrity="sha512-Hn1w6YpuoW7yrZMkl6sXtpDIpjBDP2s8LQ9+hYdUHIqaFC/qM/BQSzcejS8NY7h4Mi+gzJ3XGj0Xh+H2YcPYEw=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
     </body>
 </html>

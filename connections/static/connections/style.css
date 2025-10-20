@@ -2671,3 +2671,118 @@ div[id$='-grouping-controls'] {
 }
 
 /* ▲▲▲ [수정 없음] 개산견적(SD) 탭 끝 ▲▲▲ */
+/* ▼▼▼ [추가] SD 하단 3단 레이아웃 스타일 ▼▼▼ */
+.sd-bottom-panel.three-column-layout {
+    flex: 1.5; /* 하단 패널 높이 비율 유지 */
+    min-height: 0;
+    display: flex; /* 가로 flexbox */
+    gap: 20px;
+}
+
+/* 왼쪽 컬럼 (기본 테이블) */
+.sd-bottom-panel .left-column {
+    flex: 3; /* 넓은 비율 (3) */
+    min-width: 0;
+    display: flex; /* 내부 요소(헤더,컨텐츠) 세로 정렬 */
+    flex-direction: column;
+}
+
+/* 중간 컬럼 (연관 항목) */
+.sd-bottom-panel .middle-column {
+    flex: 2; /* 중간 비율 (2) */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* 중간 컬럼 테이블 스타일 (DD와 유사) */
+#sd-item-list-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+#sd-item-list-container .boq-item-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#sd-item-list-container .boq-item-list-table th,
+#sd-item-list-container .boq-item-list-table td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    text-align: left;
+}
+#sd-item-list-container .boq-item-list-table th {
+    background-color: #f2f2f2;
+    position: sticky;
+    top: 0;
+}
+#sd-item-list-container .boq-item-list-table tbody tr {
+    cursor: pointer;
+}
+#sd-item-list-container .boq-item-list-table tbody tr:hover td {
+    background-color: #f0f0f0;
+}
+/* 중간 목록 선택 시 하이라이트 */
+#sd-item-list-container .boq-item-list-table tbody tr.selected td {
+    background-color: #e2f0ff;
+} /* 연한 파랑 */
+
+/* 오른쪽 컬럼 (상세 속성) */
+.sd-bottom-panel .right-column {
+    flex: 1.5; /* 좁은 비율 (1.5) */
+    min-width: 280px; /* 최소 너비 */
+    display: flex;
+    flex-direction: column;
+}
+/* 오른쪽 컬럼 탭/컨텐츠 스타일 (DD와 동일) */
+.sd-bottom-panel .right-column .details-panel-tabs {
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+}
+.sd-bottom-panel .right-column .detail-tab-button {
+    padding: 8px 12px;
+    font-size: 13px;
+    flex: 1;
+    text-align: center;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+}
+.sd-bottom-panel .right-column .detail-tab-button.active {
+    border-bottom-color: var(--primary-color);
+    font-weight: bold;
+    color: var(--primary-color);
+}
+.sd-bottom-panel .right-column .detail-tab-content {
+    display: none;
+    flex-grow: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 10px; /* 패딩 추가 */
+}
+.sd-bottom-panel .right-column .detail-tab-content.active {
+    display: block;
+}
+.sd-bottom-panel .right-column .properties-sub-container {
+    border: none;
+    padding: 0;
+}
+.sd-bottom-panel .right-column .properties-sub-container h5 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+}
+.sd-bottom-panel .right-column .properties-table {
+    font-size: 12px;
+}
+.sd-bottom-panel .right-column .properties-table td,
+.sd-bottom-panel .right-column .properties-table th {
+    padding: 4px 6px;
+}
+
+/* SD 하단 왼쪽 테이블 그룹핑/표시 필드 영역 높이 제한 */
+#sd-table-container ~ .control-box {
+    max-height: 150px; /* 그룹핑/표시 필드 영역 최대 높이 */
+}

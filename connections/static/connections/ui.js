@@ -1943,15 +1943,12 @@ function renderBoqTable(
     unitPriceTypes,
     targetContainerId
 ) {
-    // targetContainerId 인자 추가
-    // const container = document.getElementById('boq-table-container'); // 기존 코드 삭제
-    const container = document.getElementById(targetContainerId); // 인자로 받은 ID 사용
+    const container = document.getElementById(targetContainerId);
     console.log(
         `[DEBUG][Render] renderBoqTable called for container #${targetContainerId}.`
-    ); // 디버깅 로그 수정
+    );
 
     if (!container) {
-        // 컨테이너 존재 여부 확인 추가
         console.error(
             `[ERROR][Render] Target container #${targetContainerId} not found.`
         );
@@ -1962,7 +1959,6 @@ function renderBoqTable(
         return;
     }
 
-    // --- (이하 코드는 이전과 거의 동일) ---
     if (!reportData || reportData.length === 0) {
         container.innerHTML =
             '<p style="padding: 20px;">집계할 데이터가 없습니다.</p>';
@@ -1970,25 +1966,31 @@ function renderBoqTable(
         return;
     }
 
-    // --- 1. 컬럼 정의 (DD/SD 공통 컬럼 상태 변수 사용) ---
-    // [수정] DD/SD 공통 상태 사용 또는 분리 필요. 여기서는 임시로 DD 상태 사용.
-    // 실제 구현 시에는 SD용 컬럼 상태(currentSdBoqColumns)를 사용하도록 수정 필요.
-    const columnsToRender =
-        targetContainerId === 'sd-table-container'
-            ? currentSdBoqColumns
-            : currentBoqColumns; // SD/DD 컬럼 구분
-    const aliasesToUse =
-        targetContainerId === 'sd-table-container'
-            ? sdBoqColumnAliases
-            : boqColumnAliases; // SD/DD 별칭 구분
+    // --- 1. 컬럼 정의 (DD/SD 구분) ---
+    const isSdTab = targetContainerId === 'sd-table-container'; // SD 탭 여부 확인
+    const columnsToUse = isSdTab ? currentSdBoqColumns : currentBoqColumns;
+    const aliasesToUse = isSdTab ? sdBoqColumnAliases : boqColumnAliases;
+
+    // ▼▼▼ [수정] SD 탭일 경우 특정 컬럼 제외 ▼▼▼
+    const columnsToRender = columnsToUse.filter((col) => {
+        if (isSdTab) {
+            // SD 탭에서는 '합계금액', '단가기준' 등 제외
+            return ![
+                'total_cost_total',
+                'material_cost_total',
+                'labor_cost_total',
+                'expense_cost_total',
+                'unit_price_type_id',
+            ].includes(col.id);
+        }
+        return true; // DD 탭은 모든 컬럼 포함
+    });
+    // ▲▲▲ [수정] 여기까지 ▲▲▲
 
     if (columnsToRender.length === 0) {
-        // 컬럼 정의 안됐을 때 처리
         console.warn(
-            `[WARN][Render] Column definitions are empty for ${targetContainerId}. Attempting to initialize...`
+            `[WARN][Render] Column definitions are empty for ${targetContainerId}.`
         );
-        // 컬럼 초기화 로직 필요 (updateSdBoqColumns 또는 updateDdBoqColumns 호출)
-        // 여기서는 임시로 에러 메시지 표시
         container.innerHTML =
             '<p style="padding: 20px; color: orange;">테이블 컬럼 정보가 초기화되지 않았습니다.</p>';
         return;
@@ -2005,26 +2007,25 @@ function renderBoqTable(
         <thead>
             <tr>`;
     columnsToRender.forEach((column) => {
-        // columnsToRender 사용
-        const displayName = aliasesToUse[column.id] || column.label; // aliasesToUse 사용
+        const displayName = aliasesToUse[column.id] || column.label;
         const thStyle = column.width ? `style="width: ${column.width};"` : '';
-        // [수정] SD 탭에서는 이름 편집 버튼(✏️) 비활성화
         const canEditName =
-            targetContainerId === 'boq-table-container' &&
+            !isSdTab &&
             (column.isDynamic ||
-                ['name', 'unit_price_type_id'].includes(column.id));
-        tableHtml += `<th draggable="${
-            targetContainerId === 'boq-table-container'
-        }" data-column-id="${column.id}" ${thStyle}>
+                ['name', 'unit_price_type_id'].includes(column.id)); // SD 탭은 편집 불가
+        tableHtml += `<th draggable="${!isSdTab}" data-column-id="${
+            column.id
+        }" ${thStyle}>
                         ${displayName}
                         ${canEditName ? '<i class="col-edit-btn">✏️</i>' : ''}
                       </th>`;
     });
     tableHtml += `</tr></thead><tbody>`;
 
-    // --- 3. 단가 기준 드롭다운 옵션 HTML 생성 ---
+    // --- 3. 단가 기준 드롭다운 옵션 HTML 생성 (DD용) ---
     let unitPriceTypeOptionsHtml = '<option value="">-- 기준 선택 --</option>';
-    if (unitPriceTypes && unitPriceTypes.length > 0) {
+    if (!isSdTab && unitPriceTypes && unitPriceTypes.length > 0) {
+        // SD 탭에서는 생성 안 함
         unitPriceTypes.forEach((type) => {
             unitPriceTypeOptionsHtml += `<option value="${type.id}">${type.name}</option>`;
         });
@@ -2039,17 +2040,12 @@ function renderBoqTable(
         let rowHasMissingPrice = node.has_missing_price;
 
         columnsToRender.forEach((column) => {
-            // columnsToRender 사용
             let cellValue = '';
             let cellStyle = column.align ? `text-align: ${column.align};` : '';
 
-            // [수정] SD 탭에서는 단가 기준 드롭다운 렌더링 안 함
-            if (
-                column.id === 'unit_price_type_id' &&
-                targetContainerId === 'boq-table-container'
-            ) {
-                // DD 탭에서만 렌더링
-                // (기존 단가 기준 드롭다운 렌더링 코드 유지)
+            // --- [수정] 단가 기준 열 렌더링 로직 (DD 전용) ---
+            if (column.id === 'unit_price_type_id' && !isSdTab) {
+                // DD 탭에서만
                 let options = unitPriceTypeOptionsHtml;
                 let selectedValue = node.unit_price_type_id || '';
                 if (node.unit_price_type_id === 'various') {
@@ -2071,9 +2067,8 @@ function renderBoqTable(
                                  </select>
                               </td>`;
             }
-            // 다른 컬럼 값 렌더링 (DD/SD 공통)
+            // --- 다른 컬럼 값 렌더링 (DD/SD 공통 처리) ---
             else {
-                // (기존 값 렌더링 코드 유지)
                 let displayValue = '';
                 switch (column.id) {
                     case 'name':
@@ -2083,9 +2078,9 @@ function renderBoqTable(
                         break;
                     case 'quantity':
                     case 'count':
-                        displayValue = node[column.id]; // 숫자
-                        break;
-                    // 비용 관련 컬럼들
+                        displayValue = node[column.id];
+                        break; // 숫자
+                    // 비용 관련 컬럼들 (SD에서는 필터링됨)
                     case 'material_cost_unit':
                     case 'material_cost_total':
                     case 'labor_cost_unit':
@@ -2128,8 +2123,6 @@ function renderBoqTable(
     // --- 5. 테이블 푸터 (총계) 생성 ---
     let footerTds = '';
     columnsToRender.forEach((column) => {
-        // columnsToRender 사용
-        // (기존 총계 코드 유지)
         let cellValue = '';
         let cellStyle = column.align ? `text-align: ${column.align};` : '';
         switch (column.id) {
@@ -2142,6 +2135,7 @@ function renderBoqTable(
             case 'count':
                 cellValue = summaryData.total_count;
                 break;
+            // 비용 관련 (SD 탭에서는 필터링 됨)
             case 'material_cost_total':
                 cellValue = summaryData.total_material_cost;
                 break;
@@ -2172,7 +2166,8 @@ function renderBoqTable(
     );
 
     // --- 6. 드롭다운 초기 값 설정 (DD 탭에서만 실행) ---
-    if (targetContainerId === 'boq-table-container') {
+    if (!isSdTab) {
+        // DD 탭에서만
         container
             .querySelectorAll('.unit-price-type-select')
             .forEach((select) => {
@@ -4111,13 +4106,13 @@ function renderSdResultsTable(predictions) {
  */
 function renderSdPredictionChart(predictions) {
     console.log(
-        '[DEBUG][Render] Rendering/Updating SD prediction chart (grouped bar).'
-    ); // 디버깅
+        '[DEBUG][Render] Rendering/Updating SD prediction chart (distribution style).'
+    );
     const canvas = document.getElementById('sd-prediction-chart');
     if (!canvas) {
         console.warn(
             "[WARN][Render] SD prediction chart canvas '#sd-prediction-chart' not found."
-        ); // 디버깅
+        );
         return;
     }
     const ctx = canvas.getContext('2d');
@@ -4125,7 +4120,7 @@ function renderSdPredictionChart(predictions) {
         console.error(
             '[ERROR][Render] Failed to get 2D context for SD prediction chart.'
         );
-        return; // 캔버스 오류
+        return;
     }
 
     // 예측 데이터 없으면 기존 차트 파괴하고 종료
@@ -4136,113 +4131,316 @@ function renderSdPredictionChart(predictions) {
     ) {
         console.log(
             '[DEBUG][Render] No SD prediction data for chart. Destroying existing chart if any.'
-        ); // 디버깅
+        );
         if (sdPredictionChartInstance) {
             sdPredictionChartInstance.destroy();
             sdPredictionChartInstance = null;
         }
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // 캔버스 내용 지우기
-        // 안내 메시지 표시 (선택 사항)
-        // ctx.font = "14px Arial";
-        // ctx.textAlign = "center";
-        // ctx.fillText("예측 결과 없음", canvas.width / 2, canvas.height / 2);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // ctx.font = "14px Arial"; ctx.textAlign = "center"; ctx.fillText("예측 결과 없음", canvas.width / 2, canvas.height / 2);
         return;
     }
 
+    // --- 데이터 준비 ---
     const labels = Object.keys(predictions);
-    const minData = labels.map(
-        (label) => predictions[label]?.min ?? predictions[label]?.predicted ?? 0
-    ); // min 없으면 predicted, 그것도 없으면 0
-    const predictedData = labels.map(
-        (label) => predictions[label]?.predicted ?? 0
-    );
-    const maxData = labels.map(
-        (label) => predictions[label]?.max ?? predictions[label]?.predicted ?? 0
-    ); // max 없으면 predicted, 그것도 없으면 0
+    const chartData = labels.map((feature) => {
+        const result = predictions[feature];
+        const predicted =
+            typeof result?.predicted === 'number' ? result.predicted : 0;
+        const minVal = typeof result?.min === 'number' ? result.min : predicted;
+        const maxVal = typeof result?.max === 'number' ? result.max : predicted;
 
-    console.log('[DEBUG][Render] Chart Data:', {
-        labels,
-        minData,
-        predictedData,
-        maxData,
-    }); // 디버깅
+        // 근사 표준편차 계산 (±2s 범위로 가정)
+        const approxStdDev = (maxVal - minVal) / 4.0;
 
-    // 기존 차트 인스턴스가 있으면 파괴
+        return {
+            x: feature, // x축 레이블
+            m: predicted,
+            s: approxStdDev,
+            min: minVal, // 툴팁 표시용
+            max: maxVal, // 툴팁 표시용
+        };
+    });
+
+    console.log('[DEBUG][Render] Chart Data (distribution style):', chartData);
+
+    // --- 차트 생성/업데이트 ---
     if (sdPredictionChartInstance) {
         console.log(
             '[DEBUG][Render] Destroying previous SD prediction chart instance.'
-        ); // 디버깅
+        );
         sdPredictionChartInstance.destroy();
     }
 
     console.log(
-        '[DEBUG][Render] Creating new SD prediction chart instance (grouped bar).'
-    ); // 디버깅
+        '[DEBUG][Render] Creating new SD prediction chart instance (distribution style).'
+    );
     try {
         sdPredictionChartInstance = new Chart(ctx, {
-            type: 'bar',
+            type: 'line', // 라인 차트로 변경
             data: {
-                labels: labels,
                 datasets: [
                     {
-                        label: '최소 예측',
-                        data: minData,
-                        backgroundColor: 'rgba(255, 159, 64, 0.6)', // 주황색 계열
-                        borderColor: 'rgba(255, 159, 64, 1)',
-                        borderWidth: 1,
-                    },
-                    {
-                        label: '평균 예측',
-                        data: predictedData,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)', // 청록색 계열
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1,
-                    },
-                    {
-                        label: '최대 예측',
-                        data: maxData,
-                        backgroundColor: 'rgba(153, 102, 255, 0.6)', // 보라색 계열
-                        borderColor: 'rgba(153, 102, 255, 1)',
-                        borderWidth: 1,
+                        label: '예측 분포 (근사치)',
+                        // 각 포인트에 필요한 모든 데이터 저장
+                        data: chartData,
+                        parsing: false, // data 객체를 직접 사용
+                        // --- 스타일링 ---
+                        borderColor: 'rgba(54, 162, 235, 1)', // 라인 색상 (파랑)
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)', // 영역 채우기 색상
+                        fill: 'origin', // x축부터 라인까지 채우기
+                        tension: 0.4, // 곡선 부드럽게
+                        pointStyle: 'circle', // 포인트 모양
+                        pointRadius: 5, // 포인트 크기
+                        pointHoverRadius: 8,
                     },
                 ],
             },
             options: {
-                // indexAxis: 'y', // 항목이 많으면 가로 막대 그래프 사용
                 responsive: true,
-                maintainAspectRatio: false, // 컨테이너 크기에 맞춤
+                maintainAspectRatio: false,
+                parsing: false, // data 객체를 직접 사용하도록 전역 설정
                 plugins: {
-                    legend: { position: 'top' }, // 범례 표시
+                    legend: { display: false }, // 범례 숨김 (단일 데이터셋)
                     title: {
                         display: true,
-                        text: '항목별 예측 결과 (최소/평균/최대)',
+                        text: '항목별 예측 분포 (평균 및 근사 표준편차)',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            // 툴팁 내용 커스터마이징
+                            label: function (context) {
+                                const dataPoint = context.raw;
+                                if (!dataPoint) return '';
+                                return [
+                                    `평균(m): ${dataPoint.m?.toLocaleString(
+                                        undefined,
+                                        {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        }
+                                    )}`,
+                                    `근사 StdDev(s): ${dataPoint.s?.toLocaleString(
+                                        undefined,
+                                        {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        }
+                                    )}`,
+                                    `(범위: ${dataPoint.min?.toLocaleString(
+                                        undefined,
+                                        {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        }
+                                    )} ~ ${dataPoint.max?.toLocaleString(
+                                        undefined,
+                                        {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                        }
+                                    )})`,
+                                ];
+                            },
+                        },
+                    },
+                    // --- Annotation 플러그인 설정 ---
+                    annotation: {
+                        annotations: labels.reduce((acc, feature, index) => {
+                            const dataPoint = chartData[index];
+                            if (!dataPoint) return acc;
+                            const m = dataPoint.m;
+                            const s = dataPoint.s;
+
+                            // 각 feature에 대해 m, m±s, m±2s 선 추가
+                            acc[`vline_m_${index}`] = {
+                                type: 'line',
+                                xMin: index,
+                                xMax: index,
+                                yMin: m - 2.5 * s,
+                                yMax: m + 2.5 * s,
+                                borderColor: 'red',
+                                borderWidth: 2,
+                                label: {
+                                    content: 'm',
+                                    display: true,
+                                    position: 'start',
+                                    yAdjust: -10,
+                                },
+                            };
+                            acc[`vline_p1s_${index}`] = {
+                                type: 'line',
+                                xMin: index,
+                                xMax: index,
+                                yMin: m + 0.5 * s,
+                                yMax: m + 1.5 * s,
+                                borderColor: 'orange',
+                                borderWidth: 1,
+                                borderDash: [6, 6],
+                                label: {
+                                    content: '+1s',
+                                    display: true,
+                                    position: 'start',
+                                    yAdjust: -10,
+                                },
+                            };
+                            acc[`vline_m1s_${index}`] = {
+                                type: 'line',
+                                xMin: index,
+                                xMax: index,
+                                yMin: m - 1.5 * s,
+                                yMax: m - 0.5 * s,
+                                borderColor: 'orange',
+                                borderWidth: 1,
+                                borderDash: [6, 6],
+                                label: {
+                                    content: '-1s',
+                                    display: true,
+                                    position: 'start',
+                                    yAdjust: -10,
+                                },
+                            };
+                            acc[`vline_p2s_${index}`] = {
+                                type: 'line',
+                                xMin: index,
+                                xMax: index,
+                                yMin: m + 1.5 * s,
+                                yMax: m + 2.5 * s,
+                                borderColor: 'green',
+                                borderWidth: 1,
+                                borderDash: [6, 6],
+                                label: {
+                                    content: '+2s',
+                                    display: true,
+                                    position: 'start',
+                                    yAdjust: -10,
+                                },
+                            };
+                            acc[`vline_m2s_${index}`] = {
+                                type: 'line',
+                                xMin: index,
+                                xMax: index,
+                                yMin: m - 2.5 * s,
+                                yMax: m - 1.5 * s,
+                                borderColor: 'green',
+                                borderWidth: 1,
+                                borderDash: [6, 6],
+                                label: {
+                                    content: '-2s',
+                                    display: true,
+                                    position: 'start',
+                                    yAdjust: -10,
+                                },
+                            };
+                            // --- 중요: Annotation 위치 조정 ---
+                            // Y 스케일에서 실제 값(m, m±s 등)에 해당하는 위치에 선을 그리는 대신,
+                            // X 스케일(카테고리)에서 해당 feature 위치에 그리고, yMin/yMax로 선의 길이를 조절합니다.
+                            // 라벨 위치 등은 세부 조정이 필요할 수 있습니다.
+                            // 주의: 이 방식은 완벽한 정규분포 곡선이 아니며, 위치 표시를 위한 시각적 표현입니다.
+
+                            // ▼▼▼ [수정] Annotation을 X축 기준으로 그리도록 수정 ▼▼▼
+                            const createAnnotationLine = (
+                                id,
+                                value,
+                                color,
+                                label,
+                                yAdjust = 0,
+                                borderDash = []
+                            ) => ({
+                                type: 'line',
+                                scaleID: 'y', // y축 기준선
+                                value: value, // y 값
+                                borderColor: color,
+                                borderWidth: id.includes('_m_') ? 2 : 1, // 평균선은 굵게
+                                borderDash: borderDash,
+                                label: {
+                                    content: label,
+                                    display: true,
+                                    position: 'start', // 선 왼쪽에 라벨 표시
+                                    xAdjust:
+                                        (index - labels.length / 2 + 0.5) * 50, // X 위치 조절 (가정)
+                                    yAdjust: yAdjust,
+                                    backgroundColor: 'rgba(255,255,255,0.7)',
+                                    color: color,
+                                    font: { size: 10 },
+                                },
+                            });
+                            // 기존 acc[`vline...`] 코드 대신 아래 코드로 교체
+                            acc[`hline_m_${index}`] = createAnnotationLine(
+                                `hline_m_${index}`,
+                                m,
+                                'red',
+                                'm'
+                            );
+                            acc[`hline_p1s_${index}`] = createAnnotationLine(
+                                `hline_p1s_${index}`,
+                                m + s,
+                                'orange',
+                                '+1s',
+                                -10,
+                                [6, 6]
+                            );
+                            acc[`hline_m1s_${index}`] = createAnnotationLine(
+                                `hline_m1s_${index}`,
+                                m - s,
+                                'orange',
+                                '-1s',
+                                10,
+                                [6, 6]
+                            );
+                            acc[`hline_p2s_${index}`] = createAnnotationLine(
+                                `hline_p2s_${index}`,
+                                m + 2 * s,
+                                'green',
+                                '+2s',
+                                -10,
+                                [6, 6]
+                            );
+                            acc[`hline_m2s_${index}`] = createAnnotationLine(
+                                `hline_m2s_${index}`,
+                                m - 2 * s,
+                                'green',
+                                '-2s',
+                                10,
+                                [6, 6]
+                            );
+                            // ▲▲▲ [수정] 여기까지 ▲▲▲
+
+                            return acc;
+                        }, {}),
                     },
                 },
                 scales: {
                     x: {
+                        // type: 'category' (기본값)
                         title: {
                             display: true,
                             text: '출력 항목 (Output Feature)',
                         },
                     },
                     y: {
-                        beginAtZero: true,
+                        beginAtZero: false, // 0에서 시작 안 함 (음수 가능성)
                         title: {
                             display: true,
                             text: '예측 값 (Predicted Value)',
                         },
+                        // Y축 범위를 min/max 값 기준으로 동적 조절 (약간의 여유 추가)
+                        suggestedMin:
+                            Math.min(...chartData.map((d) => d.min)) * 0.9,
+                        suggestedMax:
+                            Math.max(...chartData.map((d) => d.max)) * 1.1,
                     },
                 },
             },
         });
         console.log(
-            '[DEBUG][Render] SD prediction chart (grouped bar) rendered/updated successfully.'
-        ); // 디버깅
+            '[DEBUG][Render] SD prediction chart (distribution style) rendered/updated successfully.'
+        );
     } catch (e) {
         console.error(
             '[ERROR][Render] Failed to create SD prediction chart:',
             e
-        ); // 디버깅
+        );
         showToast('결과 차트를 그리는 중 오류 발생.', 'error');
     }
 }
@@ -4446,3 +4644,243 @@ function resetTrainingUI() {
         '[DEBUG][resetTrainingUI] Training UI and state variables reset.'
     );
 }
+// connections/static/connections/ui.js
+
+// ... (다른 함수들 유지) ...
+
+// ▼▼▼ [추가] SD 연관 항목 목록 렌더링 함수 ▼▼▼
+/**
+ * SD 탭 중간 패널에 연관된 산출항목 목록 테이블을 렌더링합니다.
+ * @param {Array<string>} itemIds - 표시할 CostItem ID 목록
+ */
+function renderSdAssociatedItemsTable(itemIds) {
+    const container = document.getElementById('sd-item-list-container');
+    console.log(
+        `[DEBUG][Render] Rendering SD associated items list for ${itemIds?.length} IDs.`
+    );
+
+    if (!container) {
+        console.error(
+            '[ERROR][Render] SD item list container #sd-item-list-container not found.'
+        );
+        return;
+    }
+    if (!itemIds || itemIds.length === 0) {
+        container.innerHTML =
+            '<p style="padding: 15px;">왼쪽 테이블에서 그룹 행을 선택하세요.</p>';
+        // 상세 속성 패널도 초기화
+        renderSdItemProperties(null);
+        return;
+    }
+
+    // loadedSdCostItems 전역 변수에서 필요한 데이터 필터링
+    const itemsToRender = (loadedSdCostItems || []).filter((item) =>
+        itemIds.includes(item.id)
+    );
+    if (itemsToRender.length === 0) {
+        container.innerHTML =
+            '<p style="padding: 15px;">선택된 그룹에 포함된 산출항목 데이터를 찾을 수 없습니다.</p>';
+        renderSdItemProperties(null);
+        return;
+    }
+
+    // 표시할 컬럼 정의 (요청사항 반영)
+    const headers = [
+        { id: 'cost_code_name', label: '산출항목' },
+        { id: 'quantity', label: '수량', align: 'right' },
+        { id: 'linked_member_name', label: '연관 부재' },
+        { id: 'linked_raw_name', label: 'BIM 원본 객체' },
+        { id: 'actions', label: 'BIM 연동', align: 'center' },
+    ];
+
+    let tableHtml = `<table class="boq-item-list-table"><thead><tr>`; // DD와 동일한 클래스 사용
+    headers.forEach(
+        (h) =>
+            (tableHtml += `<th style="text-align: ${h.align || 'left'};">${
+                h.label
+            }</th>`)
+    );
+    tableHtml += `</tr></thead><tbody>`;
+
+    itemsToRender.forEach((item) => {
+        // 데이터 조회 (DD 테이블 렌더링 로직 재활용)
+        const costItemName = item.cost_code_name || '(이름 없는 항목)';
+        const qtyStr = parseFloat(item.quantity || 0).toFixed(4); // 숫자 변환 후 포맷팅
+
+        const member = item.quantity_member_id
+            ? loadedQuantityMembers.find(
+                  (m) => m.id === item.quantity_member_id
+              )
+            : null;
+        const memberName = member
+            ? member.name || '(이름 없는 부재)'
+            : '(연관 부재 없음)';
+
+        const rawElement = member?.raw_element_id
+            ? allRevitData.find((el) => el.id === member.raw_element_id)
+            : null;
+        const rawElementName = rawElement
+            ? rawElement.raw_data?.Name || '(이름 없는 원본)'
+            : '(BIM 원본 없음)';
+
+        let bimButtonHtml = '';
+        if (rawElement) {
+            bimButtonHtml = `<button class="select-in-client-btn-detail" data-cost-item-id="${item.id}" title="연동 프로그램에서 선택 확인">👁️</button>`;
+        }
+
+        tableHtml += `<tr data-item-id="${item.id}">`; // 행 선택 가능하도록 data-item-id 추가
+        headers.forEach((h) => {
+            let value = '';
+            let style = h.align ? `style="text-align: ${h.align};"` : '';
+            switch (h.id) {
+                case 'cost_code_name':
+                    value = costItemName;
+                    break;
+                case 'quantity':
+                    value = qtyStr;
+                    break;
+                case 'linked_member_name':
+                    value = memberName;
+                    break;
+                case 'linked_raw_name':
+                    value = rawElementName;
+                    break;
+                case 'actions':
+                    value = bimButtonHtml;
+                    style = `style="text-align: center;"`;
+                    break;
+                default:
+                    value = item[h.id] || '';
+            }
+            tableHtml += `<td ${style}>${escapeHtml(value)}</td>`;
+        });
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML = tableHtml;
+    console.log(
+        `[DEBUG][Render] SD associated items list rendered (${itemsToRender.length} items).`
+    );
+
+    // 첫 번째 항목의 상세 정보 표시 (선택사항) 또는 초기화
+    renderSdItemProperties(null); // 초기에는 상세 정보 비움
+}
+// ▲▲▲ [추가] 여기까지 ▲▲▲
+// connections/static/connections/ui.js
+
+// ... (다른 함수들 유지) ...
+
+// ▼▼▼ [추가] SD 상세 속성 렌더링 함수 ▼▼▼
+/**
+ * SD 탭 오른쪽 패널에 선택된 항목의 상세 속성(부재, 일람부호, BIM 원본)을 렌더링합니다.
+ * DD의 renderBoqItemProperties 로직을 재사용하되, 대상 컨테이너 ID만 다릅니다.
+ * @param {String | null} itemId - 상세 정보를 표시할 CostItem의 ID
+ */
+function renderSdItemProperties(itemId) {
+    console.log(
+        `[DEBUG][Render] Rendering SD item properties for Item ID: ${itemId}`
+    );
+
+    // 중간 목록에서 현재 선택된 행 강조 (선택 사항)
+    const listContainer = document.getElementById('sd-item-list-container');
+    if (listContainer) {
+        listContainer.querySelectorAll('tr[data-item-id]').forEach((row) => {
+            row.classList.toggle('selected', row.dataset.itemId === itemId);
+        });
+    }
+
+    // 오른쪽 상세 패널의 컨테이너들
+    const memberContainer = document.getElementById(
+        'sd-details-member-container'
+    );
+    const markContainer = document.getElementById('sd-details-mark-container');
+    const rawContainer = document.getElementById('sd-details-raw-container');
+
+    // 패널 초기화 (itemId가 null일 경우)
+    if (!itemId) {
+        const initialMsg = '<p>중간 목록에서 항목을 선택하세요.</p>';
+        if (memberContainer) memberContainer.innerHTML = initialMsg;
+        if (markContainer) markContainer.innerHTML = initialMsg;
+        if (rawContainer) rawContainer.innerHTML = initialMsg;
+        console.log('[DEBUG][Render] Cleared SD details panel.');
+        return;
+    }
+
+    // [수정] loadedCostItems 대신 loadedSdCostItems 사용
+    const costItem = (loadedSdCostItems || []).find(
+        (item) => item.id.toString() === itemId.toString()
+    );
+    if (!costItem) {
+        const errorMsg = '<p>항목 정보를 찾을 수 없습니다.</p>';
+        if (memberContainer) memberContainer.innerHTML = errorMsg;
+        if (markContainer) markContainer.innerHTML = '';
+        if (rawContainer) rawContainer.innerHTML = '';
+        console.warn(
+            `[WARN][Render] SD CostItem data not found for ID: ${itemId}`
+        );
+        return;
+    }
+
+    const member = costItem.quantity_member_id
+        ? (loadedQuantityMembers || []).find(
+              (m) => m.id.toString() === costItem.quantity_member_id.toString()
+          )
+        : null;
+
+    // 1. 부재 속성 렌더링 (renderPropertyTable 헬퍼 사용 - ui.js에 있어야 함)
+    if (memberContainer) {
+        renderPropertyTable(memberContainer, member?.properties, '부재 속성');
+    }
+
+    // 2. 일람부호 속성 렌더링
+    const mark = member?.member_mark_id
+        ? (loadedMemberMarks || []).find(
+              (m) => m.id.toString() === member.member_mark_id.toString()
+          )
+        : null;
+    if (markContainer) {
+        renderPropertyTable(
+            markContainer,
+            mark?.properties,
+            mark ? `${mark.mark} (일람부호 속성)` : '연관된 일람부호 없음'
+        );
+    }
+
+    // 3. BIM 원본 데이터 렌더링
+    const rawElement = member?.raw_element_id
+        ? (allRevitData || []).find(
+              (el) => el.id.toString() === member.raw_element_id.toString()
+          )
+        : null;
+    const rawProperties = {};
+    if (rawElement?.raw_data) {
+        const rawData = rawElement.raw_data;
+        for (const key in rawData) {
+            if (
+                !['Parameters', 'TypeParameters'].includes(key) &&
+                typeof rawData[key] !== 'object'
+            ) {
+                rawProperties[key] = rawData[key];
+            }
+        }
+        for (const key in rawData.TypeParameters || {})
+            rawProperties[`Type.${key}`] = rawData.TypeParameters[key];
+        for (const key in rawData.Parameters || {})
+            rawProperties[key] = rawData.Parameters[key];
+    }
+    if (rawContainer) {
+        renderPropertyTable(
+            rawContainer,
+            rawProperties,
+            rawElement
+                ? `${rawElement.raw_data?.Name || '원본 객체'} (BIM 원본)`
+                : '연관된 BIM 원본 없음'
+        );
+    }
+
+    console.log(
+        `[DEBUG][Render] SD details panel rendered for Item ID: ${itemId}`
+    );
+}
+// ▲▲▲ [추가] 여기까지 ▲▲▲

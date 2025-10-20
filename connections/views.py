@@ -4661,10 +4661,9 @@ def download_temp_file_api(request):
 
 # connections/views.py
 
-# ▼▼▼ [교체] 기존 predict_sd_cost 함수 전체를 아래 코드로 교체 ▼▼▼
 @require_http_methods(["POST"])
 def predict_sd_cost(request, project_id, model_id):
-    """(수정) 선택된 AI 모델과 입력을 사용해 개산견적 비용 예측 및 오차범위 계산"""
+    """(수정) 선택된 AI 모델과 입력을 사용해 개산견적 비용 예측 및 오차범위 계산 (Test Set MAPE 사용)"""
     print(f"\n[DEBUG][predict_sd_cost] Prediction request for project: {project_id}, model: {model_id}")
     temp_model_path = None # 임시 파일 경로 변수 초기화
     try:
@@ -4673,11 +4672,16 @@ def predict_sd_cost(request, project_id, model_id):
         print(f"[DEBUG][predict_sd_cost] Input data received: {input_data_dict}")
 
         metadata = model_obj.metadata
+        if not isinstance(metadata, dict): # 메타데이터가 dict 타입인지 확인
+             print("[ERROR][predict_sd_cost] Metadata is not a valid dictionary.")
+             metadata = {} # 오류 방지를 위해 빈 dict로 초기화
+
         input_features = metadata.get('input_features')
         output_features = metadata.get('output_features')
-        performance_metrics = metadata.get('performance', {}) # 성능 메트릭 가져오기
-        # 오차 계산에 사용할 loss 값 (없으면 0으로 간주)
-        loss_value = performance_metrics.get('final_validation_loss', 0.0)
+        # ▼▼▼ [수정] Test Set 평가 결과 가져오기 ▼▼▼
+        test_evaluation = metadata.get('test_set_evaluation', {}) # 없으면 빈 dict
+        print(f"[DEBUG][predict_sd_cost] Test set evaluation data from metadata: {test_evaluation}")
+        # ▲▲▲ [수정] 여기까지 ▲▲▲
 
         if not input_features or not output_features:
             print("[ERROR][predict_sd_cost] Model metadata is incomplete (missing features).")
@@ -4691,8 +4695,9 @@ def predict_sd_cost(request, project_id, model_id):
                 print(f"[ERROR][predict_sd_cost] Missing input value for feature: {feature}")
                 return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'이(가) 누락되었습니다."}, status=400)
             try:
-                input_values.append(float(value))
-            except (ValueError, TypeError): # TypeError 추가
+                # [수정] 빈 문자열도 0으로 처리
+                input_values.append(float(value) if value != '' else 0.0)
+            except (ValueError, TypeError):
                 print(f"[ERROR][predict_sd_cost] Invalid numeric value for feature '{feature}': {value}")
                 return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'은(는) 숫자여야 합니다."}, status=400)
 
@@ -4701,86 +4706,94 @@ def predict_sd_cost(request, project_id, model_id):
 
         # 입력 정규화 (학습 시 사용된 경우)
         scaler_X_params = metadata.get('scaler_X_params')
-        if scaler_X_params and scaler_X_params.get('mean_') is not None and scaler_X_params.get('scale_') is not None:
+        # [수정] scaler_X_params 구조 확인 강화 (get_params() 결과가 아닌 dict 가정)
+        if isinstance(scaler_X_params, dict) and 'mean_' in scaler_X_params and 'scale_' in scaler_X_params:
             print("[DEBUG][predict_sd_cost] Applying input scaler...")
             scaler_X = StandardScaler()
-            # 저장된 mean/scale 값 로드 (길이 체크 추가)
             mean_ = np.array(scaler_X_params['mean_'])
             scale_ = np.array(scaler_X_params['scale_'])
             if len(mean_) == len(input_features) and len(scale_) == len(input_features):
                 scaler_X.mean_ = mean_
                 scaler_X.scale_ = scale_
+                # [수정] n_features_in_, n_samples_seen_ 설정 (선택적)
+                if 'n_features_in_' in scaler_X_params:
+                     scaler_X.n_features_in_ = scaler_X_params['n_features_in_']
+                if 'n_samples_seen_' in scaler_X_params:
+                     scaler_X.n_samples_seen_ = scaler_X_params['n_samples_seen_']
                 try:
                     input_array = scaler_X.transform(input_array)
                     print(f"[DEBUG][predict_sd_cost] Scaled input array: {input_array}")
-                except ValueError as e:
-                    print(f"[ERROR][predict_sd_cost] Error applying scaler transform: {e}. Check feature count.")
-                    # 오류 발생 시 정규화 없이 진행하거나 에러 반환 (여기서는 에러 반환)
+                except Exception as e: # ValueError 외 일반 예외 처리
+                    print(f"[ERROR][predict_sd_cost] Error applying scaler transform: {e}. Check feature count or scaler params.")
                     return JsonResponse({'status': 'error', 'message': f'입력값 정규화 중 오류 발생: {e}'}, status=500)
             else:
                 print("[WARN][predict_sd_cost] Scaler parameters length mismatch. Skipping scaling.")
         else:
-             print("[DEBUG][predict_sd_cost] No scaler parameters found or incomplete. Skipping scaling.")
-
+             print("[DEBUG][predict_sd_cost] No valid scaler parameters found in metadata. Skipping scaling.")
 
         # 모델 로드 (DB의 바이너리 데이터로부터 임시 파일 사용)
         print("[DEBUG][predict_sd_cost] Loading Keras model from database binary data...")
         temp_model_path = os.path.join(TEMP_UPLOAD_DIR, f"temp_predict_{model_id}.h5")
-        with open(temp_model_path, 'wb') as f:
-            f.write(model_obj.h5_file_content)
-        print(f"[DEBUG][predict_sd_cost] Model content written to temporary file: {temp_model_path}")
-
-        # --- [핵심 수정] compile=False 옵션 추가 ---
         try:
-            model = models.load_model(temp_model_path, compile=False) # <<< compile=False 추가
-            print("[DEBUG][predict_sd_cost] Model loaded successfully using models.load_model with compile=False.")
-        except Exception as load_err: # 로드 실패 시 추가 디버깅
-            print(f"[ERROR][predict_sd_cost] Failed to load model even with compile=False: {load_err}")
+            with open(temp_model_path, 'wb') as f:
+                f.write(model_obj.h5_file_content)
+            print(f"[DEBUG][predict_sd_cost] Model content written to temporary file: {temp_model_path}")
+
+            # 모델 로드 (compile=False 유지)
+            model = models.load_model(temp_model_path, compile=False)
+            print("[DEBUG][predict_sd_cost] Model loaded successfully.")
+        except Exception as load_err:
+            print(f"[ERROR][predict_sd_cost] Failed to load model: {load_err}")
             import traceback
             print(traceback.format_exc())
-            raise load_err # 에러를 다시 발생시켜 아래 except 블록에서 처리되도록 함
-        # --- [핵심 수정] 여기까지 ---
+            return JsonResponse({'status': 'error', 'message': f'모델 파일 로딩 중 오류 발생: {load_err}'}, status=500)
 
         # 예측 수행
         predictions_raw = model.predict(input_array)
         print(f"[DEBUG][predict_sd_cost] Raw predictions (shape {predictions_raw.shape}): {predictions_raw}")
-        
-        # 예측 결과 후처리 (정규화 역변환 등 - 여기서는 생략)
-        # scaler_y_params = metadata.get('scaler_y_params')
-        # if scaler_y_params:
-        #     scaler_y = StandardScaler()
-        #     scaler_y.mean_ = np.array(scaler_y_params['mean_'])
-        #     scaler_y.scale_ = np.array(scaler_y_params['scale_'])
-        #     predictions = scaler_y.inverse_transform(predictions_raw)
-        # else:
+
+        # 예측 결과 후처리 (여기서는 생략)
         predictions = predictions_raw
 
-        # 결과 딕셔너리 생성 및 오차 범위 계산
+        # 결과 딕셔너리 생성 및 오차 범위 계산 (MAPE 사용)
         results = {}
-        if predictions.ndim == 2 and predictions.shape[0] == 1: # 결과가 (1, num_outputs) 형태인지 확인
-            prediction_values = predictions[0] # 첫 번째 (유일한) 샘플의 예측값 사용
+        if predictions.ndim == 2 and predictions.shape[0] == 1:
+            prediction_values = predictions[0]
             if len(prediction_values) == len(output_features):
                 for i, feature in enumerate(output_features):
                     pred_value = float(prediction_values[i]) # NumPy float -> Python float
-                    # loss_value를 백분율 오차로 간주하여 범위 계산 (단순 방식)
-                    # loss 값이 너무 크거나 작으면 범위가 비현실적일 수 있음
-                    error_margin = abs(pred_value * loss_value) if loss_value > 0 else 0.0
+
+                    # ▼▼▼ [수정] MAPE 값 가져오기 및 범위 계산 ▼▼▼
+                    feature_eval = test_evaluation.get(feature, {}) # 해당 피처 평가 결과
+                    mape_percent = feature_eval.get('mean_ape_percent', 0.0) # 없으면 0.0 사용
+                    # 만약 overall MAPE를 사용하고 싶다면:
+                    # overall_eval = test_evaluation.get('overall', {})
+                    # mape_percent = overall_eval.get('mean_ape_percent', 0.0)
+
+                    # MAPE(%)를 소수점 비율로 변환
+                    mape_ratio = mape_percent / 100.0 if mape_percent > 0 else 0.0
+                    error_margin = abs(pred_value * mape_ratio)
+
                     min_value = pred_value - error_margin
                     max_value = pred_value + error_margin
+                    # ▲▲▲ [수정] 여기까지 ▲▲▲
+
                     results[feature] = {
                         'predicted': pred_value,
                         'min': min_value,
                         'max': max_value,
-                        'loss_used': loss_value # 계산에 사용된 loss 값 포함
+                        # ▼▼▼ [수정] 사용된 지표 이름 및 값 변경 ▼▼▼
+                        'metric_used_for_range': 'Test Set MAPE (%)',
+                        'metric_value': mape_percent
+                        # ▲▲▲ [수정] 여기까지 ▲▲▲
                     }
-                print(f"[DEBUG][predict_sd_cost] Formatted prediction results with range: {results}")
+                print(f"[DEBUG][predict_sd_cost] Formatted prediction results with range (based on Test Set MAPE): {results}")
             else:
                 print(f"[ERROR][predict_sd_cost] Prediction output dimension ({len(prediction_values)}) mismatch with metadata ({len(output_features)}).")
                 return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 차원이 메타데이터와 일치하지 않습니다.'}, status=500)
         else:
              print(f"[ERROR][predict_sd_cost] Unexpected prediction output shape: {predictions.shape}")
              return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 형식이 예상과 다릅니다.'}, status=500)
-
 
         return JsonResponse({'status': 'success', 'predictions': results})
 
@@ -4790,9 +4803,6 @@ def predict_sd_cost(request, project_id, model_id):
     except json.JSONDecodeError:
         print("[ERROR][predict_sd_cost] Invalid JSON input data.")
         return JsonResponse({'status': 'error', 'message': '잘못된 입력 데이터 형식입니다.'}, status=400)
-    except FileNotFoundError as e:
-         print(f"[ERROR][predict_sd_cost] Model file loading error: {e}")
-         return JsonResponse({'status': 'error', 'message': f'모델 파일 로딩 중 오류 발생 (파일 경로 확인 필요): {e}'}, status=500)
     except Exception as e:
         print(f"[ERROR][predict_sd_cost] Prediction error: {e}")
         import traceback
@@ -4804,6 +4814,6 @@ def predict_sd_cost(request, project_id, model_id):
             try:
                 os.remove(temp_model_path)
                 print(f"[DEBUG][predict_sd_cost] Temporary model file deleted: {temp_model_path}")
-            except Exception as e:
-                print(f"[WARN][predict_sd_cost] Failed to delete temporary model file {temp_model_path}: {e}")
+            except Exception as e_remove:
+                print(f"[WARN][predict_sd_cost] Failed to delete temporary model file {temp_model_path}: {e_remove}")
 # ▲▲▲ [교체] 여기까지 ▲▲▲

@@ -799,13 +799,13 @@ function setupSchematicEstimationListeners() {
     // --- 상단 패널 (모델 선택, 입력, 예측) ---
     document
         .getElementById('sd-model-select')
-        ?.addEventListener('change', handleSdModelSelection); // 모델 선택
+        ?.addEventListener('change', handleSdModelSelection);
     document
         .getElementById('sd-input-fields')
-        ?.addEventListener('input', handleSdInputChange); // 입력값 변경 (직접 or 연동)
+        ?.addEventListener('input', handleSdInputChange);
     document
         .getElementById('sd-predict-btn')
-        ?.addEventListener('click', runSdPrediction); // 예측 실행
+        ?.addEventListener('click', runSdPrediction);
 
     // --- 하단 패널 (BOQ 테이블 및 컨트롤) ---
     // 그룹핑 추가 버튼
@@ -813,71 +813,110 @@ function setupSchematicEstimationListeners() {
         .getElementById('add-sd-group-level-btn')
         ?.addEventListener('click', addSdGroupingLevel);
     // 그룹핑 레벨 변경/제거 시 테이블 다시 그리기 (이벤트 위임)
-    document
-        .getElementById('sd-grouping-controls')
-        ?.addEventListener('change', generateSdBoqReport);
-    document
-        .getElementById('sd-grouping-controls')
-        ?.addEventListener('click', (e) => {
+    const sdGroupingControls = document.getElementById('sd-grouping-controls');
+    if (sdGroupingControls && !sdGroupingControls.dataset.listenerAttached) {
+        sdGroupingControls.addEventListener('change', generateSdBoqReport);
+        sdGroupingControls.addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-sd-group-level-btn')) {
-                generateSdBoqReport(); // 제거 후 바로 다시 그리기
+                // 제거 후에는 자동으로 change 이벤트가 발생하지 않으므로 직접 호출
+                generateSdBoqReport();
             }
         });
+        sdGroupingControls.dataset.listenerAttached = 'true';
+    }
 
-    // 표시 필드 선택 변경 시 테이블 다시 그리기 (이벤트 위임)
-    document
-        .getElementById('sd-display-fields-container')
-        ?.addEventListener('change', (e) => {
-            if (e.target.classList.contains('sd-display-field-cb')) {
-                // [수정] 표시 필드 변경 시에는 집계 자체를 다시 할 필요는 없고,
-                // 현재 로드된 데이터 기준으로 테이블만 다시 그리면 됨 (최적화)
-                // generateSdBoqReport(); // 대신 renderBoqTable 호출
-                const tableContainer =
-                    document.getElementById('sd-table-container');
-                const tableData =
-                    tableContainer.querySelector('table')?.dataset.tableData;
-                if (tableData) {
-                    try {
-                        const parsedData = JSON.parse(tableData);
-                        // [핵심] SD용 컬럼 상태 업데이트 및 렌더링
-                        updateSdBoqColumns(); // 현재 체크박스 상태로 SD용 컬럼 목록 업데이트
-                        renderBoqTable(
-                            parsedData.report,
-                            parsedData.summary,
-                            parsedData.unitPriceTypes,
-                            'sd-table-container'
-                        ); // SD 컨테이너 타겟
-                        setupSdBoqTableInteractions(); // SD 테이블 상호작용 재설정
-                        console.log(
-                            '[DEBUG][SD Listener] Display fields changed, rerendered SD BOQ table.'
-                        );
-                    } catch (e) {
-                        console.error(
-                            '[ERROR][SD Listener] Failed to parse or rerender SD table on display field change:',
-                            e
-                        );
-                        generateSdBoqReport(); // 파싱 실패 시 안전하게 전체 재집계
-                    }
-                } else {
-                    console.warn(
-                        '[WARN][SD Listener] Cannot find table data to rerender on display field change.'
-                    );
-                    generateSdBoqReport(); // 데이터 없으면 전체 재집계
-                }
-            }
-        });
+    // 표시 필드 선택 변경 시 (리스너는 이제 필요 없음, generateSdBoqReport에서 처리)
+    // document.getElementById('sd-display-fields-container')?.addEventListener('change', ...);
 
-    // BIM 연동 버튼
+    // BIM 연동 버튼 (왼쪽 테이블 헤더)
     document
         .getElementById('sd-select-in-client-btn')
-        ?.addEventListener('click', handleSdBoqSelectInClient);
+        ?.addEventListener('click', handleSdBoqSelectInClient); // SD용 함수 호출
 
-    // [추가] SD 테이블 자체의 클릭 이벤트 (행 선택 등)
-    document
-        .getElementById('sd-table-container')
-        ?.addEventListener('click', handleSdBoqTableClick); // 행 선택 등 처리 함수
+    // 하단 왼쪽 테이블 자체의 클릭 이벤트 (행 선택 -> 중간 목록 업데이트)
+    const sdTableContainer = document.getElementById('sd-table-container');
+    if (sdTableContainer && !sdTableContainer.dataset.clickListenerAttached) {
+        sdTableContainer.addEventListener('click', handleSdBoqTableClick); // SD용 핸들러 호출
+        sdTableContainer.dataset.clickListenerAttached = 'true';
+    }
+
+    // ▼▼▼ [추가] 하단 중간 목록 클릭 이벤트 리스너 ▼▼▼
+    const sdItemListContainer = document.getElementById(
+        'sd-item-list-container'
+    );
+    if (
+        sdItemListContainer &&
+        !sdItemListContainer.dataset.clickListenerAttached
+    ) {
+        sdItemListContainer.addEventListener(
+            'click',
+            handleSdAssociatedItemClick
+        ); // 새로 추가된 핸들러 호출
+        sdItemListContainer.dataset.clickListenerAttached = 'true';
+    }
+    // ▲▲▲ [추가] 여기까지 ▲▲▲
+
+    // ▼▼▼ [추가] 하단 오른쪽 상세 속성 패널 탭 클릭 리스너 ▼▼▼
+    const sdDetailsPanel = document.getElementById('sd-item-details-panel');
+    if (sdDetailsPanel) {
+        const tabsContainer = sdDetailsPanel.querySelector(
+            '.details-panel-tabs'
+        );
+        if (tabsContainer && !tabsContainer.dataset.listenerAttached) {
+            tabsContainer.addEventListener('click', (e) => {
+                // DD와 동일한 로직 사용
+                const clickedButton = e.target.closest('.detail-tab-button');
+                if (
+                    !clickedButton ||
+                    clickedButton.classList.contains('active')
+                )
+                    return;
+                const targetTab = clickedButton.dataset.tab; // 예: "sd-member-prop"
+                console.log(`[DEBUG] SD Detail tab clicked: ${targetTab}`);
+
+                sdDetailsPanel
+                    .querySelectorAll('.detail-tab-button.active')
+                    .forEach((btn) => btn.classList.remove('active'));
+                sdDetailsPanel
+                    .querySelectorAll('.detail-tab-content.active')
+                    .forEach((content) => content.classList.remove('active'));
+
+                clickedButton.classList.add('active');
+                const targetContent = sdDetailsPanel.querySelector(
+                    `.detail-tab-content[data-tab="${targetTab}"]`
+                );
+                if (targetContent) targetContent.classList.add('active');
+            });
+            tabsContainer.dataset.listenerAttached = 'true';
+        }
+    }
+    // ▲▲▲ [추가] 여기까지 ▲▲▲
 
     console.log('[DEBUG] Schematic Estimation (SD) listeners setup complete.');
+}
+function handleSdAssociatedItemClick(event) {
+    const itemRow = event.target.closest('tr[data-item-id]');
+    const bimButton = event.target.closest(
+        'button.select-in-client-btn-detail'
+    );
+
+    if (bimButton) {
+        // BIM 연동 버튼 클릭 시 (기존 DD 함수 재사용)
+        const costItemId = bimButton.dataset.costItemId;
+        console.log(
+            `[DEBUG][Event] SD BIM link button clicked for CostItem ID: ${costItemId}`
+        );
+        handleBoqSelectInClientFromDetail(costItemId); // DD와 동일 함수 사용
+    } else if (itemRow) {
+        // 행의 다른 부분 클릭 시 (오른쪽 상세 정보 표시)
+        const itemId = itemRow.dataset.itemId;
+        console.log(
+            `[DEBUG][Event] SD associated item row clicked. Item ID: ${itemId}`
+        );
+
+        // 오른쪽 상세 속성 패널 업데이트 함수 호출
+        renderSdItemProperties(itemId);
+    }
 }
 
 // ▲▲▲ [교체] 여기까지 ▲▲▲
@@ -4793,61 +4832,137 @@ function renderBoqItemProperties(itemId) {
 // =====================================================================
 /* ▼▼▼ [교체] 기존 initializeBoqUI 함수를 아래의 최종 코드로 교체해주세요. ▼▼▼ */
 function initializeBoqUI() {
-    const boqTab = document.getElementById('boq');
-    if (!boqTab) return;
+    const ddTabContainer = document.getElementById('detailed-estimation-dd');
+    if (!ddTabContainer) {
+        console.warn(
+            "[WARN] Detailed Estimation (DD) tab container '#detailed-estimation-dd' not found. UI initialization skipped."
+        );
+        return;
+    }
+    console.log(
+        '[DEBUG] Initializing UI elements for Detailed Estimation (DD) tab...'
+    );
 
-    // UI 요소들을 선택합니다.
-    const leftToggleBtn = boqTab.querySelector('#boq-left-panel-toggle-btn');
-    const bottomToggleBtn = boqTab.querySelector(
+    // UI 요소들 선택
+    const leftToggleBtn = ddTabContainer.querySelector(
+        '#boq-left-panel-toggle-btn'
+    );
+    const bottomToggleBtn = ddTabContainer.querySelector(
         '#boq-bottom-panel-toggle-btn'
     );
-    const boqContainer = boqTab.querySelector('.boq-container');
-    const bottomPanel = boqTab.querySelector('.boq-details-wrapper');
-    const boqDetailsPanel = boqTab.querySelector('#boq-item-details-panel');
+    const boqContainer = ddTabContainer.querySelector('.boq-container');
+    const bottomPanel = ddTabContainer.querySelector('.boq-details-wrapper');
+    const boqDetailsPanel = ddTabContainer.querySelector(
+        '#boq-item-details-panel'
+    ); // 왼쪽 상세 정보 패널
 
     // --- 1. 왼쪽 패널 접기/펴기 기능 ---
     if (leftToggleBtn && boqContainer) {
-        leftToggleBtn.addEventListener('click', () => {
-            boqContainer.classList.toggle('left-panel-collapsed');
-        });
+        if (!leftToggleBtn.dataset.listenerAttached) {
+            leftToggleBtn.addEventListener('click', () => {
+                boqContainer.classList.toggle('left-panel-collapsed');
+                leftToggleBtn.textContent = boqContainer.classList.contains(
+                    'left-panel-collapsed'
+                )
+                    ? '▶'
+                    : '◀';
+                console.log(
+                    `[DEBUG] Left panel toggled. Collapsed: ${boqContainer.classList.contains(
+                        'left-panel-collapsed'
+                    )}`
+                );
+            });
+            leftToggleBtn.dataset.listenerAttached = 'true';
+            console.log('[DEBUG] Left panel toggle listener attached.');
+        }
+    } else {
+        console.warn('[WARN] Left toggle button or BOQ container not found.');
     }
 
-    // --- 2. 하단 패널 접기/펴기 기능 (복원) ---
+    // --- 2. 하단 패널 접기/펴기 기능 ---
     if (bottomToggleBtn && bottomPanel) {
-        bottomToggleBtn.addEventListener('click', () => {
-            const isCollapsing = !bottomPanel.classList.contains('collapsed');
-            bottomPanel.classList.toggle('collapsed');
-            // 버튼의 아이콘을 상태에 따라 변경합니다 (▼ 또는 ▲)
-            bottomToggleBtn.textContent = isCollapsing ? '▲' : '▼';
-        });
+        if (!bottomToggleBtn.dataset.listenerAttached) {
+            bottomToggleBtn.addEventListener('click', () => {
+                const isCollapsing =
+                    !bottomPanel.classList.contains('collapsed');
+                bottomPanel.classList.toggle('collapsed');
+                bottomToggleBtn.textContent = isCollapsing ? '▲' : '▼';
+                console.log(
+                    `[DEBUG] Bottom panel toggled. Collapsed: ${isCollapsing}`
+                );
+            });
+            bottomToggleBtn.dataset.listenerAttached = 'true';
+            console.log('[DEBUG] Bottom panel toggle listener attached.');
+        }
+    } else {
+        console.warn(
+            '[WARN] Bottom toggle button or bottom panel wrapper not found.'
+        );
     }
 
-    // --- 3. 왼쪽 상세 정보 패널 탭 클릭 기능 ---
+    // --- 3. ★★★ 왼쪽 상세 정보 패널 탭 클릭 기능 (여기로 이동) ★★★ ---
     if (boqDetailsPanel) {
-        boqDetailsPanel.addEventListener('click', (e) => {
-            const clickedButton = e.target.closest('.detail-tab-button');
-            if (!clickedButton || !clickedButton.closest('.details-panel-tabs'))
-                return;
-            if (clickedButton.classList.contains('active')) return;
+        const tabsContainer = boqDetailsPanel.querySelector(
+            '.details-panel-tabs'
+        );
+        if (tabsContainer && !tabsContainer.dataset.listenerAttached) {
+            // 중복 방지
+            tabsContainer.addEventListener('click', (e) => {
+                const clickedButton = e.target.closest('.detail-tab-button');
+                if (
+                    !clickedButton ||
+                    clickedButton.classList.contains('active') ||
+                    !clickedButton.closest('.details-panel-tabs')
+                ) {
+                    console.log(
+                        '[DEBUG] DD Detail tab click ignored (not a button, already active, or outside container).'
+                    );
+                    return;
+                }
 
-            const targetTab = clickedButton.dataset.tab;
+                const targetTab = clickedButton.dataset.tab; // 클릭된 탭의 data-tab 값 (예: "boq-member-prop")
+                console.log(`[DEBUG] DD Detail tab clicked: ${targetTab}`); // 상세 로그 추가
 
-            boqDetailsPanel
-                .querySelectorAll('.detail-tab-button.active')
-                .forEach((btn) => btn.classList.remove('active'));
-            boqDetailsPanel
-                .querySelectorAll('.detail-tab-content.active')
-                .forEach((content) => content.classList.remove('active'));
+                // 현재 패널 내에서만 active 클래스 관리
+                boqDetailsPanel
+                    .querySelectorAll('.detail-tab-button.active')
+                    .forEach((btn) => btn.classList.remove('active'));
+                boqDetailsPanel
+                    .querySelectorAll('.detail-tab-content.active')
+                    .forEach((content) => content.classList.remove('active'));
 
-            clickedButton.classList.add('active');
-            const targetContent = boqDetailsPanel.querySelector(
-                `.detail-tab-content[data-tab="${targetTab}"]`
+                clickedButton.classList.add('active');
+                const targetContent = boqDetailsPanel.querySelector(
+                    `.detail-tab-content[data-tab="${targetTab}"]`
+                );
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                    console.log(
+                        `[DEBUG] DD Detail tab content activated: ${targetTab}`
+                    );
+                } else {
+                    console.warn(
+                        `[WARN] DD Detail tab content for '${targetTab}' not found.`
+                    );
+                }
+            });
+            tabsContainer.dataset.listenerAttached = 'true'; // 리스너 추가됨 표시
+            console.log(
+                '[DEBUG] DD Detail panel tab click listener attached (in initializeBoqUI).'
             );
-            if (targetContent) {
-                targetContent.classList.add('active');
-            }
-        });
+        } else if (!tabsContainer) {
+            console.warn(
+                '[WARN] DD Detail panel tabs container not found within #boq-item-details-panel.'
+            );
+        }
+    } else {
+        console.warn(
+            "[WARN] Left detail panel '#boq-item-details-panel' not found."
+        );
     }
+    // --- ★★★ 탭 리스너 이동 완료 ★★★ ---
+
+    console.log('[DEBUG] Detailed Estimation (DD) UI initialization complete.');
 }
 
 function handleBoqSelectInClient() {
@@ -9757,7 +9872,7 @@ function setupSdBoqTableInteractions() {
  * SD 탭 하단 BOQ 테이블 클릭 이벤트 핸들러 (그룹 토글 및 행 선택)
  */
 function handleSdBoqTableClick(event) {
-    const row = event.target.closest('tr');
+    const row = event.target.closest('tr'); // 클릭된 행 (헤더 또는 데이터)
     if (!row) return;
 
     const tableContainer = document.getElementById('sd-table-container');
@@ -9765,32 +9880,27 @@ function handleSdBoqTableClick(event) {
         tableContainer.querySelector('table')?.dataset.tableData;
     if (!tableDataStr) return; // 테이블 데이터 없으면 중단
 
-    // 그룹 헤더 클릭 시 (토글 기능은 아직 미구현 - 필요 시 추가)
+    // 그룹 헤더 클릭 시 (토글 기능은 아직 미구현)
     if (row.classList.contains('boq-group-header')) {
         // TODO: 그룹 토글 로직 추가 (DD와 유사하게 상태 관리 필요)
+        const itemIds = JSON.parse(row.dataset.itemIds || '[]');
         console.log(
-            `[DEBUG][SD BOQ Click] Group header clicked: ${row.dataset.itemIds}`
+            `[DEBUG][SD BOQ Click] Group header clicked. Item IDs: ${itemIds.length}`
         );
-        // 행 선택 효과 적용 (토글과 별개로)
+
+        // 행 선택 효과 적용
         const currentSelected = row
             .closest('tbody')
             .querySelector('tr.selected-sd-boq-row');
         if (currentSelected)
             currentSelected.classList.remove('selected-sd-boq-row');
         row.classList.add('selected-sd-boq-row');
+
+        // ★★★ 중간 목록 업데이트 함수 호출 ★★★
+        renderSdAssociatedItemsTable(itemIds);
     }
-    // 데이터 행 클릭 시 (선택 효과만)
-    else if (row.dataset.itemIds) {
-        console.log(
-            `[DEBUG][SD BOQ Click] Data row clicked: ${row.dataset.itemIds}`
-        );
-        const currentSelected = row
-            .closest('tbody')
-            .querySelector('tr.selected-sd-boq-row');
-        if (currentSelected)
-            currentSelected.classList.remove('selected-sd-boq-row');
-        row.classList.add('selected-sd-boq-row');
-    }
+    // 데이터 행 클릭 시 (SD에서는 데이터 행 클릭 시 동작 없음 - 그룹 단위로만 처리)
+    // else if (row.dataset.itemIds) { ... }
 }
 
 /**
