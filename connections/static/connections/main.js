@@ -5736,10 +5736,9 @@ function handleSubNavClick(e) {
     const targetContent = document.getElementById(targetTabId);
     console.log(
         `[DEBUG][handleSubNavClick] Clicked sub-tab button: ${targetTabId}`
-    ); // 디버깅
+    );
 
-    // --- 이미 활성화된 탭이면 무시 (데이터 중복 로드 방지) ---
-    // (activeTab 변수와 비교하여 정말 같은 탭인지 확인)
+    // --- 이미 활성화된 탭이면 무시 ---
     if (
         activeTab === targetTabId &&
         targetContent &&
@@ -5747,7 +5746,7 @@ function handleSubNavClick(e) {
     ) {
         console.log(
             `[DEBUG][handleSubNavClick] Tab '${targetTabId}' is already the active tab and content is visible. No action needed.`
-        ); // 디버깅
+        );
         return;
     }
 
@@ -5757,18 +5756,17 @@ function handleSubNavClick(e) {
         parentNav
             .querySelector('.sub-nav-button.active')
             ?.classList.remove('active');
-        clickedButton.classList.add('active'); // 클릭된 버튼만 활성화
+        clickedButton.classList.add('active');
     } else {
         console.warn(
             `[WARN][handleSubNavClick] Could not find parent .secondary-nav for clicked button.`
-        ); // 디버깅
+        );
     }
 
-    // 전역 activeTab 변수 업데이트
-    activeTab = targetTabId;
+    activeTab = targetTabId; // 전역 activeTab 변수 업데이트
     console.log(
         `[DEBUG][handleSubNavClick] Active tab globally set to: ${activeTab}`
-    ); // 디버깅
+    );
 
     // 모든 메인 컨텐츠 영역 숨기기
     document
@@ -5780,13 +5778,13 @@ function handleSubNavClick(e) {
         targetContent.classList.add('active');
         console.log(
             `[DEBUG][handleSubNavClick] Content element ID '${targetTabId}' activated.`
-        ); // 디버깅
+        );
     } else {
         console.warn(
             `[WARN][handleSubNavClick] Content element with ID '${targetTabId}' not found.`
-        ); // 디버깅
-        loadDataForActiveTab(); // 컨텐츠 없어도 일단 로드 시도 (오류 방지)
-        return; // 컨텐츠 없으면 이후 로직 중단
+        );
+        loadDataForActiveTab(); // 컨텐츠 없어도 일단 로드 시도
+        return;
     }
     // --- 탭 UI 처리 끝 ---
 
@@ -5795,86 +5793,111 @@ function handleSubNavClick(e) {
         // 'AI 모델 관리' 탭 진입 시
         console.log(
             "[DEBUG][handleSubNavClick] Entering 'ai-model-manager' tab. Handling inner tabs..."
-        ); // 디버깅
+        );
         const innerNav = targetContent.querySelector('.inner-tab-nav');
-        if (innerNav) {
+        const innerContentContainer = targetContent.querySelector(
+            '.inner-tab-content-container'
+        );
+
+        if (innerNav && innerContentContainer) {
             let activeInnerButton = innerNav.querySelector(
                 '.inner-tab-button.active'
             );
-            // 활성화된 내부 탭이 없으면 기본값('ai-model-list') 활성화
+            let targetInnerTabId = activeInnerButton
+                ? activeInnerButton.dataset.innerTab
+                : 'ai-model-list'; // 기본값 설정
+
+            // 이전에 활성화된 내부 탭이 없거나, 현재 활성화된 내부 탭이 없다면 'ai-model-list'를 강제로 활성화
             if (!activeInnerButton) {
+                console.log(
+                    "[DEBUG][handleSubNavClick] No active inner AI tab found, forcing 'ai-model-list'."
+                );
+                targetInnerTabId = 'ai-model-list';
+                // UI 강제 업데이트
+                innerNav
+                    .querySelector('.inner-tab-button.active')
+                    ?.classList.remove('active');
+                innerNav
+                    .querySelector('[data-inner-tab="ai-model-list"]')
+                    ?.classList.add('active');
+                innerContentContainer
+                    .querySelector('.inner-tab-content.active')
+                    ?.classList.remove('active');
+                innerContentContainer
+                    .querySelector('#ai-model-list')
+                    ?.classList.add('active');
                 activeInnerButton = innerNav.querySelector(
                     '[data-inner-tab="ai-model-list"]'
                 );
-                console.log(
-                    "[DEBUG][handleSubNavClick] No active inner AI tab found, activating 'ai-model-list'."
-                ); // 디버깅
-            }
-            // 해당 내부 탭 클릭 (클릭 핸들러에서 데이터 로드)
-            if (activeInnerButton) {
-                console.log(
-                    `[DEBUG][handleSubNavClick] Programmatically clicking inner AI tab: ${activeInnerButton.dataset.innerTab}`
-                ); // 디버깅
-                activeInnerButton.click();
             } else {
-                console.warn(
-                    "[WARN][handleSubNavClick] Could not find default inner AI tab button 'ai-model-list'."
-                ); // 디버깅
-                // 내부 탭 없으면 그냥 일반 데이터 로드 시도
-                loadDataForActiveTab();
+                // 이미 활성화된 내부 탭이 있으면 해당 ID 사용
+                targetInnerTabId = activeInnerButton.dataset.innerTab;
+                console.log(
+                    `[DEBUG][handleSubNavClick] Found previously active inner AI tab: ${targetInnerTabId}`
+                );
             }
+
+            // ★★★ 핵심: 결정된 내부 탭 ID로 데이터 로드 함수 호출 ★★★
+            console.log(
+                `[DEBUG][handleSubNavClick] Loading data for inner AI tab: ${targetInnerTabId}`
+            );
+            loadDataForAiInnerTab(targetInnerTabId); // 데이터 로드 호출 보장
         } else {
             console.warn(
-                "[WARN][handleSubNavClick] Inner tab navigation not found in 'ai-model-manager'. Loading default data for the tab."
-            ); // 디버깅
-            loadDataForActiveTab(); // 내부 탭 구조 없으면 일단 로드 시도
+                "[WARN][handleSubNavClick] Inner tab navigation or content container not found in 'ai-model-manager'. Loading default data for the tab."
+            );
+            loadDataForActiveTab();
         }
     } else if (targetTabId === 'ruleset-management') {
-        // '룰셋 관리' 탭 진입 시
+        // '룰셋 관리' 탭 진입 시 (기존 로직 유지)
         console.log(
             "[DEBUG][handleSubNavClick] Entering 'ruleset-management' tab. Handling ruleset types..."
-        ); // 디버깅
+        );
         const rulesetNavContainer = targetContent.querySelector('.ruleset-nav');
         if (rulesetNavContainer) {
             let activeRulesetButton = rulesetNavContainer.querySelector(
                 '.ruleset-nav-button.active'
             );
-            // 활성화된 룰셋 종류 버튼이 없으면 기본값('classification-ruleset') 활성화
             if (!activeRulesetButton) {
                 activeRulesetButton = rulesetNavContainer.querySelector(
                     '[data-ruleset="classification-ruleset"]'
                 );
                 console.log(
                     "[DEBUG][handleSubNavClick] No active ruleset type, activating default 'classification-ruleset'."
-                ); // 디버깅
+                );
             }
-            // 해당 룰셋 종류 버튼 클릭 (클릭 핸들러에서 데이터 로드)
             if (activeRulesetButton) {
                 console.log(
                     `[DEBUG][handleSubNavClick] Programmatically clicking ruleset type button: ${activeRulesetButton.dataset.ruleset}`
-                ); // 디버깅
-                activeRulesetButton.click();
+                );
+                // 클릭 이벤트는 loadSpecificRuleset을 호출하므로, 데이터 로드가 보장됨
+                if (!activeRulesetButton.classList.contains('active')) {
+                    // 이미 활성화된 상태가 아니라면 클릭
+                    activeRulesetButton.click();
+                } else {
+                    // 이미 활성화 상태라면 직접 데이터 로드 함수 호출
+                    loadSpecificRuleset(activeRulesetButton.dataset.ruleset);
+                }
             } else {
                 console.warn(
                     "[WARN][handleSubNavClick] Could not find default ruleset type button 'classification-ruleset'."
-                ); // 디버깅
-                // 룰셋 종류 버튼 없으면 그냥 일반 데이터 로드 시도
+                );
                 loadDataForActiveTab();
             }
         } else {
             console.warn(
                 "[WARN][handleSubNavClick] Ruleset navigation container not found in 'ruleset-management'. Loading default data for the tab."
-            ); // 디버깅
-            loadDataForActiveTab(); // 룰셋 종류 컨테이너 없으면 일단 로드 시도
+            );
+            loadDataForActiveTab();
         }
     } else {
         // 다른 모든 보조 탭들은 바로 데이터 로드
         console.log(
             `[DEBUG][handleSubNavClick] Calling loadDataForActiveTab() directly for tab '${activeTab}'...`
-        ); // 디버깅
+        );
         loadDataForActiveTab();
     }
-    console.log('[DEBUG][handleSubNavClick] Function end.'); // 디버깅
+    console.log('[DEBUG][handleSubNavClick] Function end.');
 }
 // ▲▲▲ [교체] 여기까지 ▲▲▲
 
@@ -7154,7 +7177,7 @@ function handleAiInnerTabClick(event) {
     const targetInnerTabId = clickedButton.dataset.innerTab; // "ai-model-list" 또는 "ai-model-training"
     console.log(
         `[DEBUG][handleAiInnerTabClick] Inner tab clicked: ${targetInnerTabId}`
-    ); // 디버깅
+    );
 
     // 모든 내부 탭 버튼과 컨텐츠 비활성화
     const container = clickedButton.closest('#ai-model-manager'); // 부모 컨텐츠 영역
@@ -7172,13 +7195,13 @@ function handleAiInnerTabClick(event) {
         targetContent.classList.add('active');
         console.log(
             `[DEBUG][handleAiInnerTabClick] Inner content activated: ${targetInnerTabId}`
-        ); // 디버깅
-        // 내부 탭 전환 시 필요한 데이터 로드
+        );
+        // ★★★ 핵심: 내부 탭 전환 시 필요한 데이터 로드 함수 호출 ★★★
         loadDataForAiInnerTab(targetInnerTabId);
     } else {
         console.warn(
             `[WARN][handleAiInnerTabClick] Inner content element not found for ID: ${targetInnerTabId}`
-        ); // 디버깅
+        );
     }
 }
 

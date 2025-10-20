@@ -2474,9 +2474,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
                 <td>${escapeHtml(code)}</td>
                 <td>${escapeHtml(name)}</td>
                 <td style="text-align: right;">${qty}</td>
-                <td style="text-align: right;">${tot.toFixed(
-                    4
-                )}</td> {/* .toFixed() 사용 */}
+                <td style="text-align: right;">${tot.toFixed(4)}</td> 
                 <td style="text-align: right;">${mat.toFixed(4)}</td>
                 <td style="text-align: right;">${lab.toFixed(4)}</td>
                 <td style="text-align: right;">${exp.toFixed(4)}</td>
@@ -2488,9 +2486,7 @@ function renderBoqBimObjectCostSummary(selectedCostItemId) {
         <tfoot>
             <tr class="boq-summary-row">
                 <td colspan="3" style="text-align: center; font-weight: bold;">합계</td>
-                <td style="text-align: right;">${totalTot.toFixed(
-                    4
-                )}</td> {/* 최종 합계도 .toFixed() 사용 */}
+                <td style="text-align: right;">${totalTot.toFixed(4)}</td> 
                 <td style="text-align: right;">${totalMat.toFixed(4)}</td>
                 <td style="text-align: right;">${totalLab.toFixed(4)}</td>
                 <td style="text-align: right;">${totalExp.toFixed(4)}</td>
@@ -3419,7 +3415,7 @@ function renderUnitPricesTable(prices, editId = null) {
                     <td>${mat.toFixed(4)}</td>
                     <td>${lab.toFixed(4)}</td>
                     <td>${exp.toFixed(4)}</td>
-                    <td>${displayTotal.toFixed(4)}</td> {/* 계산된 합계 표시 */}
+                    <td>${displayTotal.toFixed(4)}</td> 
                     <td>
                         <button class="edit-price-btn" title="수정">✏️</button>
                         <button class="delete-price-btn" title="삭제">🗑️</button>
