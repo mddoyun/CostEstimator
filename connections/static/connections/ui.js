@@ -3711,6 +3711,104 @@ function renderAiModelsTable(models) {
 }
 
 /**
+ * 학습 완료 후 Test Set 평가 결과를 HTML 테이블로 렌더링합니다.
+ * @param {Object} evaluationData - 백엔드에서 받은 test_set_evaluation 데이터
+ */
+function renderTestSetEvaluationResults(evaluationData) {
+    const container = document.getElementById('test-set-evaluation-results');
+    if (!container) return;
+
+    container.innerHTML = '<h4>Test Set 평가 결과</h4>'; // 제목 초기화
+
+    if (
+        !evaluationData ||
+        typeof evaluationData !== 'object' ||
+        Object.keys(evaluationData).length === 0
+    ) {
+        container.innerHTML += '<p>Test Set 평가 결과 데이터가 없습니다.</p>';
+        return;
+    }
+
+    let tableHtml = `<table class="ruleset-table" style="font-size: 13px;">
+        <thead>
+            <tr>
+                <th>출력 항목</th>
+                <th style="text-align: right;">MAE</th>
+                <th style="text-align: right;">RMSE</th>
+                <th style="text-align: right; background-color: #fffbe0;">평균 오차율(MAPE %)</th>
+                <th style="text-align: right;">오차율 StdDev (%)</th>
+                <th style="text-align: right;">최대 오차율 (%)</th>
+                <th style="text-align: right;">최소 오차율 (%)</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    const formatMetric = (value, digits = 4) =>
+        typeof value === 'number' ? value.toFixed(digits) : 'N/A';
+    const formatPercent = (value) =>
+        typeof value === 'number' ? value.toFixed(2) + '%' : 'N/A';
+
+    // 개별 출력 항목 결과 렌더링
+    for (const outputName in evaluationData) {
+        if (outputName === 'overall') continue; // 전체 평균은 마지막에
+
+        const metrics = evaluationData[outputName];
+        tableHtml += `
+            <tr>
+                <td>${escapeHtml(outputName)}</td>
+                <td style="text-align: right;">${formatMetric(metrics.mae)}</td>
+                <td style="text-align: right;">${formatMetric(
+                    metrics.rmse
+                )}</td>
+                <td style="text-align: right; background-color: #fffbe0;">${formatPercent(
+                    metrics.mean_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    metrics.std_dev_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    metrics.max_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    metrics.min_ape_percent
+                )}</td>
+            </tr>
+        `;
+    }
+
+    // 전체 평균 결과 렌더링 (있을 경우)
+    if (evaluationData.overall) {
+        const overallMetrics = evaluationData.overall;
+        tableHtml += `
+            <tr style="font-weight: bold; border-top: 2px solid #ccc;">
+                <td>전체 평균 (Overall)</td>
+                <td style="text-align: right;">${formatMetric(
+                    overallMetrics.mae
+                )}</td>
+                <td style="text-align: right;">${formatMetric(
+                    overallMetrics.rmse
+                )}</td>
+                <td style="text-align: right; background-color: #fffbe0;">${formatPercent(
+                    overallMetrics.mean_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    overallMetrics.std_dev_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    overallMetrics.max_ape_percent
+                )}</td>
+                <td style="text-align: right;">${formatPercent(
+                    overallMetrics.min_ape_percent
+                )}</td>
+            </tr>
+        `;
+    }
+
+    tableHtml += '</tbody></table>';
+    container.innerHTML += tableHtml;
+}
+
+/**
  * 학습용 CSV 헤더를 기반으로 입력/출력 피처 선택 체크박스 리스트를 렌더링합니다.
  * @param {Array<string>} headers - CSV 파일의 헤더(컬럼명) 배열
  */
@@ -3760,6 +3858,69 @@ function renderFeatureSelectionLists(headers) {
     console.log(
         `[DEBUG][Render] ${headers.length} feature selection checkboxes rendered.`
     ); // 디버깅
+}
+
+function addHiddenLayerRow() {
+    const container = document.getElementById('hidden-layers-config');
+    if (!container) return;
+    const layerIndex = container.children.length; // 0부터 시작
+    const newRow = document.createElement('div');
+    newRow.className = 'layer-config-row';
+    newRow.dataset.layerIndex = layerIndex;
+    newRow.innerHTML = `
+        <span>Layer ${layerIndex + 1}:</span>
+        <input type="number" class="nodes-input" value="64" min="1" title="노드 수">
+        <select class="activation-select" title="활성화 함수">
+            <option value="relu" selected>relu</option>
+            <option value="sigmoid">sigmoid</option>
+            <option value="tanh">tanh</option>
+            <option value="elu">elu</option>
+            <option value="selu">selu</option>
+            <option value="swish">swish</option>
+            </select>
+        <button class="remove-layer-btn" style="padding: 2px 5px; font-size: 10px;">-</button>
+    `;
+    container.appendChild(newRow);
+
+    // 새로 추가된 제거 버튼에 이벤트 리스너 추가
+    newRow
+        .querySelector('.remove-layer-btn')
+        .addEventListener('click', removeHiddenLayerRow);
+}
+
+/**
+ * 특정 은닉층 설정 행을 제거하고 레이블을 업데이트합니다.
+ * @param {Event} event - 클릭 이벤트 객체
+ */
+function removeHiddenLayerRow(event) {
+    const rowToRemove = event.target.closest('.layer-config-row');
+    const container = document.getElementById('hidden-layers-config');
+    if (!rowToRemove || !container) return;
+
+    // 최소 1개의 레이어는 유지
+    if (container.children.length <= 1) {
+        showToast('최소 1개의 은닉층이 필요합니다.', 'warning');
+        return;
+    }
+
+    rowToRemove.remove();
+
+    // 레이어 번호 재정렬
+    Array.from(container.children).forEach((row, index) => {
+        row.dataset.layerIndex = index;
+        const span = row.querySelector('span');
+        if (span) span.textContent = `Layer ${index + 1}:`;
+    });
+}
+
+/**
+ * 은닉층 설정을 초기 상태(1개 레이어)로 리셋합니다.
+ */
+function resetHiddenLayersConfig() {
+    const container = document.getElementById('hidden-layers-config');
+    if (!container) return;
+    container.innerHTML = ''; // 기존 행 모두 제거
+    addHiddenLayerRow(); // 첫 번째 행 추가
 }
 
 // =====================================================================
@@ -4214,3 +4375,74 @@ function initializeSdUI() {
     console.log('[DEBUG][initializeSdUI] SD UI elements reset.'); // 디버깅
 }
 // ▲▲▲ [교체] 여기까지 ▲▲▲
+
+// ▼▼▼ [수정] resetTrainingUI 함수 내부 수정 ▼▼▼
+// 학습 UI 초기화 (CSV 업로드 단계로)
+function resetTrainingUI() {
+    console.log(
+        '[DEBUG][resetTrainingUI] Resetting AI training UI to Step 1 (CSV Upload).'
+    );
+    // 단계 표시 초기화
+    document.getElementById('training-step-1').style.display = 'block';
+    document.getElementById('training-step-2').style.display = 'none';
+    document.getElementById('training-step-3').style.display = 'none';
+    // 입력 값 초기화 (기존)
+    const csvInput = document.getElementById('training-csv-input');
+    if (csvInput) csvInput.value = '';
+    displaySelectedFileName('training-csv-input', 'upload-csv-btn');
+    document.getElementById('csv-info').innerHTML = '';
+    document.getElementById('input-feature-list').innerHTML = '';
+    document.getElementById('output-feature-list').innerHTML = '';
+    document.getElementById('training-model-name').value = '';
+
+    // ▼▼▼ [추가] 새로운 UI 요소 초기화 ▼▼▼
+    // 모델 구조 리셋
+    resetHiddenLayersConfig();
+    // 하이퍼파라미터 리셋 (기본값으로)
+    document.getElementById('loss-function').value = 'mse';
+    document.getElementById('optimizer').value = 'adam';
+    // Metrics 다중 선택 초기화 (첫 번째 옵션만 선택)
+    const metricsSelect = document.getElementById('metrics');
+    if (metricsSelect) {
+        Array.from(metricsSelect.options).forEach((option, index) => {
+            option.selected = index === 0;
+        });
+    }
+    document.getElementById('learning-rate').value = 0.001;
+    document.getElementById('epochs').value = 50;
+    document.getElementById('normalize-inputs').checked = true;
+    // 데이터 분할 리셋
+    document.getElementById('train-ratio').value = 70;
+    document.getElementById('val-ratio').value = 15;
+    document.getElementById('test-ratio-display').textContent =
+        'Test 비율(%): 15'; // 초기값
+    document.getElementById('use-random-seed').checked = false;
+    document.getElementById('random-seed-value').value = 42;
+    document.getElementById('random-seed-value').style.display = 'none'; // 숨김
+    // ▲▲▲ [추가] 여기까지 ▲▲▲
+
+    // 진행률/결과/액션 초기화 (기존)
+    document.getElementById('training-progress-info').textContent =
+        '학습 대기 중...';
+    document.getElementById('training-results').innerHTML = '';
+    // ▼▼▼ [추가] 평가 결과 영역 초기화 ▼▼▼
+    document.getElementById('test-set-evaluation-results').innerHTML = '';
+    // ▲▲▲ [추가] 여기까지 ▲▲▲
+    document.getElementById('training-actions').style.display = 'none';
+    document.getElementById('save-trained-model-btn').disabled = false;
+    // 차트 초기화 (기존)
+    if (trainingChartInstance) {
+        trainingChartInstance.destroy();
+        trainingChartInstance = null;
+    }
+    // 전역 변수 초기화 (기존)
+    uploadedCsvFilename = null;
+    csvHeaders = [];
+    currentTrainingTaskId = null;
+    currentTrainingStatus = {};
+    trainedModelTempFilename = null;
+    trainedModelMetadata = null;
+    console.log(
+        '[DEBUG][resetTrainingUI] Training UI and state variables reset.'
+    );
+}

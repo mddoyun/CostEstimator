@@ -9,6 +9,7 @@ from asgiref.sync import async_to_sync
 import json
 import csv
 import re
+import math # RMSE 계산 위해 추가
 from urllib.parse import quote as urlquote # Python 기본 라이브러리 사용
 import os # 파일 처리 위해 추가
 import base64 # 바이너리 데이터 인코딩/디코딩 위해 추가
@@ -33,6 +34,7 @@ import datetime
 from decimal import Decimal, InvalidOperation # [추가] Decimal 임포트
 import decimal # <--- decimal 임포트 추가
 from django.db.models import Case, When, Value, IntegerField # [추가] Case, When 임포트
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from .models import (
     Project,
     RawElement,
@@ -4104,74 +4106,108 @@ class ProgressCallback(keras.callbacks.Callback):
 def run_ai_training_task(project_id, task_id, temp_filename, config):
     print(f"\n[DEBUG][Training Task {task_id}] Background training started for project: {project_id}")
     temp_filepath = os.path.join(TEMP_UPLOAD_DIR, temp_filename)
+    results = {'status': 'error', 'message': 'Unknown error'} # 최종 결과 저장용
 
     try:
-        # 0. 초기 상태 전송
-        send_training_progress(project_id, task_id, {'status': 'starting', 'message': '학습 데이터 로딩 중...'})
+        # 0. 초기 상태 전송 및 설정값 추출
+        send_training_progress(project_id, task_id, {'status': 'starting', 'message': '학습 설정 및 데이터 로딩 중...'})
+        print(f"  [Train Task {task_id}] Config received: {config}")
+
+        input_features = config.get('input_features', [])
+        output_features = config.get('output_features', [])
+        hidden_layers_config = config.get('hidden_layers_config', [{'nodes': 64, 'activation': 'relu'}]) # 기본값: 1개 층
+        loss_function = config.get('loss_function', 'mse')
+        optimizer_name = config.get('optimizer', 'adam').lower()
+        metrics_list = config.get('metrics', ['mae']) # 기본 메트릭 MAE
+        learning_rate = config.get('learning_rate', 0.001)
+        epochs = config.get('epochs', 10)
+        train_ratio = config.get('train_ratio', 70) / 100.0
+        val_ratio = config.get('val_ratio', 15) / 100.0
+        # test_ratio = 1.0 - train_ratio - val_ratio # 자동 계산됨
+        use_random_seed = config.get('use_random_seed', False)
+        random_seed_value = config.get('random_seed_value', 42) if use_random_seed else None
+        normalize_inputs = config.get('normalize_inputs', False)
+
+        if not (0 < train_ratio < 1 and 0 < val_ratio < 1 and (train_ratio + val_ratio) < 1):
+             raise ValueError("Train/Validation 비율 합계는 0과 100 사이여야 합니다.")
+
+        test_ratio_calc = 1.0 - train_ratio - val_ratio
+        print(f"  [Train Task {task_id}] Data split ratios: Train={train_ratio:.2f}, Val={val_ratio:.2f}, Test={test_ratio_calc:.2f}")
 
         # 1. 데이터 로드 및 전처리
         print(f"  [Train Task {task_id}] Loading data from: {temp_filepath}")
         df = pd.read_csv(temp_filepath)
-        print(f"  [Train Task {task_id}] Data loaded successfully. Shape: {df.shape}")
+        print(f"  [Train Task {task_id}] Data loaded. Shape: {df.shape}")
 
-        input_features = config['input_features']
-        output_features = config['output_features']
-        print(f"  [Train Task {task_id}] Input features: {input_features}")
-        print(f"  [Train Task {task_id}] Output features: {output_features}")
+        if df.empty:
+            raise ValueError("CSV 파일이 비어 있습니다.")
+        if not all(f in df.columns for f in input_features):
+            raise ValueError(f"입력 피처 중 일부가 CSV 파일에 없습니다: {set(input_features) - set(df.columns)}")
+        if not all(f in df.columns for f in output_features):
+             raise ValueError(f"출력 피처 중 일부가 CSV 파일에 없습니다: {set(output_features) - set(df.columns)}")
 
-        # 입력/출력 데이터 분리 및 NaN 처리 (여기서는 간단히 0으로 채움)
+
         X = df[input_features].fillna(0).values
         y = df[output_features].fillna(0).values
-        print(f"  [Train Task {task_id}] Features (X) shape: {X.shape}")
-        print(f"  [Train Task {task_id}] Targets (y) shape: {y.shape}")
+        print(f"  [Train Task {task_id}] Features (X) shape: {X.shape}, Targets (y) shape: {y.shape}")
 
-        # 데이터 분할 (학습/검증)
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-        print(f"  [Train Task {task_id}] Data split: Train={X_train.shape[0]}, Validation={X_val.shape[0]}")
+        # 데이터 분할 (Train / Temp -> Validation / Test)
+        X_train_full, X_test, y_train_full, y_test = train_test_split(
+            X, y, test_size=test_ratio_calc, random_state=random_seed_value
+        )
+        # Validation 분할 비율 조정 (Temp 크기 대비)
+        relative_val_ratio = val_ratio / (train_ratio + val_ratio)
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_train_full, y_train_full, test_size=relative_val_ratio, random_state=random_seed_value
+        )
 
-        # 정규화 (StandardScaler 사용) - 설정에 따라 적용
+        print(f"  [Train Task {task_id}] Data split completed:")
+        print(f"    Train set: X={X_train.shape}, y={y_train.shape}")
+        print(f"    Validation set: X={X_val.shape}, y={y_val.shape}")
+        print(f"    Test set: X={X_test.shape}, y={y_test.shape}")
+
+        # 정규화
         scaler_X = None
-        if config.get('normalize_inputs', False):
+        if normalize_inputs:
             print(f"  [Train Task {task_id}] Normalizing input features...")
             scaler_X = StandardScaler()
             X_train = scaler_X.fit_transform(X_train)
             X_val = scaler_X.transform(X_val)
-        scaler_y = None # 출력값 정규화는 일반적으로 회귀 문제에서 필요할 수 있음 (선택 사항)
-        # if config.get('normalize_outputs', False):
-        #     scaler_y = StandardScaler()
-        #     y_train = scaler_y.fit_transform(y_train)
-        #     y_val = scaler_y.transform(y_val)
+            X_test = scaler_X.transform(X_test) # 테스트셋에도 동일 스케일러 적용
 
         send_training_progress(project_id, task_id, {'status': 'preprocessing_done', 'message': '모델 구성 중...'})
 
-        # 2. Keras 모델 구성
+        # 2. 동적 Keras 모델 구성
         print(f"  [Train Task {task_id}] Building Keras model...")
         model = keras.Sequential()
-        # 입력 레이어
-        model.add(keras.layers.Input(shape=(len(input_features),)))
-        # 은닉 레이어
-        hidden_layers = config.get('hidden_layers', 1)
-        nodes_per_layer = config.get('nodes_per_layer', 64)
-        for _ in range(hidden_layers):
-            model.add(keras.layers.Dense(nodes_per_layer, activation='relu')) # 기본 활성화 함수: ReLU
-        # 출력 레이어 (활성화 함수 없음 - 회귀 문제 가정)
-        model.add(keras.layers.Dense(len(output_features)))
+        model.add(keras.layers.Input(shape=(len(input_features),), name='input_layer'))
+        # 은닉층 동적 추가
+        for i, layer_config in enumerate(hidden_layers_config):
+            nodes = layer_config.get('nodes', 64)
+            activation = layer_config.get('activation', 'relu')
+            print(f"    Adding Hidden Layer {i+1}: nodes={nodes}, activation='{activation}'")
+            model.add(keras.layers.Dense(nodes, activation=activation, name=f'hidden_layer_{i+1}'))
+        # 출력 레이어
+        print(f"    Adding Output Layer: nodes={len(output_features)}")
+        model.add(keras.layers.Dense(len(output_features), name='output_layer'))
         print(f"  [Train Task {task_id}] Model summary:")
-        model.summary(print_fn=lambda x: print(f"    {x}"))
+        model.summary(print_fn=lambda x: print(f"    {x}")) # 터미널 출력용
 
         # 3. 모델 컴파일
-        optimizer_name = config.get('optimizer', 'adam').lower()
-        learning_rate = config.get('learning_rate', 0.001)
-        print(f"  [Train Task {task_id}] Compiling model with optimizer={optimizer_name}, lr={learning_rate}...")
+        print(f"  [Train Task {task_id}] Compiling model with optimizer='{optimizer_name}', lr={learning_rate}, loss='{loss_function}', metrics={metrics_list}...")
         if optimizer_name == 'adam':
             optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
-        else: # 기본값 또는 다른 옵티마이저 추가 가능
+        elif optimizer_name == 'sgd':
+            optimizer = keras.optimizers.SGD(learning_rate=learning_rate)
+        elif optimizer_name == 'rmsprop':
+            optimizer = keras.optimizers.RMSprop(learning_rate=learning_rate)
+        else: # 기본값 Adam
+            print(f"    Unsupported optimizer '{optimizer_name}', defaulting to Adam.")
             optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
 
-        model.compile(optimizer=optimizer, loss='mse') # 기본 손실 함수: Mean Squared Error
+        model.compile(optimizer=optimizer, loss=loss_function, metrics=metrics_list)
 
         # 4. 모델 학습
-        epochs = config.get('epochs', 10)
         print(f"  [Train Task {task_id}] Starting training for {epochs} epochs...")
         send_training_progress(project_id, task_id, {'status': 'training_started', 'message': f'총 {epochs} 에포크 학습 시작...'})
 
@@ -4181,60 +4217,148 @@ def run_ai_training_task(project_id, task_id, temp_filename, config):
             epochs=epochs,
             validation_data=(X_val, y_val),
             callbacks=[progress_callback],
-            verbose=0 # 콜백에서 로그를 처리하므로 여기서는 끔
+            verbose=0 # 콜백에서 로그 처리
         )
         print(f"  [Train Task {task_id}] Training finished.")
 
-        # 5. 최종 성능 평가 (간단히 마지막 에포크의 검증 손실 사용)
-        final_val_loss = history.history['val_loss'][-1]
-        print(f"  [Train Task {task_id}] Final validation loss: {final_val_loss:.4f}")
+        # 5. 최종 성능 평가 (Validation set 기준 - history 사용)
+        final_val_loss = history.history.get('val_loss', [None])[-1]
+        print(f"  [Train Task {task_id}] Final validation loss: {final_val_loss if final_val_loss is not None else 'N/A'}")
 
-        # 6. 모델 저장 준비 (임시 파일)
+        # --- 6. Test Set 상세 성능 평가 ---
+        print(f"  [Train Task {task_id}] Evaluating model on Test Set...")
+        send_training_progress(project_id, task_id, {'status': 'evaluating', 'message': '테스트 데이터로 모델 평가 중...'})
+
+        y_pred_test = model.predict(X_test)
+        print(f"    Test set predictions generated. Shape: {y_pred_test.shape}")
+
+        test_metrics = {}
+        output_dim = y_test.shape[1] if y_test.ndim > 1 else 1
+
+        all_ape = [] # 전체 오차율(%) 저장용
+
+        for i in range(output_dim):
+            output_name = output_features[i]
+            y_true_col = y_test[:, i] if output_dim > 1 else y_test
+            y_pred_col = y_pred_test[:, i] if output_dim > 1 else y_pred_test.flatten()
+
+            # 개별 지표 계산
+            mae = mean_absolute_error(y_true_col, y_pred_col)
+            mse = mean_squared_error(y_true_col, y_pred_col)
+            rmse = math.sqrt(mse)
+
+            # 오차율(APE) 계산 (0으로 나누기 방지)
+            absolute_percentage_errors = []
+            for true_val, pred_val in zip(y_true_col, y_pred_col):
+                if true_val != 0:
+                    ape = abs((true_val - pred_val) / true_val) * 100
+                    absolute_percentage_errors.append(ape)
+                elif pred_val == 0:
+                     absolute_percentage_errors.append(0.0) # 둘 다 0이면 오차 0
+                else:
+                    absolute_percentage_errors.append(float('inf')) # 정답 0, 예측 != 0 이면 무한대 오차 (평균 계산 시 주의)
+
+            # 무한대 값 처리 (제외하고 계산)
+            finite_apes = [ape for ape in absolute_percentage_errors if math.isfinite(ape)]
+            mape = np.mean(finite_apes) if finite_apes else 0.0
+            std_ape = np.std(finite_apes) if finite_apes else 0.0
+            max_ape = np.max(finite_apes) if finite_apes else 0.0
+            min_ape = np.min(finite_apes) if finite_apes else 0.0
+
+            all_ape.extend(finite_apes) # 전체 오차율 리스트에 추가
+
+            test_metrics[output_name] = {
+                'mae': mae,
+                'rmse': rmse,
+                'mean_ape_percent': mape,
+                'std_dev_ape_percent': std_ape,
+                'max_ape_percent': max_ape,
+                'min_ape_percent': min_ape,
+            }
+            print(f"    Metrics for output '{output_name}': MAE={mae:.4f}, RMSE={rmse:.4f}, MAPE={mape:.2f}%, StdDev APE={std_ape:.2f}%")
+
+        # 전체 평균 지표 계산
+        if output_dim > 1:
+            overall_mae = np.mean([m['mae'] for m in test_metrics.values()])
+            overall_rmse = np.mean([m['rmse'] for m in test_metrics.values()]) # RMSE는 평균내기 부적절할 수 있음
+            overall_mape = np.mean(all_ape) if all_ape else 0.0
+            overall_std_ape = np.std(all_ape) if all_ape else 0.0
+            overall_max_ape = np.max(all_ape) if all_ape else 0.0
+            overall_min_ape = np.min(all_ape) if all_ape else 0.0
+
+            test_metrics['overall'] = {
+                'mae': overall_mae,
+                'rmse': overall_rmse,
+                'mean_ape_percent': overall_mape,
+                'std_dev_ape_percent': overall_std_ape,
+                'max_ape_percent': overall_max_ape,
+                'min_ape_percent': overall_min_ape,
+            }
+            print(f"    Overall Metrics: MAE={overall_mae:.4f}, RMSE={overall_rmse:.4f}, MAPE={overall_mape:.2f}%, StdDev APE={overall_std_ape:.2f}%")
+
+        print(f"  [Train Task {task_id}] Test set evaluation complete.")
+
+        # 7. 모델 저장 준비 (임시 파일)
         trained_model_filename = f"proj_{project_id}_trained_{task_id}.h5"
         trained_model_filepath = os.path.join(TEMP_UPLOAD_DIR, trained_model_filename)
+        print(f"  [Train Task {task_id}] Saving trained model temporarily to: {trained_model_filepath}")
         model.save(trained_model_filepath)
-        print(f"  [Train Task {task_id}] Trained model saved temporarily to: {trained_model_filepath}")
+        print(f"    Model saved successfully.")
 
-        # 7. 메타데이터 생성
+        # 8. 메타데이터 생성 (성능 지표 포함)
         metadata = {
             'input_features': input_features,
             'output_features': output_features,
-            'training_config': config,
-            'performance': {'final_validation_loss': final_val_loss},
-            'scaler_X_params': scaler_X.get_params() if scaler_X else None, # 정규화 파라미터 저장
-            # 'scaler_y_params': scaler_y.get_params() if scaler_y else None,
+            'training_config': config, # 사용된 전체 설정 저장
+            'performance': { # Validation 성능
+                 'final_validation_loss': final_val_loss,
+                 # 필요 시 history에서 다른 메트릭 추가
+            },
+            'test_set_evaluation': test_metrics, # Test 성능 상세 지표 추가
+            'scaler_X_params': { # 정규화 정보 저장
+                'mean_': scaler_X.mean_.tolist(),
+                'scale_': scaler_X.scale_.tolist(),
+                'n_features_in_': scaler_X.n_features_in_,
+                'n_samples_seen_': int(scaler_X.n_samples_seen_), # int로 변환
+             } if scaler_X else None,
         }
         print(f"  [Train Task {task_id}] Metadata generated.")
 
-        # 최종 상태 전송 (성공)
-        final_progress = {
+        # 최종 상태 전송 (성공 - 상세 평가 결과 포함)
+        # 최종 검증 손실 값을 표시용 문자열로 미리 만듭니다.
+        val_loss_display = f"{final_val_loss:.4f}" if final_val_loss is not None else "N/A"
+
+        # 최종 상태 전송 (성공 - 상세 평가 결과 포함)
+        results = {
             'status': 'completed',
-            'message': f'학습 완료! 최종 검증 손실: {final_val_loss:.4f}',
-            'final_val_loss': final_val_loss,
-            'trained_model_filename': trained_model_filename, # 다운로드 또는 DB 저장에 사용
-            'metadata': metadata,
-            'epoch_history': progress_callback.epoch_data # 최종 그래프 데이터
+            'message': f'학습 완료! 최종 검증 손실: {val_loss_display}', # 미리 만든 문자열 사용
+            'final_val_loss': final_val_loss, # 실제 값은 그대로 유지
+            'trained_model_filename': trained_model_filename,
+            'metadata': metadata, # test_set_evaluation 포함된 메타데이터
+            'epoch_history': progress_callback.epoch_data
         }
-        send_training_progress(project_id, task_id, final_progress)
-        training_progress[task_id] = final_progress # 최종 결과 저장
 
     except Exception as e:
         error_message = f"학습 중 오류 발생: {str(e)}"
         print(f"[ERROR][Training Task {task_id}] {error_message}")
         import traceback
         print(traceback.format_exc())
-        error_progress = {'status': 'error', 'message': error_message}
-        send_training_progress(project_id, task_id, error_progress)
-        training_progress[task_id] = error_progress # 오류 상태 저장
+        results = {'status': 'error', 'message': error_message}
+
     finally:
+        # 상태 전송
+        send_training_progress(project_id, task_id, results)
+        training_progress[task_id] = results # 최종 결과 저장 (성공 또는 오류)
+
         # 임시 CSV 파일 삭제
         if os.path.exists(temp_filepath):
             try:
                 os.remove(temp_filepath)
                 print(f"  [Train Task {task_id}] Temporary CSV file deleted: {temp_filepath}")
-            except Exception as e:
-                print(f"[ERROR][Training Task {task_id}] Failed to delete temporary CSV file {temp_filepath}: {e}")
+            except Exception as e_remove:
+                print(f"[ERROR][Training Task {task_id}] Failed to delete temporary CSV file {temp_filepath}: {e_remove}")
         print(f"[DEBUG][Training Task {task_id}] Background training finished.")
+# ▲▲▲ [교체] 여기까지 ▲▲▲
 
 @require_http_methods(["POST"])
 def start_ai_training(request, project_id):
@@ -4242,24 +4366,24 @@ def start_ai_training(request, project_id):
     print(f"\n[DEBUG][start_ai_training] Received training start request for project: {project_id}")
     try:
         project = get_object_or_404(Project, id=project_id)
+        # 프론트엔드에서 보낸 모든 설정을 포함하는 config 객체 로드
         config = json.loads(request.body)
+        print(f"[DEBUG][start_ai_training] Training Config received: {config}") # 전체 설정 로깅
+
         temp_filename = config.get('temp_filename')
 
         if not temp_filename or not os.path.exists(os.path.join(TEMP_UPLOAD_DIR, temp_filename)):
             print(f"[ERROR][start_ai_training] Invalid or missing temp_filename: {temp_filename}")
             return JsonResponse({'status': 'error', 'message': '유효하지 않은 학습 데이터 파일입니다.'}, status=400)
 
-        # ▼▼▼ [확인] 이 부분이 올바르게 있는지 확인 ▼▼▼
         # 고유한 작업 ID 생성
         task_id = str(uuid.uuid4())
-        # ▲▲▲ [확인] 여기까지 ▲▲▲
         print(f"[DEBUG][start_ai_training] Generated Task ID: {task_id}")
-        print(f"[DEBUG][start_ai_training] Training Config: {config}")
 
         # 초기 진행 상태 설정
         training_progress[task_id] = {'status': 'queued', 'message': '학습 대기 중...'}
 
-        # 백그라운드 스레드 생성 및 시작
+        # 백그라운드 스레드 생성 및 시작 (전체 config 객체 전달)
         thread = threading.Thread(target=run_ai_training_task, args=(project_id, task_id, temp_filename, config))
         thread.start()
         print(f"[DEBUG][start_ai_training] Background training thread started for Task ID: {task_id}")
@@ -4281,8 +4405,7 @@ def start_ai_training(request, project_id):
         import traceback
         print(traceback.format_exc())
         return JsonResponse({'status': 'error', 'message': f'학습 시작 중 오류 발생: {str(e)}'}, status=500)
-
-# ▲▲▲ [추가] 여기까지 ▲▲▲
+# ▲▲▲ [교체] 여기까지 ▲▲▲
 
 # ▼▼▼ [추가] 개산견적(SD) 관련 API 뷰 함수들 ▼▼▼
 @require_http_methods(["GET"])

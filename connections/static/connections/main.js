@@ -731,6 +731,67 @@ function setupAiModelManagementListeners() {
     document
         .getElementById('output-feature-list')
         ?.addEventListener('change', handleFeatureSelection);
+
+    document
+        .getElementById('add-hidden-layer-btn')
+        ?.addEventListener('click', addHiddenLayerRow);
+
+    // 제거 버튼은 동적으로 추가되므로 이벤트 위임 사용 (컨테이너에 리스너 추가)
+    const layersContainer = document.getElementById('hidden-layers-config');
+    if (layersContainer && !layersContainer.dataset.listenerAttached) {
+        // 중복 방지
+        layersContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('remove-layer-btn')) {
+                removeHiddenLayerRow(event);
+            }
+        });
+        layersContainer.dataset.listenerAttached = 'true'; // 리스너 추가됨 표시
+    }
+
+    // 데이터 분할 비율 변경 시 Test 비율 업데이트
+    const trainRatioInput = document.getElementById('train-ratio');
+    const valRatioInput = document.getElementById('val-ratio');
+    const testRatioDisplay = document.getElementById('test-ratio-display');
+    const updateTestRatio = () => {
+        const trainR = parseInt(trainRatioInput?.value) || 0;
+        const valR = parseInt(valRatioInput?.value) || 0;
+        const testR = 100 - trainR - valR;
+        if (testRatioDisplay) {
+            testRatioDisplay.textContent = `Test 비율(%): ${
+                testR >= 0 ? testR : '오류'
+            }`;
+        }
+    };
+    trainRatioInput?.addEventListener('input', updateTestRatio);
+    valRatioInput?.addEventListener('input', updateTestRatio);
+
+    // 랜덤 시드 고정 옵션 변경 시 입력 필드 표시/숨김
+    const useRandomSeedCheckbox = document.getElementById('use-random-seed');
+    const randomSeedValueInput = document.getElementById('random-seed-value');
+    useRandomSeedCheckbox?.addEventListener('change', (event) => {
+        if (randomSeedValueInput) {
+            randomSeedValueInput.style.display = event.target.checked
+                ? 'inline-block'
+                : 'none';
+        }
+    });
+
+    // 설정 초기화 버튼
+    document
+        .getElementById('reset-training-config-btn')
+        ?.addEventListener('click', () => {
+            if (
+                confirm(
+                    '모델 구조, 하이퍼파라미터, 데이터 분할 설정을 기본값으로 초기화하시겠습니까?'
+                )
+            ) {
+                resetTrainingUI(false); // UI만 리셋 (CSV는 유지)
+                // resetTrainingUI 함수 내부에서 UI 요소들 초기화
+                // resetHiddenLayersConfig() 호출 불필요 (resetTrainingUI에서 처리)
+                showToast('학습 설정을 초기화했습니다.', 'info');
+            }
+        });
+
     console.log('[DEBUG] AI Model Management listeners setup complete.');
 }
 
@@ -7848,7 +7909,7 @@ function handleFeatureSelection(event) {
 async function startTraining() {
     console.log(
         '[DEBUG][startTraining] Validating inputs and preparing to start AI training...'
-    ); // 디버깅
+    );
     if (!currentProjectId || !uploadedCsvFilename) {
         showToast('프로젝트 선택 및 CSV 파일 업로드가 필요합니다.', 'error');
         return;
@@ -7874,7 +7935,6 @@ async function startTraining() {
         showToast('학습된 모델의 이름을 입력하세요.', 'error');
         return;
     }
-    // 모델 이름 중복 검사 (클라이언트 측)
     if (loadedAiModels.some((m) => m.name === modelName)) {
         showToast(
             '이미 사용 중인 모델 이름입니다. 다른 이름을 사용하세요.',
@@ -7883,36 +7943,91 @@ async function startTraining() {
         return;
     }
 
-    // 학습 설정 객체 생성
+    // --- 새로운 설정값 수집 ---
+    // 동적 레이어 설정 수집 (JavaScript 변수: hiddenLayersConfig - 카멜케이스)
+    const hiddenLayersConfig = []; // <<< 변수 정의 (카멜케이스)
+    document
+        .querySelectorAll('#hidden-layers-config .layer-config-row')
+        .forEach((row) => {
+            const nodes =
+                parseInt(row.querySelector('.nodes-input').value) || 64;
+            const activation =
+                row.querySelector('.activation-select').value || 'relu';
+            hiddenLayersConfig.push({ nodes, activation }); // <<< 변수 사용 (카멜케이스)
+        });
+    if (hiddenLayersConfig.length === 0) {
+        // <<< 변수 사용 (카멜케이스)
+        showToast('최소 1개 이상의 은닉층을 설정해야 합니다.', 'error');
+        return;
+    }
+
+    // 하이퍼파라미터 수집
+    const loss_function = document.getElementById('loss-function').value;
+    const optimizer = document.getElementById('optimizer').value;
+    const metricsSelect = document.getElementById('metrics');
+    const metrics = metricsSelect
+        ? Array.from(metricsSelect.selectedOptions).map(
+              (option) => option.value
+          )
+        : ['mae'];
+    const learning_rate =
+        parseFloat(document.getElementById('learning-rate').value) || 0.001;
+    const epochs = parseInt(document.getElementById('epochs').value) || 10;
+    const normalize_inputs =
+        document.getElementById('normalize-inputs').checked;
+
+    // 데이터 분할 설정 수집
+    const train_ratio =
+        parseInt(document.getElementById('train-ratio').value) || 70;
+    const val_ratio =
+        parseInt(document.getElementById('val-ratio').value) || 15;
+    if (train_ratio + val_ratio >= 100 || train_ratio <= 0 || val_ratio <= 0) {
+        showToast(
+            'Train과 Validation 비율의 합은 100 미만이어야 하며, 각각 0보다 커야 합니다.',
+            'error'
+        );
+        return;
+    }
+    const use_random_seed = document.getElementById('use-random-seed').checked;
+    const random_seed_value =
+        parseInt(document.getElementById('random-seed-value').value) || 42;
+    // --- 설정값 수집 끝 ---
+
+    // config 객체 생성 (백엔드로 보낼 JSON 데이터)
     const config = {
         temp_filename: uploadedCsvFilename,
         model_name: modelName,
         input_features: inputFeatures,
         output_features: outputFeatures,
-        hidden_layers:
-            parseInt(document.getElementById('hidden-layers').value) || 1,
-        nodes_per_layer:
-            parseInt(document.getElementById('nodes-per-layer').value) || 64,
-        learning_rate:
-            parseFloat(document.getElementById('learning-rate').value) || 0.001,
-        epochs: parseInt(document.getElementById('epochs').value) || 10,
-        optimizer: document.getElementById('optimizer').value || 'adam',
-        normalize_inputs: document.getElementById('normalize-inputs').checked,
+        // ▼▼▼ 속성 이름은 스네이크케이스, 값은 JavaScript 변수(카멜케이스) ▼▼▼
+        hidden_layers_config: hiddenLayersConfig, // <<< JavaScript 변수(hiddenLayersConfig)를 사용
+        loss_function: loss_function,
+        optimizer: optimizer,
+        metrics: metrics,
+        learning_rate: learning_rate,
+        epochs: epochs,
+        normalize_inputs: normalize_inputs,
+        train_ratio: train_ratio,
+        val_ratio: val_ratio,
+        use_random_seed: use_random_seed,
+        random_seed_value: random_seed_value,
+        // ▲▲▲ 여기까지 ▲▲▲
     };
+    // 오류가 발생한 라인
     console.log(
         '[DEBUG][startTraining] Training configuration prepared:',
         config
-    ); // 디버깅
+    );
 
-    // UI 업데이트: 2단계 숨기고 3단계 표시, 진행률 초기화
+    // --- UI 업데이트 및 API 호출 (이하 동일) ---
     document.getElementById('training-step-1').style.display = 'none';
     document.getElementById('training-step-2').style.display = 'none';
     document.getElementById('training-step-3').style.display = 'block';
     document.getElementById('training-progress-info').textContent =
         '학습 시작 요청 중...';
-    document.getElementById('training-results').innerHTML = ''; // 이전 결과 초기화
-    document.getElementById('training-actions').style.display = 'none'; // 완료 후 버튼 숨김
-    // 차트 초기화
+    document.getElementById('training-results').innerHTML = '';
+    document.getElementById('test-set-evaluation-results').innerHTML = '';
+    document.getElementById('training-actions').style.display = 'none';
     if (trainingChartInstance) trainingChartInstance.destroy();
     const ctx = document
         .getElementById('training-progress-chart')
@@ -7941,7 +8056,7 @@ async function startTraining() {
     });
     console.log(
         '[DEBUG][startTraining] Training UI updated to Step 3 (Progress). Chart initialized.'
-    ); // 디버깅
+    );
 
     showToast('AI 모델 학습 시작 요청...', 'info');
     try {
@@ -7953,35 +8068,31 @@ async function startTraining() {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrftoken,
                 },
-                body: JSON.stringify(config),
+                body: JSON.stringify(config), // 생성된 config 객체 전송
             }
         );
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || '학습 시작 실패');
 
         showToast(result.message, 'success');
-        currentTrainingTaskId = result.task_id; // 작업 ID 저장
+        currentTrainingTaskId = result.task_id;
         currentTrainingStatus = {
             status: 'queued',
             message: '학습 대기 중...',
-        }; // 초기 상태 설정
+        };
         console.log(
             `[DEBUG][startTraining] Training start request successful. Task ID: ${currentTrainingTaskId}`
-        ); // 디버깅
-        // WebSocket 메시지가 진행률을 업데이트할 것임
+        );
     } catch (error) {
         console.error(
             '[ERROR][startTraining] Failed to start training:',
             error
-        ); // 디버깅
+        );
         showToast(error.message, 'error');
         document.getElementById(
             'training-progress-info'
         ).textContent = `오류: ${error.message}`;
-        // 오류 발생 시 UI를 이전 단계로 되돌리거나 리셋
-        // document.getElementById('training-step-2').style.display = 'block';
-        // document.getElementById('training-step-3').style.display = 'none';
-        resetTrainingUI(); // 아예 처음으로 리셋
+        resetTrainingUI();
     }
 }
 
@@ -8006,6 +8117,9 @@ function handleTrainingProgressUpdate(data) {
     const progressInfo = document.getElementById('training-progress-info');
     const resultsDiv = document.getElementById('training-results');
     const actionsDiv = document.getElementById('training-actions');
+    const evaluationContainer = document.getElementById(
+        'test-set-evaluation-results'
+    );
     const chart = trainingChartInstance;
 
     // 진행률 메시지 업데이트
@@ -8038,28 +8152,44 @@ function handleTrainingProgressUpdate(data) {
     }
 
     // 상태에 따른 UI 처리 (완료 또는 오류)
+    // 상태에 따른 UI 처리 (완료 또는 오류)
     if (currentTrainingStatus.status === 'completed') {
         progressInfo.textContent = `✅ 학습 완료! ${currentTrainingStatus.message}`;
+        // Validation 결과 표시 (기존)
         resultsDiv.innerHTML = `<ul><li>최종 검증 손실(Final Validation Loss): ${
             currentTrainingStatus.final_val_loss?.toFixed(4) ?? 'N/A'
         }</li></ul>`;
+
+        // ▼▼▼ [추가] Test Set 평가 결과 렌더링 호출 ▼▼▼
+        if (currentTrainingStatus.metadata?.test_set_evaluation) {
+            renderTestSetEvaluationResults(
+                currentTrainingStatus.metadata.test_set_evaluation
+            );
+        } else {
+            evaluationContainer.innerHTML =
+                '<h4>Test Set 평가 결과</h4><p>Test Set 평가 결과 데이터가 없습니다.</p>';
+        }
+        // ▲▲▲ [추가] 여기까지 ▲▲▲
+
         actionsDiv.style.display = 'block'; // 완료 후 버튼 표시
-        trainedModelTempFilename = currentTrainingStatus.trained_model_filename; // 임시 파일명 저장
-        trainedModelMetadata = currentTrainingStatus.metadata; // 메타데이터 저장
+        trainedModelTempFilename = currentTrainingStatus.trained_model_filename;
+        trainedModelMetadata = currentTrainingStatus.metadata;
         console.log(
             `[DEBUG][handleTrainingProgressUpdate] Training completed. Temp file: ${trainedModelTempFilename}`
-        ); // 디버깅
+        );
     } else if (currentTrainingStatus.status === 'error') {
         progressInfo.textContent = `❌ 오류: ${currentTrainingStatus.message}`;
         resultsDiv.innerHTML = '';
-        actionsDiv.style.display = 'none'; // 오류 시 버튼 숨김
+        evaluationContainer.innerHTML = ''; // 오류 시 평가 결과 영역도 비움
+        actionsDiv.style.display = 'none';
         console.error(
             `[ERROR][handleTrainingProgressUpdate] Training failed: ${currentTrainingStatus.message}`
-        ); // 디버깅
-        currentTrainingTaskId = null; // 오류 발생 시 ID 초기화
+        );
+        currentTrainingTaskId = null;
     } else {
         // 학습 진행 중이면 결과/액션 숨김
         resultsDiv.innerHTML = '';
+        evaluationContainer.innerHTML = ''; // 진행 중 평가 결과 영역 비움
         actionsDiv.style.display = 'none';
     }
 }
@@ -8193,52 +8323,85 @@ function downloadTrainedModelFile(type) {
         ); // 디버깅
     }
 }
-
-// 학습 UI 초기화 (CSV 업로드 단계로)
-function resetTrainingUI() {
+/**
+ * 학습 UI를 초기 상태로 리셋합니다.
+ * @param {boolean} fullReset - true이면 CSV 업로드 상태까지 완전히 초기화, false이면 설정값만 초기화 (기본값: true)
+ */
+function resetTrainingUI(fullReset = true) {
     console.log(
-        '[DEBUG][resetTrainingUI] Resetting AI training UI to Step 1 (CSV Upload).'
-    ); // 디버깅
-    // 단계 표시 초기화
-    document.getElementById('training-step-1').style.display = 'block';
-    document.getElementById('training-step-2').style.display = 'none';
-    document.getElementById('training-step-3').style.display = 'none';
-    // 입력 값 초기화
-    const csvInput = document.getElementById('training-csv-input');
-    if (csvInput) csvInput.value = ''; // 파일 선택 초기화
-    displaySelectedFileName('training-csv-input', 'upload-csv-btn'); // 버튼 텍스트 복원
-    document.getElementById('csv-info').innerHTML = '';
+        `[DEBUG][resetTrainingUI] Resetting AI training UI. Full reset: ${fullReset}`
+    );
+
+    if (fullReset) {
+        // 1단계(CSV 업로드) 표시, 나머지 숨김
+        document.getElementById('training-step-1').style.display = 'block';
+        document.getElementById('training-step-2').style.display = 'none';
+        document.getElementById('training-step-3').style.display = 'none';
+
+        // CSV 관련 UI 및 변수 초기화
+        const csvInput = document.getElementById('training-csv-input');
+        if (csvInput) csvInput.value = '';
+        displaySelectedFileName('training-csv-input', 'upload-csv-btn');
+        document.getElementById('csv-info').innerHTML = '';
+        uploadedCsvFilename = null;
+        csvHeaders = [];
+    } else {
+        // 설정값만 리셋하는 경우 (2단계 표시 유지)
+        document.getElementById('training-step-1').style.display = 'none';
+        document.getElementById('training-step-2').style.display = 'block';
+        document.getElementById('training-step-3').style.display = 'none';
+    }
+
+    // --- 공통 초기화 로직 (설정값, 진행상태, 결과, 차트, 관련 변수) ---
     document.getElementById('input-feature-list').innerHTML = '';
     document.getElementById('output-feature-list').innerHTML = '';
     document.getElementById('training-model-name').value = '';
-    // 모델 설정 기본값 복원 (선택적)
-    document.getElementById('hidden-layers').value = 2;
-    document.getElementById('nodes-per-layer').value = 64;
+
+    // 모델 구조 리셋
+    resetHiddenLayersConfig();
+    // 하이퍼파라미터 리셋
+    document.getElementById('loss-function').value = 'mse';
+    document.getElementById('optimizer').value = 'adam';
+    const metricsSelect = document.getElementById('metrics');
+    if (metricsSelect) {
+        Array.from(metricsSelect.options).forEach((option, index) => {
+            option.selected = index === 0;
+        });
+    }
     document.getElementById('learning-rate').value = 0.001;
     document.getElementById('epochs').value = 50;
-    document.getElementById('optimizer').value = 'adam';
     document.getElementById('normalize-inputs').checked = true;
+    // 데이터 분할 리셋
+    document.getElementById('train-ratio').value = 70;
+    document.getElementById('val-ratio').value = 15;
+    document.getElementById('test-ratio-display').textContent =
+        'Test 비율(%): 15';
+    document.getElementById('use-random-seed').checked = false;
+    document.getElementById('random-seed-value').value = 42;
+    document.getElementById('random-seed-value').style.display = 'none';
+
     // 진행률/결과/액션 초기화
     document.getElementById('training-progress-info').textContent =
         '학습 대기 중...';
     document.getElementById('training-results').innerHTML = '';
+    document.getElementById('test-set-evaluation-results').innerHTML = '';
     document.getElementById('training-actions').style.display = 'none';
-    document.getElementById('save-trained-model-btn').disabled = false; // 저장 버튼 다시 활성화
+    document.getElementById('save-trained-model-btn').disabled = false;
     // 차트 초기화
     if (trainingChartInstance) {
         trainingChartInstance.destroy();
         trainingChartInstance = null;
     }
-    // 전역 변수 초기화
-    uploadedCsvFilename = null;
-    csvHeaders = [];
+    // 관련 전역 변수 초기화 (task ID, status 등)
     currentTrainingTaskId = null;
     currentTrainingStatus = {};
     trainedModelTempFilename = null;
     trainedModelMetadata = null;
+    // --- 공통 초기화 로직 끝 ---
+
     console.log(
-        '[DEBUG][resetTrainingUI] Training UI and state variables reset.'
-    ); // 디버깅
+        '[DEBUG][resetTrainingUI] Training UI and relevant state variables reset.'
+    );
 }
 
 // =====================================================================
