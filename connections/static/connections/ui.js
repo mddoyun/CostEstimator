@@ -4182,32 +4182,69 @@ function renderSdPredictionChart(predictions) {
         const minVal = Number.isFinite(minRaw) ? minRaw : mean;
         const maxRaw = Number(result?.max);
         const maxVal = Number.isFinite(maxRaw) ? maxRaw : mean;
-        let stdDev = (maxVal - minVal) / 4 || 0;
+        const rangeSpan = maxVal - minVal;
+        const lowerDelta = Math.abs(mean - minVal);
+        const upperDelta = Math.abs(maxVal - mean);
+        const positiveDeltas = [lowerDelta, upperDelta].filter((delta) => delta > 0);
+
+        let stdDev;
+        if (positiveDeltas.length === 0) {
+            stdDev = Math.max(Math.abs(mean) * 0.001, 0.05);
+        } else if (positiveDeltas.length === 1) {
+            stdDev = positiveDeltas[0] / 2;
+        } else {
+            stdDev = (positiveDeltas[0] + positiveDeltas[1]) / 4;
+        }
         if (!isFinite(stdDev) || stdDev <= 0) {
-            const fallback = Math.max(
-                Math.abs(mean) * 0.05,
-                Math.abs(maxVal) * 0.05,
-                Math.abs(minVal) * 0.05,
-                1
-            );
-            stdDev = fallback;
+            stdDev = Math.max(Math.abs(mean) * 0.001, 0.05);
         }
 
-        const sigmaRange = 3;
-        const curveStart = Math.min(minVal, mean - sigmaRange * stdDev);
-        const curveEnd = Math.max(maxVal, mean + sigmaRange * stdDev);
-        const sampleCount = 80;
-        const step = sampleCount > 1 ? (curveEnd - curveStart) / (sampleCount - 1) : 1;
+        let sampleStart;
+        let sampleEnd;
+        if (rangeSpan > 0) {
+            sampleStart = minVal;
+            sampleEnd = maxVal;
+        } else {
+            sampleStart = mean - stdDev;
+            sampleEnd = mean + stdDev;
+        }
+
+        if (!isFinite(sampleStart) || !isFinite(sampleEnd) || sampleStart === sampleEnd) {
+            sampleStart = mean - Math.max(stdDev, 0.05);
+            sampleEnd = mean + Math.max(stdDev, 0.05);
+        }
+
+        const paddingBase = sampleEnd - sampleStart;
+        const padding =
+            Math.max(paddingBase * 0.05, stdDev * 0.1, 0.05);
+        sampleStart -= padding;
+        sampleEnd += padding;
+
+        const sampleCount = 120;
+        const step = sampleCount > 1 ? (sampleEnd - sampleStart) / (sampleCount - 1) : 1;
 
         const curveData = [];
         for (let i = 0; i < sampleCount; i += 1) {
-            const x = curveStart + step * i;
+            const x = sampleStart + step * i;
             const y = normalPdf(x, mean, stdDev);
             curveData.push({ x, y });
             if (x < globalMinX) globalMinX = x;
             if (x > globalMaxX) globalMaxX = x;
             if (y > globalMaxY) globalMaxY = y;
         }
+
+        [minVal, mean, maxVal].forEach((anchorX) => {
+            if (!Number.isFinite(anchorX)) return;
+            const existing = curveData.find((point) => Math.abs(point.x - anchorX) < step / 2);
+            if (!existing) {
+                const y = normalPdf(anchorX, mean, stdDev);
+                curveData.push({ x: anchorX, y });
+                if (anchorX < globalMinX) globalMinX = anchorX;
+                if (anchorX > globalMaxX) globalMaxX = anchorX;
+                if (y > globalMaxY) globalMaxY = y;
+            }
+        });
+        curveData.sort((a, b) => a.x - b.x);
 
         const color = palette[index % palette.length];
         datasets.push({
@@ -4311,7 +4348,7 @@ function renderSdPredictionChart(predictions) {
                                     feature,
                                     `x: ${parsed.x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                                     `밀도: ${parsed.y.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`,
-                                    `μ: ${mean?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                                    `예상값(μ): ${mean?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                                     `범위: ${min?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ~ ${max?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                                     metricDisplay,
                                 ].filter(Boolean);
