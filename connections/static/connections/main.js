@@ -8000,8 +8000,12 @@ function handleFeatureSelection(event) {
         const otherListId = isInputList
             ? 'output-feature-list'
             : 'input-feature-list';
+        const escapedFeatureName =
+            typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                ? CSS.escape(featureName)
+                : featureName.replace(/["\\]/g, '\\$&');
         const otherCheckbox = document.querySelector(
-            `#${otherListId} input[value="${featureName}"]`
+            `#${otherListId} input[value="${escapedFeatureName}"]`
         );
         if (event.target.checked && otherCheckbox && otherCheckbox.checked) {
             otherCheckbox.checked = false;

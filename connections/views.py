@@ -4065,6 +4065,26 @@ def upload_training_csv(request, project_id):
 # 학습 진행 상태를 저장할 딕셔너리 (간단한 인메모리 방식)
 training_progress = {}
 
+
+def _ensure_json_serializable(data):
+    """
+    Numpy/Pandas 타입을 JSON 직렬화 가능한 기본 파이썬 타입으로 변환.
+    중첩된 dict/list 구조도 재귀적으로 처리한다.
+    """
+    if isinstance(data, dict):
+        return {key: _ensure_json_serializable(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple, set)):
+        return [_ensure_json_serializable(value) for value in data]
+    if isinstance(data, (np.floating,)):
+        return float(data)
+    if isinstance(data, (np.integer,)):
+        return int(data)
+    if isinstance(data, np.ndarray):
+        return data.tolist()
+    if pd.api.types.is_scalar(data) and isinstance(data, (pd.Timestamp, pd.Timedelta)):
+        return data.isoformat()
+    return data
+
 # WebSocket으로 진행률 전송하는 함수
 def send_training_progress(project_id, task_id, progress_data):
     """WebSocket을 통해 특정 프로젝트의 학습 진행률 브로드캐스트"""
@@ -4076,7 +4096,7 @@ def send_training_progress(project_id, task_id, progress_data):
             'type': 'broadcast_training_progress', # consumers.py에 핸들러 추가 필요
             'project_id': str(project_id),
             'task_id': task_id,
-            'progress': progress_data,
+            'progress': _ensure_json_serializable(progress_data),
         }
     )
 
@@ -4155,9 +4175,54 @@ def run_ai_training_task(project_id, task_id, temp_filename, config):
              raise ValueError(f"출력 피처 중 일부가 CSV 파일에 없습니다: {set(output_features) - set(df.columns)}")
 
 
-        X = df[input_features].fillna(0).values
-        y = df[output_features].fillna(0).values
-        print(f"  [Train Task {task_id}] Features (X) shape: {X.shape}, Targets (y) shape: {y.shape}")
+        # 숫자형으로 변환 (문자 데이터가 섞여 있는 경우 자동 처리)
+        print(f"  [Train Task {task_id}] Converting selected features to numeric dtype...")
+
+        def _coerce_numeric_columns(df_subset, subset_label):
+            cleaned_df = pd.DataFrame(index=df_subset.index)
+            warning_cols = []
+
+            for column in df_subset.columns:
+                series = df_subset[column]
+                if pd.api.types.is_numeric_dtype(series):
+                    coerced = pd.to_numeric(series, errors='coerce')
+                else:
+                    coerced = (
+                        series.astype(str)
+                        .str.replace(r'[\s\u00a0]', '', regex=True)
+                        .str.replace(',', '', regex=False)
+                        .str.replace('"', '', regex=False)
+                    )
+                    coerced = coerced.replace(
+                        {'': np.nan, 'nan': np.nan, 'NaN': np.nan, 'NONE': np.nan, 'None': np.nan, 'null': np.nan}
+                    )
+                    coerced = pd.to_numeric(coerced, errors='coerce')
+                if coerced.isna().all():
+                    print(
+                        f"  [Train Task {task_id}] Warning: Column '{column}' in {subset_label} contained no numeric values. Filling with 0."
+                    )
+                    cleaned_df[column] = pd.Series(
+                        np.zeros(len(coerced), dtype=np.float32),
+                        index=df_subset.index,
+                    )
+                    continue
+                if coerced.isna().any():
+                    warning_cols.append(column)
+                cleaned_df[column] = coerced
+
+            if warning_cols:
+                print(
+                    f"  [Train Task {task_id}] Warning: Columns in {subset_label} had non-numeric values; remaining NaNs will be filled with 0. Columns: {warning_cols}"
+                )
+            return cleaned_df, warning_cols
+
+        X_df, _ = _coerce_numeric_columns(df[input_features], 'input')
+        y_df, _ = _coerce_numeric_columns(df[output_features], 'output')
+
+        X = X_df.fillna(0).to_numpy(dtype=np.float32, copy=False)
+        y = y_df.fillna(0).to_numpy(dtype=np.float32, copy=False)
+        print(f"  [Train Task {task_id}] Features (X) dtype: {X.dtype}, shape: {X.shape}")
+        print(f"  [Train Task {task_id}] Targets (y) dtype: {y.dtype}, shape: {y.shape}")
 
         # 데이터 분할 (Train / Temp -> Validation / Test)
         X_train_full, X_test, y_train_full, y_test = train_test_split(
@@ -4356,7 +4421,7 @@ def run_ai_training_task(project_id, task_id, temp_filename, config):
     finally:
         # 상태 전송
         send_training_progress(project_id, task_id, results)
-        training_progress[task_id] = results # 최종 결과 저장 (성공 또는 오류)
+        training_progress[task_id] = _ensure_json_serializable(results) # 최종 결과 저장 (성공 또는 오류)
 
         # 임시 CSV 파일 삭제
         if os.path.exists(temp_filepath):
@@ -4389,7 +4454,7 @@ def start_ai_training(request, project_id):
         print(f"[DEBUG][start_ai_training] Generated Task ID: {task_id}")
 
         # 초기 진행 상태 설정
-        training_progress[task_id] = {'status': 'queued', 'message': '학습 대기 중...'}
+        training_progress[task_id] = _ensure_json_serializable({'status': 'queued', 'message': '학습 대기 중...'})
 
         # 백그라운드 스레드 생성 및 시작 (전체 config 객체 전달)
         thread = threading.Thread(target=run_ai_training_task, args=(project_id, task_id, temp_filename, config))
