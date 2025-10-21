@@ -4105,14 +4105,10 @@ function renderSdResultsTable(predictions) {
  * @param {Object} predictions - 예측 결과 객체
  */
 function renderSdPredictionChart(predictions) {
-    console.log(
-        '[DEBUG][Render] Rendering/Updating SD prediction chart (distribution style).'
-    );
+    console.log('[DEBUG][Render] Rendering SD prediction chart.');
     const canvas = document.getElementById('sd-prediction-chart');
     if (!canvas) {
-        console.warn(
-            "[WARN][Render] SD prediction chart canvas '#sd-prediction-chart' not found."
-        );
+        console.warn('[WARN][Render] SD prediction chart canvas #sd-prediction-chart not found.');
         return;
     }
     const ctx = canvas.getContext('2d');
@@ -4123,327 +4119,240 @@ function renderSdPredictionChart(predictions) {
         return;
     }
 
-    // 예측 데이터 없으면 기존 차트 파괴하고 종료
-    if (
-        !predictions ||
-        typeof predictions !== 'object' ||
-        Object.keys(predictions).length === 0
-    ) {
-        console.log(
-            '[DEBUG][Render] No SD prediction data for chart. Destroying existing chart if any.'
-        );
+    const hasPredictionData =
+        predictions &&
+        typeof predictions === 'object' &&
+        Object.keys(predictions).length > 0;
+
+    if (!hasPredictionData) {
+        console.log('[DEBUG][Render] No SD prediction data. Cleaning up chart canvas.');
         if (sdPredictionChartInstance) {
             sdPredictionChartInstance.destroy();
             sdPredictionChartInstance = null;
         }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // ctx.font = "14px Arial"; ctx.textAlign = "center"; ctx.fillText("예측 결과 없음", canvas.width / 2, canvas.height / 2);
         return;
     }
 
-    // --- 데이터 준비 ---
-    const labels = Object.keys(predictions);
-    const chartData = labels.map((feature) => {
-        const result = predictions[feature];
-        const predicted =
-            typeof result?.predicted === 'number' ? result.predicted : 0;
-        const minVal = typeof result?.min === 'number' ? result.min : predicted;
-        const maxVal = typeof result?.max === 'number' ? result.max : predicted;
-
-        // 근사 표준편차 계산 (±2s 범위로 가정)
-        const approxStdDev = (maxVal - minVal) / 4.0;
-
-        return {
-            x: feature, // x축 레이블
-            m: predicted,
-            s: approxStdDev,
-            min: minVal, // 툴팁 표시용
-            max: maxVal, // 툴팁 표시용
-        };
-    });
-
-    console.log('[DEBUG][Render] Chart Data (distribution style):', chartData);
-
-    // --- 차트 생성/업데이트 ---
     if (sdPredictionChartInstance) {
-        console.log(
-            '[DEBUG][Render] Destroying previous SD prediction chart instance.'
-        );
+        console.log('[DEBUG][Render] Destroying previous SD prediction chart instance.');
         sdPredictionChartInstance.destroy();
+        sdPredictionChartInstance = null;
     }
 
-    console.log(
-        '[DEBUG][Render] Creating new SD prediction chart instance (distribution style).'
-    );
+    const featureKeys = Object.keys(predictions);
+    const palette = [
+        '#2F80ED',
+        '#BB6BD9',
+        '#27AE60',
+        '#F2994A',
+        '#EB5757',
+        '#9B51E0',
+        '#219653',
+        '#F2C94C',
+    ];
+
+    const normalPdf = (x, mean, stdDev) => {
+        if (!isFinite(stdDev) || stdDev <= 0) return 0;
+        const exponent = -0.5 * Math.pow((x - mean) / stdDev, 2);
+        return (1 / (stdDev * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+    };
+
+    const hexToRgba = (hex, alpha) => {
+        const sanitized = hex.replace('#', '');
+        if (sanitized.length !== 6) return `rgba(47, 128, 237, ${alpha})`;
+        const bigint = parseInt(sanitized, 16);
+        const r = (bigint >> 16) & 255;
+        const g = (bigint >> 8) & 255;
+        const b = bigint & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const datasets = [];
+    const annotations = {};
+    let globalMinX = Number.POSITIVE_INFINITY;
+    let globalMaxX = Number.NEGATIVE_INFINITY;
+    let globalMaxY = 0;
+
+    featureKeys.forEach((feature, index) => {
+        const result = predictions[feature] || {};
+        const predictedRaw = Number(result?.predicted);
+        const mean = Number.isFinite(predictedRaw) ? predictedRaw : 0;
+        const minRaw = Number(result?.min);
+        const minVal = Number.isFinite(minRaw) ? minRaw : mean;
+        const maxRaw = Number(result?.max);
+        const maxVal = Number.isFinite(maxRaw) ? maxRaw : mean;
+        let stdDev = (maxVal - minVal) / 4 || 0;
+        if (!isFinite(stdDev) || stdDev <= 0) {
+            const fallback = Math.max(
+                Math.abs(mean) * 0.05,
+                Math.abs(maxVal) * 0.05,
+                Math.abs(minVal) * 0.05,
+                1
+            );
+            stdDev = fallback;
+        }
+
+        const sigmaRange = 3;
+        const curveStart = Math.min(minVal, mean - sigmaRange * stdDev);
+        const curveEnd = Math.max(maxVal, mean + sigmaRange * stdDev);
+        const sampleCount = 80;
+        const step = sampleCount > 1 ? (curveEnd - curveStart) / (sampleCount - 1) : 1;
+
+        const curveData = [];
+        for (let i = 0; i < sampleCount; i += 1) {
+            const x = curveStart + step * i;
+            const y = normalPdf(x, mean, stdDev);
+            curveData.push({ x, y });
+            if (x < globalMinX) globalMinX = x;
+            if (x > globalMaxX) globalMaxX = x;
+            if (y > globalMaxY) globalMaxY = y;
+        }
+
+        const color = palette[index % palette.length];
+        datasets.push({
+            label: feature,
+            data: curveData,
+            parsing: false,
+            showLine: true,
+            fill: true,
+            tension: 0.35,
+            borderColor: color,
+            backgroundColor: hexToRgba(color, 0.28),
+            pointRadius: 0,
+            pointHoverRadius: 3,
+        });
+
+        const addAnnotationLine = (id, value, borderColor, borderDash, labelText, labelBgAlpha = 0.85) => {
+            annotations[id] = {
+                type: 'line',
+                scaleID: 'x',
+                value,
+                borderColor,
+                borderWidth: id.includes('mean') ? 2 : 1,
+                borderDash,
+                label: {
+                    content: labelText,
+                    enabled: true,
+                    position: 'start',
+                    yAdjust: -6,
+                    backgroundColor: hexToRgba(borderColor, labelBgAlpha),
+                    color: '#000',
+                    font: { size: 10 },
+                },
+            };
+        };
+
+        addAnnotationLine(
+            `sd-mean-${index}`,
+            mean,
+            color,
+            [],
+            `${feature} \u03bc`
+        );
+        addAnnotationLine(`sd-min-${index}`, minVal, color, [6, 6], `${feature} min`);
+        addAnnotationLine(`sd-max-${index}`, maxVal, color, [6, 6], `${feature} max`);
+    });
+
+    if (!Number.isFinite(globalMinX) || !Number.isFinite(globalMaxX)) {
+        globalMinX = 0;
+        globalMaxX = 1;
+    }
+    if (!Number.isFinite(globalMaxY) || globalMaxY <= 0) {
+        globalMaxY = 1;
+    }
+
+    console.log('[DEBUG][Render] SD chart datasets:', datasets);
+
     try {
         sdPredictionChartInstance = new Chart(ctx, {
-            type: 'line', // 라인 차트로 변경
-            data: {
-                datasets: [
-                    {
-                        label: '예측 분포 (근사치)',
-                        // 각 포인트에 필요한 모든 데이터 저장
-                        data: chartData,
-                        parsing: false, // data 객체를 직접 사용
-                        // --- 스타일링 ---
-                        borderColor: 'rgba(54, 162, 235, 1)', // 라인 색상 (파랑)
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)', // 영역 채우기 색상
-                        fill: 'origin', // x축부터 라인까지 채우기
-                        tension: 0.4, // 곡선 부드럽게
-                        pointStyle: 'circle', // 포인트 모양
-                        pointRadius: 5, // 포인트 크기
-                        pointHoverRadius: 8,
-                    },
-                ],
-            },
+            type: 'scatter',
+            data: { datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                parsing: false, // data 객체를 직접 사용하도록 전역 설정
+                animation: false,
                 plugins: {
-                    legend: { display: false }, // 범례 숨김 (단일 데이터셋)
+                    legend: {
+                        display: datasets.length > 1,
+                        position: 'bottom',
+                    },
                     title: {
                         display: true,
-                        text: '항목별 예측 분포 (평균 및 근사 표준편차)',
+                        text: 'AI 예측 분포 (정규분포 근사)',
                     },
                     tooltip: {
+                        mode: 'nearest',
+                        intersect: false,
                         callbacks: {
-                            // 툴팁 내용 커스터마이징
-                            label: function (context) {
-                                const dataPoint = context.raw;
-                                if (!dataPoint) return '';
+                            label(context) {
+                                const { dataset, parsed } = context;
+                                if (!dataset || !parsed) return '';
+                                const feature = dataset.label || '';
+                                const prediction = predictions[feature] || {};
+                                const mean = prediction.predicted;
+                                const min = prediction.min;
+                                const max = prediction.max;
+                                const metricName = prediction.metric_used_for_range;
+                                const metricValue = prediction.metric_value;
+                                const formattedMetricValue =
+                                    typeof metricValue === 'number'
+                                        ? metricValue.toLocaleString(undefined, {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                          })
+                                        : metricValue;
+                                const metricDisplay =
+                                    metricName && formattedMetricValue != null && formattedMetricValue !== ''
+                                        ? `${metricName}: ${formattedMetricValue}`
+                                        : '';
+
                                 return [
-                                    `평균(m): ${dataPoint.m?.toLocaleString(
-                                        undefined,
-                                        {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        }
-                                    )}`,
-                                    `근사 StdDev(s): ${dataPoint.s?.toLocaleString(
-                                        undefined,
-                                        {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        }
-                                    )}`,
-                                    `(범위: ${dataPoint.min?.toLocaleString(
-                                        undefined,
-                                        {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        }
-                                    )} ~ ${dataPoint.max?.toLocaleString(
-                                        undefined,
-                                        {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                        }
-                                    )})`,
-                                ];
+                                    feature,
+                                    `x: ${parsed.x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                                    `밀도: ${parsed.y.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`,
+                                    `μ: ${mean?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                                    `범위: ${min?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ~ ${max?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                                    metricDisplay,
+                                ].filter(Boolean);
                             },
                         },
                     },
-                    // --- Annotation 플러그인 설정 ---
-                    annotation: {
-                        annotations: labels.reduce((acc, feature, index) => {
-                            const dataPoint = chartData[index];
-                            if (!dataPoint) return acc;
-                            const m = dataPoint.m;
-                            const s = dataPoint.s;
-
-                            // 각 feature에 대해 m, m±s, m±2s 선 추가
-                            acc[`vline_m_${index}`] = {
-                                type: 'line',
-                                xMin: index,
-                                xMax: index,
-                                yMin: m - 2.5 * s,
-                                yMax: m + 2.5 * s,
-                                borderColor: 'red',
-                                borderWidth: 2,
-                                label: {
-                                    content: 'm',
-                                    display: true,
-                                    position: 'start',
-                                    yAdjust: -10,
-                                },
-                            };
-                            acc[`vline_p1s_${index}`] = {
-                                type: 'line',
-                                xMin: index,
-                                xMax: index,
-                                yMin: m + 0.5 * s,
-                                yMax: m + 1.5 * s,
-                                borderColor: 'orange',
-                                borderWidth: 1,
-                                borderDash: [6, 6],
-                                label: {
-                                    content: '+1s',
-                                    display: true,
-                                    position: 'start',
-                                    yAdjust: -10,
-                                },
-                            };
-                            acc[`vline_m1s_${index}`] = {
-                                type: 'line',
-                                xMin: index,
-                                xMax: index,
-                                yMin: m - 1.5 * s,
-                                yMax: m - 0.5 * s,
-                                borderColor: 'orange',
-                                borderWidth: 1,
-                                borderDash: [6, 6],
-                                label: {
-                                    content: '-1s',
-                                    display: true,
-                                    position: 'start',
-                                    yAdjust: -10,
-                                },
-                            };
-                            acc[`vline_p2s_${index}`] = {
-                                type: 'line',
-                                xMin: index,
-                                xMax: index,
-                                yMin: m + 1.5 * s,
-                                yMax: m + 2.5 * s,
-                                borderColor: 'green',
-                                borderWidth: 1,
-                                borderDash: [6, 6],
-                                label: {
-                                    content: '+2s',
-                                    display: true,
-                                    position: 'start',
-                                    yAdjust: -10,
-                                },
-                            };
-                            acc[`vline_m2s_${index}`] = {
-                                type: 'line',
-                                xMin: index,
-                                xMax: index,
-                                yMin: m - 2.5 * s,
-                                yMax: m - 1.5 * s,
-                                borderColor: 'green',
-                                borderWidth: 1,
-                                borderDash: [6, 6],
-                                label: {
-                                    content: '-2s',
-                                    display: true,
-                                    position: 'start',
-                                    yAdjust: -10,
-                                },
-                            };
-                            // --- 중요: Annotation 위치 조정 ---
-                            // Y 스케일에서 실제 값(m, m±s 등)에 해당하는 위치에 선을 그리는 대신,
-                            // X 스케일(카테고리)에서 해당 feature 위치에 그리고, yMin/yMax로 선의 길이를 조절합니다.
-                            // 라벨 위치 등은 세부 조정이 필요할 수 있습니다.
-                            // 주의: 이 방식은 완벽한 정규분포 곡선이 아니며, 위치 표시를 위한 시각적 표현입니다.
-
-                            // ▼▼▼ [수정] Annotation을 X축 기준으로 그리도록 수정 ▼▼▼
-                            const createAnnotationLine = (
-                                id,
-                                value,
-                                color,
-                                label,
-                                yAdjust = 0,
-                                borderDash = []
-                            ) => ({
-                                type: 'line',
-                                scaleID: 'y', // y축 기준선
-                                value: value, // y 값
-                                borderColor: color,
-                                borderWidth: id.includes('_m_') ? 2 : 1, // 평균선은 굵게
-                                borderDash: borderDash,
-                                label: {
-                                    content: label,
-                                    display: true,
-                                    position: 'start', // 선 왼쪽에 라벨 표시
-                                    xAdjust:
-                                        (index - labels.length / 2 + 0.5) * 50, // X 위치 조절 (가정)
-                                    yAdjust: yAdjust,
-                                    backgroundColor: 'rgba(255,255,255,0.7)',
-                                    color: color,
-                                    font: { size: 10 },
-                                },
-                            });
-                            // 기존 acc[`vline...`] 코드 대신 아래 코드로 교체
-                            acc[`hline_m_${index}`] = createAnnotationLine(
-                                `hline_m_${index}`,
-                                m,
-                                'red',
-                                'm'
-                            );
-                            acc[`hline_p1s_${index}`] = createAnnotationLine(
-                                `hline_p1s_${index}`,
-                                m + s,
-                                'orange',
-                                '+1s',
-                                -10,
-                                [6, 6]
-                            );
-                            acc[`hline_m1s_${index}`] = createAnnotationLine(
-                                `hline_m1s_${index}`,
-                                m - s,
-                                'orange',
-                                '-1s',
-                                10,
-                                [6, 6]
-                            );
-                            acc[`hline_p2s_${index}`] = createAnnotationLine(
-                                `hline_p2s_${index}`,
-                                m + 2 * s,
-                                'green',
-                                '+2s',
-                                -10,
-                                [6, 6]
-                            );
-                            acc[`hline_m2s_${index}`] = createAnnotationLine(
-                                `hline_m2s_${index}`,
-                                m - 2 * s,
-                                'green',
-                                '-2s',
-                                10,
-                                [6, 6]
-                            );
-                            // ▲▲▲ [수정] 여기까지 ▲▲▲
-
-                            return acc;
-                        }, {}),
-                    },
+                    annotation: { annotations },
                 },
                 scales: {
                     x: {
-                        // type: 'category' (기본값)
+                        type: 'linear',
                         title: {
                             display: true,
-                            text: '출력 항목 (Output Feature)',
+                            text: '예측 값',
                         },
+                        suggestedMin: globalMinX,
+                        suggestedMax: globalMaxX,
                     },
                     y: {
-                        beginAtZero: false, // 0에서 시작 안 함 (음수 가능성)
                         title: {
                             display: true,
-                            text: '예측 값 (Predicted Value)',
+                            text: '상대 확률 밀도',
                         },
-                        // Y축 범위를 min/max 값 기준으로 동적 조절 (약간의 여유 추가)
-                        suggestedMin:
-                            Math.min(...chartData.map((d) => d.min)) * 0.9,
-                        suggestedMax:
-                            Math.max(...chartData.map((d) => d.max)) * 1.1,
+                        suggestedMin: 0,
+                        suggestedMax: globalMaxY * 1.05,
+                        ticks: {
+                            callback(value) {
+                                return Number(value).toFixed(3);
+                            },
+                        },
                     },
                 },
             },
         });
-        console.log(
-            '[DEBUG][Render] SD prediction chart (distribution style) rendered/updated successfully.'
-        );
-    } catch (e) {
-        console.error(
-            '[ERROR][Render] Failed to create SD prediction chart:',
-            e
-        );
-        showToast('결과 차트를 그리는 중 오류 발생.', 'error');
+        console.log('[DEBUG][Render] SD prediction chart rendered successfully.');
+    } catch (error) {
+        console.error('[ERROR][Render] Failed to render SD chart:', error);
+        showToast('Failed to render SD prediction chart.', 'error');
     }
 }
+
 
 /**
  * 개산견적(SD) 탭 하단 테이블에 CostItem 목록을 렌더링합니다.
