@@ -4064,10 +4064,11 @@ async function generateBoqReport() {
     }
 
     // --- [핵심 수정] 체크박스 상태 읽기를 함수 내부로 이동 ---
-    const filterAiChecked = document.getElementById('boq-filter-ai').checked;
-    const filterDdChecked = document.getElementById('boq-filter-dd').checked;
+    // 상세견적(DD) 탭은 DD 활성 공사코드만 집계하도록 필터를 고정합니다.
+    const filterAiChecked = false;
+    const filterDdChecked = true;
     console.log(
-        `[DEBUG] 필터 상태 - AI: ${filterAiChecked}, DD: ${filterDdChecked}`
+        '[DEBUG] Detailed Estimation filter fixed to DD-only (AI=false, DD=true).'
     );
     // --- [핵심 수정] 여기까지 ---
 

@@ -1878,6 +1878,14 @@ def generate_boq_report_api(request, project_id):
     print(f"  - raw_element_ids: {raw_element_ids}")
     print(f"  - filter_ai: {filter_ai}")
     print(f"  - filter_dd: {filter_dd}")
+    if filter_ai and filter_dd:
+        print("[DEBUG] Filter mode resolved: include both AI(SD) and DD cost codes.")
+    elif filter_dd and not filter_ai:
+        print("[DEBUG] Filter mode resolved: DD-only cost codes will be aggregated.")
+    elif filter_ai and not filter_dd:
+        print("[DEBUG] Filter mode resolved: AI(SD)-only cost codes will be aggregated.")
+    else:
+        print("[DEBUG] Filter mode resolved: neither AI nor DD selected; result will be empty.")
 
     if not group_by_fields:
         print("[ERROR] 그룹핑 기준이 선택되지 않았습니다.")
