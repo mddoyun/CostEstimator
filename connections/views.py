@@ -4066,17 +4066,24 @@ def upload_training_csv(request, project_id):
 training_progress = {}
 
 
+import math # <<< [추가] math 라이브러리를 파일 상단에 추가해주세요.
+
 def _ensure_json_serializable(data):
     """
-    Numpy/Pandas 타입을 JSON 직렬화 가능한 기본 파이썬 타입으로 변환.
-    중첩된 dict/list 구조도 재귀적으로 처리한다.
+    [수정] Numpy/Pandas 및 NaN 타입을 JSON 직렬화 가능한 기본 파이썬 타입으로 변환.
     """
     if isinstance(data, dict):
         return {key: _ensure_json_serializable(value) for key, value in data.items()}
     if isinstance(data, (list, tuple, set)):
         return [_ensure_json_serializable(value) for value in data]
+    
+    # [수정] NaN 값인지 명시적으로 확인하여 None (JSON null)으로 변환
+    if isinstance(data, float) and math.isnan(data):
+        return None
+
     if isinstance(data, (np.floating,)):
-        return float(data)
+        # numpy float도 NaN일 수 있으므로 확인
+        return None if np.isnan(data) else float(data)
     if isinstance(data, (np.integer,)):
         return int(data)
     if isinstance(data, np.ndarray):
@@ -4134,27 +4141,26 @@ class ProgressCallback(keras.callbacks.Callback):
 def run_ai_training_task(project_id, task_id, temp_filename, config):
     print(f"\n[DEBUG][Training Task {task_id}] Background training started for project: {project_id}")
     temp_filepath = os.path.join(TEMP_UPLOAD_DIR, temp_filename)
-    results = {'status': 'error', 'message': 'Unknown error'} # 최종 결과 저장용
+    results = {'status': 'error', 'message': 'Unknown error'}
 
     try:
-        # 0. 초기 상태 전송 및 설정값 추출
-        send_training_progress(project_id, task_id, {'status': 'starting', 'message': '학습 설정 및 데이터 로딩 중...'})
-        print(f"  [Train Task {task_id}] Config received: {config}")
+        send_training_progress(project_id, task_id, {'status': 'starting', 'message': '학습 설정 및 데이터 로딩 중...'}) 
+        print(f"  [Train Task {task_id}] Config received: {json.dumps(config, indent=2)}")
 
         input_features = config.get('input_features', [])
         output_features = config.get('output_features', [])
-        hidden_layers_config = config.get('hidden_layers_config', [{'nodes': 64, 'activation': 'relu'}]) # 기본값: 1개 층
+        hidden_layers_config = config.get('hidden_layers_config', [{'nodes': 64, 'activation': 'relu'}])
         loss_function = config.get('loss_function', 'mse')
         optimizer_name = config.get('optimizer', 'adam').lower()
-        metrics_list = config.get('metrics', ['mae']) # 기본 메트릭 MAE
-        learning_rate = config.get('learning_rate', 0.001)
-        epochs = config.get('epochs', 10)
-        train_ratio = config.get('train_ratio', 70) / 100.0
-        val_ratio = config.get('val_ratio', 15) / 100.0
-        # test_ratio = 1.0 - train_ratio - val_ratio # 자동 계산됨
+        metrics_list = config.get('metrics', ['mae'])
+        learning_rate = float(config.get('learning_rate', 0.001))
+        epochs = int(config.get('epochs', 10))
+        train_ratio = float(config.get('train_ratio', 70)) / 100.0
+        val_ratio = float(config.get('val_ratio', 15)) / 100.0
         use_random_seed = config.get('use_random_seed', False)
-        random_seed_value = config.get('random_seed_value', 42) if use_random_seed else None
-        normalize_inputs = config.get('normalize_inputs', False)
+        random_seed_value = int(config.get('random_seed_value', 42)) if use_random_seed else None
+        normalize_inputs = config.get('normalize_inputs', True)
+        normalize_outputs = config.get('normalize_outputs', True)
 
         if not (0 < train_ratio < 1 and 0 < val_ratio < 1 and (train_ratio + val_ratio) < 1):
              raise ValueError("Train/Validation 비율 합계는 0과 100 사이여야 합니다.")
@@ -4162,276 +4168,122 @@ def run_ai_training_task(project_id, task_id, temp_filename, config):
         test_ratio_calc = 1.0 - train_ratio - val_ratio
         print(f"  [Train Task {task_id}] Data split ratios: Train={train_ratio:.2f}, Val={val_ratio:.2f}, Test={test_ratio_calc:.2f}")
 
-        # 1. 데이터 로드 및 전처리
-        print(f"  [Train Task {task_id}] Loading data from: {temp_filepath}")
         df = pd.read_csv(temp_filepath)
-        print(f"  [Train Task {task_id}] Data loaded. Shape: {df.shape}")
-
-        if df.empty:
-            raise ValueError("CSV 파일이 비어 있습니다.")
-        if not all(f in df.columns for f in input_features):
-            raise ValueError(f"입력 피처 중 일부가 CSV 파일에 없습니다: {set(input_features) - set(df.columns)}")
-        if not all(f in df.columns for f in output_features):
-             raise ValueError(f"출력 피처 중 일부가 CSV 파일에 없습니다: {set(output_features) - set(df.columns)}")
-
-
-        # 숫자형으로 변환 (문자 데이터가 섞여 있는 경우 자동 처리)
-        print(f"  [Train Task {task_id}] Converting selected features to numeric dtype...")
-
+        
         def _coerce_numeric_columns(df_subset, subset_label):
             cleaned_df = pd.DataFrame(index=df_subset.index)
-            warning_cols = []
-
             for column in df_subset.columns:
                 series = df_subset[column]
-                if pd.api.types.is_numeric_dtype(series):
-                    coerced = pd.to_numeric(series, errors='coerce')
-                else:
-                    coerced = (
-                        series.astype(str)
-                        .str.replace(r'[\s\u00a0]', '', regex=True)
-                        .str.replace(',', '', regex=False)
-                        .str.replace('"', '', regex=False)
-                    )
-                    coerced = coerced.replace(
-                        {'': np.nan, 'nan': np.nan, 'NaN': np.nan, 'NONE': np.nan, 'None': np.nan, 'null': np.nan}
-                    )
-                    coerced = pd.to_numeric(coerced, errors='coerce')
+                coerced = pd.to_numeric(series, errors='coerce')
                 if coerced.isna().all():
-                    print(
-                        f"  [Train Task {task_id}] Warning: Column '{column}' in {subset_label} contained no numeric values. Filling with 0."
-                    )
-                    cleaned_df[column] = pd.Series(
-                        np.zeros(len(coerced), dtype=np.float32),
-                        index=df_subset.index,
-                    )
-                    continue
-                if coerced.isna().any():
-                    warning_cols.append(column)
-                cleaned_df[column] = coerced
-
-            if warning_cols:
-                print(
-                    f"  [Train Task {task_id}] Warning: Columns in {subset_label} had non-numeric values; remaining NaNs will be filled with 0. Columns: {warning_cols}"
-                )
-            return cleaned_df, warning_cols
+                    cleaned_df[column] = pd.Series(np.zeros(len(coerced), dtype=np.float32), index=df_subset.index)
+                else:
+                    cleaned_df[column] = coerced
+            return cleaned_df.fillna(0), []
 
         X_df, _ = _coerce_numeric_columns(df[input_features], 'input')
         y_df, _ = _coerce_numeric_columns(df[output_features], 'output')
 
-        X = X_df.fillna(0).to_numpy(dtype=np.float32, copy=False)
-        y = y_df.fillna(0).to_numpy(dtype=np.float32, copy=False)
-        print(f"  [Train Task {task_id}] Features (X) dtype: {X.dtype}, shape: {X.shape}")
-        print(f"  [Train Task {task_id}] Targets (y) dtype: {y.dtype}, shape: {y.shape}")
+        X = X_df.to_numpy(dtype=np.float32, copy=False)
+        y = y_df.to_numpy(dtype=np.float32, copy=False)
 
-        # 데이터 분할 (Train / Temp -> Validation / Test)
-        X_train_full, X_test, y_train_full, y_test = train_test_split(
-            X, y, test_size=test_ratio_calc, random_state=random_seed_value
-        )
-        # Validation 분할 비율 조정 (Temp 크기 대비)
+        X_train_full, X_test, y_train_full, y_test = train_test_split(X, y, test_size=test_ratio_calc, random_state=random_seed_value)
         relative_val_ratio = val_ratio / (train_ratio + val_ratio)
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train_full, y_train_full, test_size=relative_val_ratio, random_state=random_seed_value
-        )
+        X_train, X_val, y_train, y_val = train_test_split(X_train_full, y_train_full, test_size=relative_val_ratio, random_state=random_seed_value)
 
-        print(f"  [Train Task {task_id}] Data split completed:")
-        print(f"    Train set: X={X_train.shape}, y={y_train.shape}")
-        print(f"    Validation set: X={X_val.shape}, y={y_val.shape}")
-        print(f"    Test set: X={X_test.shape}, y={y_test.shape}")
+        scaler_X, scaler_y = None, None
+        y_train_fit, y_val_fit = y_train, y_val
 
-        # 정규화
-        scaler_X = None
         if normalize_inputs:
-            print(f"  [Train Task {task_id}] Normalizing input features...")
             scaler_X = StandardScaler()
             X_train = scaler_X.fit_transform(X_train)
             X_val = scaler_X.transform(X_val)
-            X_test = scaler_X.transform(X_test) # 테스트셋에도 동일 스케일러 적용
+            X_test = scaler_X.transform(X_test)
 
-        send_training_progress(project_id, task_id, {'status': 'preprocessing_done', 'message': '모델 구성 중...'})
+        if normalize_outputs:
+            scaler_y = StandardScaler()
+            y_train_fit = scaler_y.fit_transform(y_train)
+            y_val_fit = scaler_y.transform(y_val)
 
-        # 2. 동적 Keras 모델 구성
-        print(f"  [Train Task {task_id}] Building Keras model...")
+        send_training_progress(project_id, task_id, {'status': 'preprocessing_done', 'message': '모델 구성 중...'}) 
+
         model = keras.Sequential()
         model.add(keras.layers.Input(shape=(len(input_features),), name='input_layer'))
-        # 은닉층 동적 추가
         for i, layer_config in enumerate(hidden_layers_config):
             nodes = layer_config.get('nodes', 64)
             activation = layer_config.get('activation', 'relu')
-            print(f"    Adding Hidden Layer {i+1}: nodes={nodes}, activation='{activation}'")
             model.add(keras.layers.Dense(nodes, activation=activation, name=f'hidden_layer_{i+1}'))
-        # 출력 레이어
-        print(f"    Adding Output Layer: nodes={len(output_features)}")
         model.add(keras.layers.Dense(len(output_features), name='output_layer'))
-        print(f"  [Train Task {task_id}] Model summary:")
-        model.summary(print_fn=lambda x: print(f"    {x}")) # 터미널 출력용
-
-        # 3. 모델 컴파일
-        print(f"  [Train Task {task_id}] Compiling model with optimizer='{optimizer_name}', lr={learning_rate}, loss='{loss_function}', metrics={metrics_list}...")
-        if optimizer_name == 'adam':
-            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
-        elif optimizer_name == 'sgd':
-            optimizer = keras.optimizers.SGD(learning_rate=learning_rate)
-        elif optimizer_name == 'rmsprop':
-            optimizer = keras.optimizers.RMSprop(learning_rate=learning_rate)
-        else: # 기본값 Adam
-            print(f"    Unsupported optimizer '{optimizer_name}', defaulting to Adam.")
-            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        
+        if optimizer_name == 'adam': optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        elif optimizer_name == 'sgd': optimizer = keras.optimizers.SGD(learning_rate=learning_rate)
+        elif optimizer_name == 'rmsprop': optimizer = keras.optimizers.RMSprop(learning_rate=learning_rate)
+        elif optimizer_name == 'adagrad': optimizer = keras.optimizers.Adagrad(learning_rate=learning_rate)
+        elif optimizer_name == 'nadam': optimizer = keras.optimizers.Nadam(learning_rate=learning_rate)
+        else: optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
 
         model.compile(optimizer=optimizer, loss=loss_function, metrics=metrics_list)
 
-        # 4. 모델 학습
-        print(f"  [Train Task {task_id}] Starting training for {epochs} epochs...")
-        send_training_progress(project_id, task_id, {'status': 'training_started', 'message': f'총 {epochs} 에포크 학습 시작...'})
-
         progress_callback = ProgressCallback(project_id, task_id)
-        history = model.fit(
-            X_train, y_train,
-            epochs=epochs,
-            validation_data=(X_val, y_val),
-            callbacks=[progress_callback],
-            verbose=0 # 콜백에서 로그 처리
-        )
-        print(f"  [Train Task {task_id}] Training finished.")
+        history = model.fit(X_train, y_train_fit, epochs=epochs, validation_data=(X_val, y_val_fit), callbacks=[progress_callback], verbose=0)
 
-        # 5. 최종 성능 평가 (Validation set 기준 - history 사용)
         final_val_loss = history.history.get('val_loss', [None])[-1]
-        print(f"  [Train Task {task_id}] Final validation loss: {final_val_loss if final_val_loss is not None else 'N/A'}")
 
-        # --- 6. Test Set 상세 성능 평가 ---
-        print(f"  [Train Task {task_id}] Evaluating model on Test Set...")
-        send_training_progress(project_id, task_id, {'status': 'evaluating', 'message': '테스트 데이터로 모델 평가 중...'})
-
-        y_pred_test = model.predict(X_test)
-        print(f"    Test set predictions generated. Shape: {y_pred_test.shape}")
+        y_pred_scaled = model.predict(X_test)
+        y_pred_test = scaler_y.inverse_transform(y_pred_scaled) if scaler_y else y_pred_scaled
 
         test_metrics = {}
+        all_ape = []
         output_dim = y_test.shape[1] if y_test.ndim > 1 else 1
-
-        all_ape = [] # 전체 오차율(%) 저장용
-
         for i in range(output_dim):
             output_name = output_features[i]
             y_true_col = y_test[:, i] if output_dim > 1 else y_test
             y_pred_col = y_pred_test[:, i] if output_dim > 1 else y_pred_test.flatten()
-
-            # 개별 지표 계산
             mae = mean_absolute_error(y_true_col, y_pred_col)
-            mse = mean_squared_error(y_true_col, y_pred_col)
-            rmse = math.sqrt(mse)
+            rmse = math.sqrt(mean_squared_error(y_true_col, y_pred_col))
+            ape_values = np.abs((y_true_col - y_pred_col) / np.where(y_true_col == 0, 1, y_true_col)) * 100
+            ape_values[np.where((y_true_col == 0) & (y_pred_col == 0))] = 0
+            ape_values[np.where((y_true_col == 0) & (y_pred_col != 0))] = np.nan
+            all_ape.extend(ape_values[~np.isnan(ape_values)])
+            test_metrics[output_name] = {'mae': mae, 'rmse': rmse, 'mean_ape_percent': np.nanmean(ape_values), 'std_dev_ape_percent': np.nanstd(ape_values)}
 
-            # 오차율(APE) 계산 (0으로 나누기 방지)
-            absolute_percentage_errors = []
-            for true_val, pred_val in zip(y_true_col, y_pred_col):
-                if true_val != 0:
-                    ape = abs((true_val - pred_val) / true_val) * 100
-                    absolute_percentage_errors.append(ape)
-                elif pred_val == 0:
-                     absolute_percentage_errors.append(0.0) # 둘 다 0이면 오차 0
-                else:
-                    absolute_percentage_errors.append(float('inf')) # 정답 0, 예측 != 0 이면 무한대 오차 (평균 계산 시 주의)
+        test_metrics['overall'] = {'mean_ape_percent': np.mean(all_ape) if all_ape else 0.0}
 
-            # 무한대 값 처리 (제외하고 계산)
-            finite_apes = [ape for ape in absolute_percentage_errors if math.isfinite(ape)]
-            mape = np.mean(finite_apes) if finite_apes else 0.0
-            std_ape = np.std(finite_apes) if finite_apes else 0.0
-            max_ape = np.max(finite_apes) if finite_apes else 0.0
-            min_ape = np.min(finite_apes) if finite_apes else 0.0
-
-            all_ape.extend(finite_apes) # 전체 오차율 리스트에 추가
-
-            test_metrics[output_name] = {
-                'mae': mae,
-                'rmse': rmse,
-                'mean_ape_percent': mape,
-                'std_dev_ape_percent': std_ape,
-                'max_ape_percent': max_ape,
-                'min_ape_percent': min_ape,
-            }
-            print(f"    Metrics for output '{output_name}': MAE={mae:.4f}, RMSE={rmse:.4f}, MAPE={mape:.2f}%, StdDev APE={std_ape:.2f}%")
-
-        # 전체 평균 지표 계산
-        if output_dim > 1:
-            overall_mae = np.mean([m['mae'] for m in test_metrics.values()])
-            overall_rmse = np.mean([m['rmse'] for m in test_metrics.values()]) # RMSE는 평균내기 부적절할 수 있음
-            overall_mape = np.mean(all_ape) if all_ape else 0.0
-            overall_std_ape = np.std(all_ape) if all_ape else 0.0
-            overall_max_ape = np.max(all_ape) if all_ape else 0.0
-            overall_min_ape = np.min(all_ape) if all_ape else 0.0
-
-            test_metrics['overall'] = {
-                'mae': overall_mae,
-                'rmse': overall_rmse,
-                'mean_ape_percent': overall_mape,
-                'std_dev_ape_percent': overall_std_ape,
-                'max_ape_percent': overall_max_ape,
-                'min_ape_percent': overall_min_ape,
-            }
-            print(f"    Overall Metrics: MAE={overall_mae:.4f}, RMSE={overall_rmse:.4f}, MAPE={overall_mape:.2f}%, StdDev APE={overall_std_ape:.2f}%")
-
-        print(f"  [Train Task {task_id}] Test set evaluation complete.")
-
-        # 7. 모델 저장 준비 (임시 파일)
         trained_model_filename = f"proj_{project_id}_trained_{task_id}.h5"
         trained_model_filepath = os.path.join(TEMP_UPLOAD_DIR, trained_model_filename)
-        print(f"  [Train Task {task_id}] Saving trained model temporarily to: {trained_model_filepath}")
         model.save(trained_model_filepath)
-        print(f"    Model saved successfully.")
 
-        # 8. 메타데이터 생성 (성능 지표 포함)
         metadata = {
-            'input_features': input_features,
-            'output_features': output_features,
-            'training_config': config, # 사용된 전체 설정 저장
-            'performance': { # Validation 성능
-                 'final_validation_loss': final_val_loss,
-                 # 필요 시 history에서 다른 메트릭 추가
-            },
-            'test_set_evaluation': test_metrics, # Test 성능 상세 지표 추가
-            'scaler_X_params': { # 정규화 정보 저장
-                'mean_': scaler_X.mean_.tolist(),
-                'scale_': scaler_X.scale_.tolist(),
-                'n_features_in_': scaler_X.n_features_in_,
-                'n_samples_seen_': int(scaler_X.n_samples_seen_), # int로 변환
-             } if scaler_X else None,
+            'input_features': input_features, 'output_features': output_features, 'training_config': config,
+            'performance': {'final_validation_loss': final_val_loss},
+            'test_set_evaluation': test_metrics,
+            'scaler_X_params': {'mean_': scaler_X.mean_.tolist(), 'scale_': scaler_X.scale_.tolist()} if scaler_X else None,
+            'scaler_y_params': {'mean_': scaler_y.mean_.tolist(), 'scale_': scaler_y.scale_.tolist()} if scaler_y else None,
         }
-        print(f"  [Train Task {task_id}] Metadata generated.")
 
-        # 최종 상태 전송 (성공 - 상세 평가 결과 포함)
-        # 최종 검증 손실 값을 표시용 문자열로 미리 만듭니다.
         val_loss_display = f"{final_val_loss:.4f}" if final_val_loss is not None else "N/A"
-
-        # 최종 상태 전송 (성공 - 상세 평가 결과 포함)
         results = {
             'status': 'completed',
-            'message': f'학습 완료! 최종 검증 손실: {val_loss_display}', # 미리 만든 문자열 사용
-            'final_val_loss': final_val_loss, # 실제 값은 그대로 유지
+            'message': f'학습 완료! 최종 검증 손실: {val_loss_display}',
+            'final_val_loss': final_val_loss,
             'trained_model_filename': trained_model_filename,
-            'metadata': metadata, # test_set_evaluation 포함된 메타데이터
+            'metadata': metadata,
             'epoch_history': progress_callback.epoch_data
         }
 
     except Exception as e:
         error_message = f"학습 중 오류 발생: {str(e)}"
-        print(f"[ERROR][Training Task {task_id}] {error_message}")
-        import traceback
-        print(traceback.format_exc())
         results = {'status': 'error', 'message': error_message}
 
     finally:
-        # 상태 전송
         send_training_progress(project_id, task_id, results)
-        training_progress[task_id] = _ensure_json_serializable(results) # 최종 결과 저장 (성공 또는 오류)
-
-        # 임시 CSV 파일 삭제
+        training_progress[task_id] = _ensure_json_serializable(results)
         if os.path.exists(temp_filepath):
             try:
                 os.remove(temp_filepath)
-                print(f"  [Train Task {task_id}] Temporary CSV file deleted: {temp_filepath}")
             except Exception as e_remove:
                 print(f"[ERROR][Training Task {task_id}] Failed to delete temporary CSV file {temp_filepath}: {e_remove}")
-        print(f"[DEBUG][Training Task {task_id}] Background training finished.")
-# ▲▲▲ [교체] 여기까지 ▲▲▲
+        print(f"[DEBUG][Training Task {task_id}] Background training finished.")# ▲▲▲ [교체] 여기까지 ▲▲▲
 
 @require_http_methods(["POST"])
 def start_ai_training(request, project_id):
@@ -4736,157 +4588,99 @@ def download_temp_file_api(request):
 
 @require_http_methods(["POST"])
 def predict_sd_cost(request, project_id, model_id):
-    """(수정) 선택된 AI 모델과 입력을 사용해 개산견적 비용 예측 및 오차범위 계산 (Test Set MAPE 사용)"""
+    """(수정) 선택된 AI 모델과 입력을 사용해 개산견적 비용 예측 및 정규분포 시각화 데이터 생성"""
     print(f"\n[DEBUG][predict_sd_cost] Prediction request for project: {project_id}, model: {model_id}")
-    temp_model_path = None # 임시 파일 경로 변수 초기화
+    temp_model_path = None
     try:
         model_obj = get_object_or_404(AIModel, id=model_id, project_id=project_id)
         input_data_dict = json.loads(request.body)
         print(f"[DEBUG][predict_sd_cost] Input data received: {input_data_dict}")
 
         metadata = model_obj.metadata
-        if not isinstance(metadata, dict): # 메타데이터가 dict 타입인지 확인
-             print("[ERROR][predict_sd_cost] Metadata is not a valid dictionary.")
-             metadata = {} # 오류 방지를 위해 빈 dict로 초기화
+        if not isinstance(metadata, dict): metadata = {}
 
         input_features = metadata.get('input_features')
         output_features = metadata.get('output_features')
-        # ▼▼▼ [수정] Test Set 평가 결과 가져오기 ▼▼▼
-        test_evaluation = metadata.get('test_set_evaluation', {}) # 없으면 빈 dict
-        print(f"[DEBUG][predict_sd_cost] Test set evaluation data from metadata: {test_evaluation}")
-        # ▲▲▲ [수정] 여기까지 ▲▲▲
+        test_evaluation = metadata.get('test_set_evaluation', {})
+        scaler_X_params = metadata.get('scaler_X_params')
+        scaler_y_params = metadata.get('scaler_y_params') # [추가]
 
         if not input_features or not output_features:
-            print("[ERROR][predict_sd_cost] Model metadata is incomplete (missing features).")
-            return JsonResponse({'status': 'error', 'message': '선택된 모델의 메타데이터(입력/출력 정보)가 완전하지 않습니다.'}, status=400)
+            return JsonResponse({'status': 'error', 'message': '모델의 메타데이터(입력/출력 정보)가 완전하지 않습니다.'}, status=400)
 
-        # 입력 데이터 준비 (메타데이터 순서에 맞게)
         input_values = []
         for feature in input_features:
             value = input_data_dict.get(feature)
-            if value is None:
-                print(f"[ERROR][predict_sd_cost] Missing input value for feature: {feature}")
-                return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'이(가) 누락되었습니다."}, status=400)
             try:
-                # [수정] 빈 문자열도 0으로 처리
-                input_values.append(float(value) if value != '' else 0.0)
+                input_values.append(float(value) if value not in [None, ''] else 0.0)
             except (ValueError, TypeError):
-                print(f"[ERROR][predict_sd_cost] Invalid numeric value for feature '{feature}': {value}")
                 return JsonResponse({'status': 'error', 'message': f"입력값 '{feature}'은(는) 숫자여야 합니다."}, status=400)
 
-        input_array = np.array([input_values]) # 모델 입력 형식 (2D 배열)
-        print(f"[DEBUG][predict_sd_cost] Prepared input array shape: {input_array.shape}, values: {input_array}")
+        input_array = np.array([input_values], dtype=np.float32)
 
-        # 입력 정규화 (학습 시 사용된 경우)
-        scaler_X_params = metadata.get('scaler_X_params')
-        # [수정] scaler_X_params 구조 확인 강화 (get_params() 결과가 아닌 dict 가정)
         if isinstance(scaler_X_params, dict) and 'mean_' in scaler_X_params and 'scale_' in scaler_X_params:
-            print("[DEBUG][predict_sd_cost] Applying input scaler...")
             scaler_X = StandardScaler()
-            mean_ = np.array(scaler_X_params['mean_'])
-            scale_ = np.array(scaler_X_params['scale_'])
-            if len(mean_) == len(input_features) and len(scale_) == len(input_features):
-                scaler_X.mean_ = mean_
-                scaler_X.scale_ = scale_
-                # [수정] n_features_in_, n_samples_seen_ 설정 (선택적)
-                if 'n_features_in_' in scaler_X_params:
-                     scaler_X.n_features_in_ = scaler_X_params['n_features_in_']
-                if 'n_samples_seen_' in scaler_X_params:
-                     scaler_X.n_samples_seen_ = scaler_X_params['n_samples_seen_']
-                try:
-                    input_array = scaler_X.transform(input_array)
-                    print(f"[DEBUG][predict_sd_cost] Scaled input array: {input_array}")
-                except Exception as e: # ValueError 외 일반 예외 처리
-                    print(f"[ERROR][predict_sd_cost] Error applying scaler transform: {e}. Check feature count or scaler params.")
-                    return JsonResponse({'status': 'error', 'message': f'입력값 정규화 중 오류 발생: {e}'}, status=500)
-            else:
-                print("[WARN][predict_sd_cost] Scaler parameters length mismatch. Skipping scaling.")
-        else:
-             print("[DEBUG][predict_sd_cost] No valid scaler parameters found in metadata. Skipping scaling.")
+            scaler_X.mean_ = np.array(scaler_X_params['mean_'])
+            scaler_X.scale_ = np.array(scaler_X_params['scale_'])
+            input_array = scaler_X.transform(input_array)
+            print(f"[DEBUG][predict_sd_cost] Input array scaled: {input_array}")
 
-        # 모델 로드 (DB의 바이너리 데이터로부터 임시 파일 사용)
-        print("[DEBUG][predict_sd_cost] Loading Keras model from database binary data...")
         temp_model_path = os.path.join(TEMP_UPLOAD_DIR, f"temp_predict_{model_id}.h5")
-        try:
-            with open(temp_model_path, 'wb') as f:
-                f.write(model_obj.h5_file_content)
-            print(f"[DEBUG][predict_sd_cost] Model content written to temporary file: {temp_model_path}")
+        with open(temp_model_path, 'wb') as f:
+            f.write(model_obj.h5_file_content)
+        model = models.load_model(temp_model_path, compile=False)
 
-            # 모델 로드 (compile=False 유지)
-            model = models.load_model(temp_model_path, compile=False)
-            print("[DEBUG][predict_sd_cost] Model loaded successfully.")
-        except Exception as load_err:
-            print(f"[ERROR][predict_sd_cost] Failed to load model: {load_err}")
-            import traceback
-            print(traceback.format_exc())
-            return JsonResponse({'status': 'error', 'message': f'모델 파일 로딩 중 오류 발생: {load_err}'}, status=500)
+        predictions_scaled = model.predict(input_array)
+        print(f"[DEBUG][predict_sd_cost] Raw (scaled) predictions: {predictions_scaled}")
 
-        # 예측 수행
-        predictions_raw = model.predict(input_array)
-        print(f"[DEBUG][predict_sd_cost] Raw predictions (shape {predictions_raw.shape}): {predictions_raw}")
+        # [수정] 출력값 스케일 복원
+        predictions_inversed = predictions_scaled
+        if isinstance(scaler_y_params, dict) and 'mean_' in scaler_y_params and 'scale_' in scaler_y_params:
+            print("[DEBUG][predict_sd_cost] Applying output inverse scaler (scaler_y)...")
+            scaler_y = StandardScaler()
+            scaler_y.mean_ = np.array(scaler_y_params['mean_'])
+            scaler_y.scale_ = np.array(scaler_y_params['scale_'])
+            predictions_inversed = scaler_y.inverse_transform(predictions_scaled)
+            print(f"[DEBUG][predict_sd_cost] Inverse-transformed predictions: {predictions_inversed}")
 
-        # 예측 결과 후처리 (여기서는 생략)
-        predictions = predictions_raw
-
-        # 결과 딕셔너리 생성 및 오차 범위 계산 (MAPE 사용)
         results = {}
-        if predictions.ndim == 2 and predictions.shape[0] == 1:
-            prediction_values = predictions[0]
-            if len(prediction_values) == len(output_features):
-                for i, feature in enumerate(output_features):
-                    pred_value = float(prediction_values[i]) # NumPy float -> Python float
+        if predictions_inversed.ndim == 2 and predictions_inversed.shape[0] == 1:
+            prediction_values = predictions_inversed[0]
+            for i, feature in enumerate(output_features):
+                pred_value = float(prediction_values[i])
+                
+                overall_eval = test_evaluation.get('overall', {})
+                feature_eval = test_evaluation.get(feature, {})
+                mape_percent = feature_eval.get('mean_ape_percent', overall_eval.get('mean_ape_percent', 0.0))
+                mape_ratio = mape_percent / 100.0 if mape_percent > 0 else 0.0
+                error_margin = abs(pred_value * mape_ratio)
 
-                    # ▼▼▼ [수정] MAPE 값 가져오기 및 범위 계산 ▼▼▼
-                    feature_eval = test_evaluation.get(feature, {}) # 해당 피처 평가 결과
-                    mape_percent = feature_eval.get('mean_ape_percent', 0.0) # 없으면 0.0 사용
-                    # 만약 overall MAPE를 사용하고 싶다면:
-                    # overall_eval = test_evaluation.get('overall', {})
-                    # mape_percent = overall_eval.get('mean_ape_percent', 0.0)
+                # 정규분포 데이터 생성
+                sigma = error_margin / 2 if error_margin > 0 else (abs(pred_value) * 0.01 if pred_value != 0 else 1)
+                mu = pred_value
+                x = np.linspace(mu - 4 * sigma, mu + 4 * sigma, 50)
+                pdf = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(- (x - mu)**2 / (2 * sigma**2))
+                pdf_max = np.max(pdf)
+                if pdf_max > 0: pdf = pdf / pdf_max
+                distribution_data = np.vstack((x, pdf)).T.tolist()
 
-                    # MAPE(%)를 소수점 비율로 변환
-                    mape_ratio = mape_percent / 100.0 if mape_percent > 0 else 0.0
-                    error_margin = abs(pred_value * mape_ratio)
-
-                    min_value = pred_value - error_margin
-                    max_value = pred_value + error_margin
-                    # ▲▲▲ [수정] 여기까지 ▲▲▲
-
-                    results[feature] = {
-                        'predicted': pred_value,
-                        'min': min_value,
-                        'max': max_value,
-                        # ▼▼▼ [수정] 사용된 지표 이름 및 값 변경 ▼▼▼
-                        'metric_used_for_range': 'Test Set MAPE (%)',
-                        'metric_value': mape_percent
-                        # ▲▲▲ [수정] 여기까지 ▲▲▲
-                    }
-                print(f"[DEBUG][predict_sd_cost] Formatted prediction results with range (based on Test Set MAPE): {results}")
-            else:
-                print(f"[ERROR][predict_sd_cost] Prediction output dimension ({len(prediction_values)}) mismatch with metadata ({len(output_features)}).")
-                return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 차원이 메타데이터와 일치하지 않습니다.'}, status=500)
+                results[feature] = {
+                    'predicted': pred_value,
+                    'min': pred_value - error_margin,
+                    'max': pred_value + error_margin,
+                    'metric_value': mape_percent,
+                    'distribution_data': distribution_data,
+                }
         else:
-             print(f"[ERROR][predict_sd_cost] Unexpected prediction output shape: {predictions.shape}")
-             return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 형식이 예상과 다릅니다.'}, status=500)
+            return JsonResponse({'status': 'error', 'message': '모델 예측 결과의 형식이 예상과 다릅니다.'}, status=500)
 
         return JsonResponse({'status': 'success', 'predictions': results})
 
-    except (AIModel.DoesNotExist, Project.DoesNotExist):
-        print(f"[ERROR][predict_sd_cost] Model or Project not found.")
-        return JsonResponse({'status': 'error', 'message': '모델 또는 프로젝트를 찾을 수 없습니다.'}, status=404)
-    except json.JSONDecodeError:
-        print("[ERROR][predict_sd_cost] Invalid JSON input data.")
-        return JsonResponse({'status': 'error', 'message': '잘못된 입력 데이터 형식입니다.'}, status=400)
     except Exception as e:
         print(f"[ERROR][predict_sd_cost] Prediction error: {e}")
-        import traceback
-        print(traceback.format_exc())
         return JsonResponse({'status': 'error', 'message': f'예측 중 오류 발생: {str(e)}'}, status=500)
     finally:
-        # 임시 모델 파일 삭제
         if temp_model_path and os.path.exists(temp_model_path):
-            try:
-                os.remove(temp_model_path)
-                print(f"[DEBUG][predict_sd_cost] Temporary model file deleted: {temp_model_path}")
-            except Exception as e_remove:
-                print(f"[WARN][predict_sd_cost] Failed to delete temporary model file {temp_model_path}: {e_remove}")
+            try: os.remove(temp_model_path)
+            except Exception as e_remove: print(f"[WARN][predict_sd_cost] Failed to delete temp file: {e_remove}")
 # ▲▲▲ [교체] 여기까지 ▲▲▲
