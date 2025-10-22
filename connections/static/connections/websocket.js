@@ -1,5 +1,29 @@
 // websocket.js
 let frontendSocket;
+const PROGRESS_TOTAL_KEYS = [
+    'total',
+    'total_elements',
+    'totalElements',
+    'total_count',
+    'element_count',
+    'count',
+];
+
+function parseProgressTotal(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return { hasTotal: false, total: null };
+    }
+    for (const key of PROGRESS_TOTAL_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) {
+            continue;
+        }
+        const numeric = Number(payload[key]);
+        if (Number.isFinite(numeric) && numeric >= 0) {
+            return { hasTotal: true, total: numeric };
+        }
+    }
+    return { hasTotal: false, total: null };
+}
 
 function setupWebSocket() {
     const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -51,42 +75,112 @@ function setupWebSocket() {
 
         switch (data.type) {
             case 'revit_data_start':
-            case 'fetch_progress_start': // 두 경우 동일 처리
+            case 'fetch_progress_start': { // 두 경우 동일 처리
                 console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 lowerValueCache?.clear?.();
                 allRevitData = [];
-                const totalStart =
-                    data.payload.total || data.payload.total_elements;
-                progressBar.max = totalStart;
+                const payload = data.payload ?? {};
+                const { hasTotal, total } = parseProgressTotal(payload);
+                const clampedTotal = hasTotal && total > 0 ? total : 1;
+                progressBar.dataset.totalKnown = hasTotal ? '1' : '0';
+                progressBar.dataset.displayTotal = hasTotal ? String(total) : '';
+                progressBar.max = clampedTotal;
                 progressBar.value = 0;
-                progressStatus.textContent = `0 / ${totalStart}`;
+                progressStatus.textContent = hasTotal
+                    ? `0 / ${total}`
+                    : '0 / ?';
                 progressContainer.style.display = 'block';
-                statusEl.textContent = `데이터 수신 시작. 총 ${totalStart}개 객체.`;
+                statusEl.textContent = hasTotal
+                    ? `데이터 수신 시작. 총 ${total}개 객체.`
+                    : '데이터 수신 시작. 총 개수를 파악 중입니다.';
+                if (!hasTotal) {
+                    console.warn(
+                        `[WebSocket] ${data.type} payload missing valid total. Payload:`,
+                        payload
+                    );
+                }
                 console.log(
-                    `[WebSocket] Data fetch/progress started. Total: ${totalStart}`
+                    `[WebSocket] Data fetch/progress started. Total: ${hasTotal ? total : 'unknown'}`
                 ); // 디버깅
                 break;
+            }
 
-            case 'revit_data_chunk':
+            case 'revit_data_chunk': {
                 // console.log("[WebSocket] Received data chunk."); // 너무 빈번하여 주석 처리
                 allRevitData.push(...data.payload);
-                progressBar.value = allRevitData.length;
-                progressStatus.textContent = `${allRevitData.length} / ${
-                    progressBar.max
-                } (${((allRevitData.length / progressBar.max) * 100).toFixed(
-                    0
-                )}%)`;
+                const totalKnown = progressBar.dataset.totalKnown === '1';
+                const displayTotal = Number(
+                    progressBar.dataset.displayTotal ?? progressBar.max
+                );
+
+                if (totalKnown && displayTotal > 0) {
+                    const clampedValue = Math.min(
+                        allRevitData.length,
+                        displayTotal
+                    );
+                    progressBar.value = clampedValue;
+                    progressStatus.textContent = `${allRevitData.length} / ${displayTotal} (${(
+                        (allRevitData.length / displayTotal) *
+                        100
+                    ).toFixed(0)}%)`;
+                } else if (totalKnown) {
+                    progressBar.value = 0;
+                    progressStatus.textContent = `${allRevitData.length} / ${displayTotal}`;
+                } else {
+                    const dynamicMax = Math.max(
+                        Number(progressBar.max) || 1,
+                        allRevitData.length || 1
+                    );
+                    progressBar.max = dynamicMax;
+                    progressBar.value = allRevitData.length;
+                    progressStatus.textContent = `${allRevitData.length} / ?`;
+                }
                 break;
-            case 'fetch_progress_update':
-                const processed = data.payload.processed_count;
-                const totalUpdate = progressBar.max;
-                progressBar.value = processed;
-                progressStatus.textContent = `${processed} / ${totalUpdate} (${(
-                    (processed / totalUpdate) *
-                    100
-                ).toFixed(0)}%)`;
+            }
+            case 'fetch_progress_update': {
+                const processed = Number(
+                    data?.payload?.processed_count ?? 0
+                );
+                const payload = data.payload ?? {};
+                let totalKnown = progressBar.dataset.totalKnown === '1';
+                if (!totalKnown) {
+                    const { hasTotal, total } = parseProgressTotal(payload);
+                    if (hasTotal) {
+                        totalKnown = true;
+                        progressBar.dataset.totalKnown = '1';
+                        progressBar.dataset.displayTotal = String(total);
+                        if (total > 0) {
+                            progressBar.max = total;
+                        }
+                    }
+                }
+                const displayTotal = Number(
+                    progressBar.dataset.displayTotal ?? progressBar.max
+                );
+
+                if (totalKnown && displayTotal > 0) {
+                    const clampedValue = Math.min(processed, displayTotal);
+                    progressBar.value = clampedValue;
+                    progressStatus.textContent = `${processed} / ${displayTotal} (${(
+                        (processed / displayTotal) *
+                        100
+                    ).toFixed(0)}%)`;
+                } else if (totalKnown) {
+                    progressBar.value = processed;
+                    progressStatus.textContent = `${processed} / ${displayTotal}`;
+                } else {
+                    const dynamicMax = Math.max(
+                        Number(progressBar.max) || 1,
+                        processed || 0,
+                        1
+                    );
+                    progressBar.max = dynamicMax;
+                    progressBar.value = processed;
+                    progressStatus.textContent = `처리됨: ${processed}개`;
+                }
                 // console.log(`[WebSocket] Fetch progress update: ${processed}/${totalUpdate}`); // 너무 빈번하여 주석 처리
                 break;
+            }
 
             case 'revit_data_complete':
                 console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
@@ -122,10 +216,28 @@ function setupWebSocket() {
                 ); // 디버깅
                 break;
 
-            case 'fetch_progress_complete':
+            case 'fetch_progress_complete': {
                 console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
-                progressBar.value = progressBar.max;
-                progressStatus.textContent = 'DB 동기화 완료!';
+                const totalKnown = progressBar.dataset.totalKnown === '1';
+                if (totalKnown) {
+                    const displayTotal = Number(
+                        progressBar.dataset.displayTotal ?? progressBar.max
+                    );
+                    const finalMax = displayTotal > 0 ? displayTotal : 1;
+                    progressBar.max = finalMax;
+                    progressBar.value = finalMax;
+                    progressStatus.textContent = 'DB 동기화 완료!';
+                } else {
+                    const fallbackMax = Math.max(
+                        Number(progressBar.max) || 1,
+                        progressBar.value || 0,
+                        1
+                    );
+                    progressBar.max = fallbackMax;
+                    progressBar.value = fallbackMax;
+                    progressStatus.textContent =
+                        'DB 동기화 완료 (총 개수 미확인)';
+                }
                 statusEl.textContent = `DB 동기화 완료. 최종 데이터 요청 중...`;
                 console.log(
                     '[WebSocket] Fetch progress complete. Requesting final data...'
@@ -142,6 +254,7 @@ function setupWebSocket() {
                     );
                 }
                 break;
+            }
             case 'all_elements': // fetch_progress_complete 후 서버가 보내는 최종 데이터
                 console.log(`[WebSocket][onmessage] Received: ${data.type}`); // <--- 추가
                 lowerValueCache?.clear?.();
