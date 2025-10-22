@@ -1947,6 +1947,8 @@ function renderBoqTable(
     console.log(
         `[DEBUG][Render] renderBoqTable called for container #${targetContainerId}.`
     );
+    console.log(`[DEBUG][renderBoqTable] Received reportData:`, reportData);
+    console.log(`[DEBUG][renderBoqTable] Received unitPriceTypes:`, unitPriceTypes);
 
     if (!container) {
         console.error(
@@ -2039,6 +2041,11 @@ function renderBoqTable(
         let rowTds = '';
         let rowHasMissingPrice = node.has_missing_price;
 
+        console.log(`[DEBUG][renderBoqTable] Node level: ${node.level}, Name: ${node.name}, UnitPriceTypeId: ${node.unit_price_type_id}`);
+        if (node.level === 0) {
+            console.log(`[DEBUG][renderBoqTable] Available UnitPriceTypes:`, unitPriceTypes);
+        }
+
         columnsToRender.forEach((column) => {
             let cellValue = '';
             let cellStyle = column.align ? `text-align: ${column.align};` : '';
@@ -2046,12 +2053,23 @@ function renderBoqTable(
             // --- [수정] 단가 기준 열 렌더링 로직 (DD 전용) ---
             if (column.id === 'unit_price_type_id' && !isSdTab) {
                 // DD 탭에서만
-                let options = unitPriceTypeOptionsHtml;
-                let selectedValue = node.unit_price_type_id || '';
-                if (node.unit_price_type_id === 'various') {
-                    options = variousOptionHtml + options;
-                    selectedValue = 'various';
+                let optionsHtmlForSelect = '';
+                // Determine the selected value, prioritizing node.unit_price_type_id, then lastSelectedUnitPriceTypeId
+                const effectiveUnitPriceTypeId = node.unit_price_type_id === undefined ? lastSelectedUnitPriceTypeId : node.unit_price_type_id;
+
+                if (effectiveUnitPriceTypeId === 'various') {
+                    optionsHtmlForSelect += `<option value="various" disabled selected>-- 다양함 --</option>`;
+                } else {
+                    optionsHtmlForSelect += '<option value="">-- 기준 선택 --</option>'; // Default empty option
                 }
+
+                if (!isSdTab && unitPriceTypes && unitPriceTypes.length > 0) {
+                    unitPriceTypes.forEach((type) => {
+                        const isSelected = type.id === effectiveUnitPriceTypeId;
+                        optionsHtmlForSelect += `<option value="${type.id}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
+                    });
+                }
+
                 const titleAttr = rowHasMissingPrice
                     ? 'title="주의: 일부 하위 항목의 단가 정보가 누락되어 합계가 부정확할 수 있습니다."'
                     : '';
@@ -2063,7 +2081,7 @@ function renderBoqTable(
                                  <select class="unit-price-type-select" data-item-ids='${JSON.stringify(
                                      node.item_ids
                                  )}'>
-                                     ${options}
+                                     ${optionsHtmlForSelect}
                                  </select>
                               </td>`;
             }
@@ -2657,10 +2675,8 @@ function renderBoqDisplayFieldControls(fields) {
         return;
     }
 
-    // '수량'과 '항목 수'는 기본 표시 항목이므로 체크박스 목록에서는 제외합니다.
-    const creatableFields = fields.filter(
-        (f) => f.value !== 'quantity' && f.value !== 'count'
-    );
+    // '수량'과 '항목 수'는 기본 표시 항목이므로 체크박스 목록에서는 제외합니다. -> 이 필터링을 제거합니다.
+    const creatableFields = fields; // 모든 필드를 포함하도록 변경
 
     container.innerHTML = creatableFields
         .map(
@@ -2674,38 +2690,7 @@ function renderBoqDisplayFieldControls(fields) {
         .join('');
 }
 
-// connections/static/connections/ui.js
 
-// 파일 맨 아래에 아래 함수 전체를 추가해주세요.
-
-/**
- * BOQ 탭에서 집계 결과에 함께 표시할 필드를 선택하는 체크박스 UI를 생성합니다.
- * @param {Array} fields - 서버에서 받은 표시 가능한 필드 목록
- */
-function renderBoqDisplayFieldControls(fields) {
-    const container = document.getElementById('boq-display-fields-container');
-    if (!fields || fields.length === 0) {
-        container.innerHTML =
-            '<small>표시할 필드를 불러올 수 없습니다.</small>';
-        return;
-    }
-
-    // '수량'과 '항목 수'는 기본 표시 항목이므로 체크박스 목록에서는 제외합니다.
-    const creatableFields = fields.filter(
-        (f) => f.value !== 'quantity' && f.value !== 'count'
-    );
-
-    container.innerHTML = creatableFields
-        .map(
-            (field) => `
-        <label>
-            <input type="checkbox" class="boq-display-field-cb" value="${field.value}">
-            ${field.label}
-        </label>
-    `
-        )
-        .join('');
-}
 // ▼▼▼ [교체] 기존 renderBimPropertiesTable 함수 전체를 아래 코드로 교체 ▼▼▼
 /**
  * [수정됨] 현재 활성화된 탭 컨텍스트('data-management' 또는 'space-management')에 따라

@@ -86,6 +86,7 @@ let boqColumnAliases = {};
 let lastBoqItemIds = []; // BOQ 상세에서 이전 그룹으로 돌아가기 위한 ID 저장 (미사용 시 제거 가능)
 let currentBoqDetailItemId = null; // BOQ 상세에서 현재 선택된 Item ID
 let loadedUnitPriceTypesForBoq = [];
+let lastSelectedUnitPriceTypeId = null;
 
 // --- 기타 상태 ---
 let currentCsvImportUrl = null; // CSV 가져오기 시 사용할 URL 임시 저장
@@ -117,6 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log(
         '[DEBUG] DOMContentLoaded start - Setting up event listeners...'
     ); // 디버깅
+
+    // BOQ 컬럼 설정 로드 (초기 로드 시)
+    loadBoqColumnSettings();
 
     // CSRF 토큰 설정
     const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -928,6 +932,9 @@ function handleProjectChange(e) {
         `[DEBUG][handleProjectChange] Project changed to: ${currentProjectId}`
     ); // 디버깅
 
+    // BOQ 컬럼 설정 로드 (프로젝트 변경 시)
+    loadBoqColumnSettings();
+
     // --- 상태 초기화 ---
     allRevitData = []; // BIM 데이터 초기화
     // 각 뷰어 상태 초기화
@@ -958,8 +965,8 @@ function handleProjectChange(e) {
     lastSelectedCiRowIndex = -1;
     // BOQ(DD) 상태 초기화
     boqFilteredRawElementIds.clear();
-    currentBoqColumns = [];
-    boqColumnAliases = {};
+    // currentBoqColumns = []; // loadBoqColumnSettings에서 처리
+    // boqColumnAliases = {}; // loadBoqColumnSettings에서 처리
     lastBoqItemIds = [];
     currentBoqDetailItemId = null;
     loadedUnitPriceTypesForBoq = [];
@@ -4286,6 +4293,7 @@ function setupBoqTableInteractions() {
 
             // Re-render the table body with the new column order
             generateBoqReport(); // This will use the updated currentBoqColumns
+            saveBoqColumnSettings(); // Save new column order
         });
 
         // Column name editing listener
@@ -4308,6 +4316,7 @@ function setupBoqTableInteractions() {
                     console.log(
                         `[DEBUG] Column alias updated for "${colId}": "${newAlias.trim()}"`
                     ); // 디버깅
+                    saveBoqColumnSettings(); // Save new column alias
                     // No need to regenerate report, just update alias
                 } else if (newAlias === '') {
                     // If user enters empty string, reset to default label
@@ -4317,6 +4326,7 @@ function setupBoqTableInteractions() {
                     delete boqColumnAliases[colId];
                     th.childNodes[0].nodeValue = `${defaultLabel} `;
                     console.log(`[DEBUG] Column alias reset for "${colId}".`); // 디버깅
+                    saveBoqColumnSettings(); // Save updated aliases
                 }
             }
         });
@@ -4397,6 +4407,7 @@ function setupBoqTableInteractions() {
                     console.log(
                         `[DEBUG][Event] UnitPriceType update successful. Refreshing BOQ table...`
                     ); // 디버깅
+                    lastSelectedUnitPriceTypeId = newTypeId; // Store the last successfully selected ID
                     // 중요: 업데이트 성공 후 BOQ 테이블 전체를 다시 그림
                     await generateBoqReport();
                 } catch (error) {
@@ -4560,6 +4571,7 @@ function updateBoqDetailsPanel(itemIds) {
     const itemsToRender = loadedDdCostItems.filter((item) =>
         itemIds.includes(item.id)
     );
+    console.log(`[DEBUG][updateBoqDetailsPanel] Filtered itemsToRender:`, itemsToRender);
     // ▲▲▲ 수정 끝 ▲▲▲
     if (itemsToRender.length === 0) {
         listContainer.innerHTML =
@@ -4576,6 +4588,9 @@ function updateBoqDetailsPanel(itemIds) {
         { id: 'quantity', label: '수량', align: 'right' },
         { id: 'unit_price_type_name', label: '단가기준' },
         { id: 'total_cost_unit', label: '합계단가', align: 'right' },
+        { id: 'material_cost_unit', label: '재료비단가', align: 'right' },
+        { id: 'labor_cost_unit', label: '노무비단가', align: 'right' },
+        { id: 'expense_cost_unit', label: '경비단가', align: 'right' },
         { id: 'total_cost_total', label: '합계금액', align: 'right' },
         { id: 'material_cost_total', label: '재료비', align: 'right' },
         { id: 'labor_cost_total', label: '노무비', align: 'right' },
@@ -4597,6 +4612,8 @@ function updateBoqDetailsPanel(itemIds) {
 
     // --- 각 CostItem 행 생성 ---
     itemsToRender.forEach((item) => {
+        console.log(`[DEBUG][updateBoqDetailsPanel] Processing item ID: ${item.id}`);
+        console.log(`[DEBUG][updateBoqDetailsPanel] Item unit costs: totalUnit=${item.total_cost_unit}, materialUnit=${item.material_cost_unit}, laborUnit=${item.labor_cost_unit}, expenseUnit=${item.expense_cost_unit}`);
         // --- 이름 및 비용 정보 조회 로직 ---
         const costItemName = item.cost_code_name || '(이름 없는 항목)';
         const qtyStr = item.quantity || '0.0000'; // 백엔드에서 문자열로 옴
@@ -4629,6 +4646,9 @@ function updateBoqDetailsPanel(itemIds) {
 
         // 비용 정보 (loadedCostItems 또는 loadedDdCostItems에 이미 문자열로 포함되어 있음)
         const totalUnit = item.total_cost_unit || '0.0000';
+        const materialUnit = item.material_cost_unit || '0.0000';
+        const laborUnit = item.labor_cost_unit || '0.0000';
+        const expenseUnit = item.expense_cost_unit || '0.0000';
         const totalAmount = item.total_cost_total || '0.0000';
         const matAmount = item.material_cost_total || '0.0000';
         const labAmount = item.labor_cost_total || '0.0000';
@@ -4658,6 +4678,15 @@ function updateBoqDetailsPanel(itemIds) {
                     break;
                 case 'total_cost_unit':
                     value = totalUnit;
+                    break;
+                case 'material_cost_unit':
+                    value = materialUnit;
+                    break;
+                case 'labor_cost_unit':
+                    value = laborUnit;
+                    break;
+                case 'expense_cost_unit':
+                    value = expenseUnit;
                     break;
                 case 'total_cost_total':
                     value = totalAmount;
@@ -5096,12 +5125,19 @@ function resetBoqColumnsAndRegenerate(skipConfirmation = false) {
         return;
     }
 
+    // localStorage에서 설정 제거
+    localStorage.removeItem('boqColumnSettings');
+    console.log('[DEBUG] BOQ column settings removed from localStorage.');
+
+    // 전역 변수 초기화 (loadBoqColumnSettings가 기본값으로 다시 채울 것임)
     currentBoqColumns = [];
     boqColumnAliases = {};
     console.log(
         '[DEBUG] 열 상태(currentBoqColumns, boqColumnAliases) 초기화됨.'
     );
 
+    // 설정 로드 함수를 다시 호출하여 기본값으로 채우고, 테이블 재생성
+    loadBoqColumnSettings();
     showToast('열 상태를 초기화하고 집계표를 다시 생성합니다.', 'info');
     generateBoqReport();
 }
@@ -10059,6 +10095,11 @@ function updateDdBoqColumns() {
         }, // DD는 단가기준 포함
         { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
         { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
+        // 추가된 단가 관련 컬럼
+        { id: 'total_cost_unit', label: '합계단가', isDynamic: true, align: 'right' },
+        { id: 'material_cost_unit', label: '재료비단가', isDynamic: true, align: 'right' },
+        { id: 'labor_cost_unit', label: '노무비단가', isDynamic: true, align: 'right' },
+        { id: 'expense_cost_unit', label: '경비단가', isDynamic: true, align: 'right' },
         ...selectedDisplayFields,
         // 비용 관련 컬럼 (DD)
         {
@@ -10085,10 +10126,121 @@ function updateDdBoqColumns() {
             isDynamic: false,
             align: 'right',
         },
-        // 필요 시 단가 컬럼 추가 (예: total_cost_unit 등)
     ];
     console.log(
         '[DEBUG][DD BOQ] Updated currentBoqColumns:',
         currentBoqColumns
     );
 }
+
+/**
+ * BOQ 테이블의 컬럼 순서와 별칭 설정을 localStorage에 저장합니다.
+ */
+function saveBoqColumnSettings() {
+    try {
+        const settings = {
+            columnOrder: currentBoqColumns.map(col => col.id),
+            columnAliases: boqColumnAliases
+        };
+        localStorage.setItem('boqColumnSettings', JSON.stringify(settings));
+        console.log('[DEBUG] BOQ column settings saved to localStorage.');
+    } catch (e) {
+        console.error('[ERROR] Failed to save BOQ column settings to localStorage:', e);
+    }
+}
+
+/**
+ * localStorage에서 BOQ 테이블의 컬럼 순서와 별칭 설정을 로드합니다.
+ * 로드된 설정은 currentBoqColumns와 boqColumnAliases에 적용됩니다.
+ */
+function loadBoqColumnSettings() {
+    try {
+        const savedSettings = localStorage.getItem('boqColumnSettings');
+        if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+            if (settings.columnOrder && Array.isArray(settings.columnOrder)) {
+                // 기본 컬럼 정의를 기반으로 순서 재구성
+                const defaultColumns = [
+                    { id: 'name', label: '구분', isDynamic: false, align: 'left' },
+                    { id: 'unit_price_type_id', label: '단가기준', isDynamic: false, align: 'center', width: '150px' },
+                    { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
+                    { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
+                    { id: 'total_cost_unit', label: '합계단가', isDynamic: true, align: 'right' },
+                    { id: 'material_cost_unit', label: '재료비단가', isDynamic: true, align: 'right' },
+                    { id: 'labor_cost_unit', label: '노무비단가', isDynamic: true, align: 'right' },
+                    { id: 'expense_cost_unit', label: '경비단가', isDynamic: true, align: 'right' },
+                    { id: 'total_cost_total', label: '합계금액', isDynamic: false, align: 'right' },
+                    { id: 'material_cost_total', label: '재료비', isDynamic: false, align: 'right' },
+                    { id: 'labor_cost_total', label: '노무비', isDynamic: false, align: 'right' },
+                    { id: 'expense_cost_total', label: '경비', isDynamic: false, align: 'right' },
+                ];
+                
+                const reorderedColumns = [];
+                settings.columnOrder.forEach(colId => {
+                    const found = defaultColumns.find(dc => dc.id === colId);
+                    if (found) {
+                        reorderedColumns.push(found);
+                    } else {
+                        // 동적으로 추가된 필드 (예: BIM 속성) 처리
+                        // availableBoqFields에서 찾거나, 임시 객체 생성
+                        const dynamicField = availableBoqFields.find(f => f.value === colId);
+                        if (dynamicField) {
+                            reorderedColumns.push({ id: dynamicField.value, label: dynamicField.label, isDynamic: true, align: 'left' });
+                        } else {
+                             // 만약 저장된 컬럼이 현재 availableBoqFields에 없으면 기본값으로 추가 (예: 삭제된 필드)
+                            reorderedColumns.push({ id: colId, label: colId, isDynamic: true, align: 'left' });
+                        }
+                    }
+                });
+                // 저장된 순서에 없는 기본 컬럼 추가 (새로 추가된 기본 컬럼 등)
+                defaultColumns.forEach(defaultCol => {
+                    if (!reorderedColumns.some(rc => rc.id === defaultCol.id)) {
+                        reorderedColumns.push(defaultCol);
+                    }
+                });
+                currentBoqColumns = reorderedColumns;
+            }
+            if (settings.columnAliases) {
+                boqColumnAliases = settings.columnAliases;
+            }
+            console.log('[DEBUG] BOQ column settings loaded from localStorage.');
+        } else {
+            console.log('[DEBUG] No BOQ column settings found in localStorage. Using defaults.');
+            // 기본 컬럼 설정 (초기 로드 시)
+            currentBoqColumns = [
+                { id: 'name', label: '구분', isDynamic: false, align: 'left' },
+                { id: 'unit_price_type_id', label: '단가기준', isDynamic: false, align: 'center', width: '150px' },
+                { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
+                { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
+                { id: 'total_cost_unit', label: '합계단가', isDynamic: true, align: 'right' },
+                { id: 'material_cost_unit', label: '재료비단가', isDynamic: true, align: 'right' },
+                { id: 'labor_cost_unit', label: '노무비단가', isDynamic: true, align: 'right' },
+                { id: 'expense_cost_unit', label: '경비단가', isDynamic: true, align: 'right' },
+                { id: 'total_cost_total', label: '합계금액', isDynamic: false, align: 'right' },
+                { id: 'material_cost_total', label: '재료비', isDynamic: false, align: 'right' },
+                { id: 'labor_cost_total', label: '노무비', isDynamic: false, align: 'right' },
+                { id: 'expense_cost_total', label: '경비', isDynamic: false, align: 'right' },
+            ];
+            boqColumnAliases = {};
+        }
+    } catch (e) {
+        console.error('[ERROR] Failed to load BOQ column settings from localStorage:', e);
+        // 오류 발생 시 기본값으로 초기화
+        currentBoqColumns = [
+            { id: 'name', label: '구분', isDynamic: false, align: 'left' },
+            { id: 'unit_price_type_id', label: '단가기준', isDynamic: false, align: 'center', width: '150px' },
+            { id: 'quantity', label: '수량', isDynamic: false, align: 'right' },
+            { id: 'count', label: '항목 수', isDynamic: false, align: 'right' },
+            { id: 'total_cost_unit', label: '합계단가', isDynamic: true, align: 'right' },
+            { id: 'material_cost_unit', label: '재료비단가', isDynamic: true, align: 'right' },
+            { id: 'labor_cost_unit', label: '노무비단가', isDynamic: true, align: 'right' },
+            { id: 'expense_cost_unit', label: '경비단가', isDynamic: true, align: 'right' },
+            { id: 'total_cost_total', label: '합계금액', isDynamic: false, align: 'right' },
+            { id: 'material_cost_total', label: '재료비', isDynamic: false, align: 'right' },
+            { id: 'labor_cost_total', label: '노무비', isDynamic: false, align: 'right' },
+            { id: 'expense_cost_total', label: '경비', isDynamic: false, align: 'right' },
+        ];
+        boqColumnAliases = {};
+    }
+}
+
