@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+"""post-commit: 작업 로그 및 요청 파일 동기화."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def run_script(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        cwd=script.parents[1],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    root = Path(__file__).resolve().parents[1]
+    worklog_script = root / "scripts" / "update_worklog.py"
+    requests_script = root / "scripts" / "update_requests.py"
+
+    try:
+        result = run_script(worklog_script)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(exc.stderr or "[오류] update_worklog.py 실행 실패\n")
+        sys.exit(exc.returncode)
+
+    info_text = result.stdout.strip()
+    try:
+        json.loads(info_text)
+    except json.JSONDecodeError:
+        sys.stderr.write("[오류] update_worklog.py 결과를 해석할 수 없습니다.\n")
+        sys.exit(1)
+
+    try:
+        run_script(requests_script, "--commit-info", info_text)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(exc.stderr or "[오류] update_requests.py 실행 실패\n")
+        sys.exit(exc.returncode)
+
+
+if __name__ == "__main__":
+    main()
