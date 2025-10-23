@@ -2240,6 +2240,9 @@ function updateBoqDetailsPanel(itemIds) {
         { id: 'cost_code_name', label: '산출항목' },
         { id: 'quantity', label: '수량', align: 'right' },
         { id: 'unit_price_type_name', label: '단가기준' },
+        { id: 'material_cost_unit', label: '재료비단가', align: 'right' },
+        { id: 'labor_cost_unit', label: '노무비단가', align: 'right' },
+        { id: 'expense_cost_unit', label: '경비단가', align: 'right' },
         { id: 'total_cost_unit', label: '합계단가', align: 'right' },
         { id: 'total_cost_total', label: '합계금액', align: 'right' },
         { id: 'material_cost_total', label: '재료비', align: 'right' },
@@ -2293,6 +2296,9 @@ function updateBoqDetailsPanel(itemIds) {
             : '(미지정)';
 
         // 비용 정보 (loadedCostItems에 이미 문자열로 포함되어 있음)
+        const matUnit = item.material_cost_unit || '0.0000';
+        const labUnit = item.labor_cost_unit || '0.0000';
+        const expUnit = item.expense_cost_unit || '0.0000';
         const totalUnit = item.total_cost_unit || '0.0000';
         const totalAmount = item.total_cost_total || '0.0000';
         const matAmount = item.material_cost_total || '0.0000';
@@ -2321,6 +2327,15 @@ function updateBoqDetailsPanel(itemIds) {
                     break; // 문자열 그대로 사용
                 case 'unit_price_type_name':
                     value = unitPriceTypeName;
+                    break;
+                case 'material_cost_unit':
+                    value = matUnit;
+                    break;
+                case 'labor_cost_unit':
+                    value = labUnit;
+                    break;
+                case 'expense_cost_unit':
+                    value = expUnit;
                     break;
                 case 'total_cost_unit':
                     value = totalUnit;

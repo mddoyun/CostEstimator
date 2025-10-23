@@ -4407,7 +4407,7 @@ function setupBoqTableInteractions() {
                     console.log(
                         `[DEBUG][Event] UnitPriceType update successful. Refreshing BOQ table...`
                     ); // 디버깅
-                    lastSelectedUnitPriceTypeId = newTypeId; // Store the last successfully selected ID
+                    // lastSelectedUnitPriceTypeId = newTypeId; // This was causing a bug where all dropdowns would change
                     // 중요: 업데이트 성공 후 BOQ 테이블 전체를 다시 그림
                     await generateBoqReport();
                 } catch (error) {
