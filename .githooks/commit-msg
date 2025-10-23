@@ -1,35 +1,27 @@
-#!/usr/bin/env python
-"""commit-msg: 커밋 메시지 간결성 검증."""
+#!/bin/sh
+# commit-msg hook
+#
+# Checks the commit message for style.
+# 1. Subject line should be 50 characters or less.
+# 2. Subject line should contain Korean.
 
-from __future__ import annotations
+COMMIT_MSG_FILE=$1
+SUBJECT=$(head -n1 "$COMMIT_MSG_FILE")
+# Use 'expr length' for better compatibility
+SUBJECT_LENGTH=$(expr length "$SUBJECT")
 
-import re
-import sys
-from pathlib import Path
+echo "--- Running commit-msg hook ---"
 
+# Check length
+if [ "$SUBJECT_LENGTH" -gt 50 ]; then
+    echo "[오류] 커밋 제목이 50자를 초과했습니다 (${SUBJECT_LENGTH}자)."
+    exit 1
+fi
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        sys.stderr.write("[오류] 커밋 메시지 파일이 전달되지 않았습니다.\n")
-        sys.exit(1)
+# Check for Korean characters (simple check)
+if ! echo "$SUBJECT" | grep -q -E '[가-힣]'; then
+    echo "[경고] 커밋 제목에 한글이 없습니다. 한글 사용을 권장합니다."
+fi
 
-    message_path = Path(sys.argv[1])
-    message = message_path.read_text(encoding="utf-8")
-    if not message.strip():
-        sys.stderr.write("[오류] 커밋 메시지가 비어 있습니다.\n")
-        sys.exit(1)
-
-    title = message.splitlines()[0].strip()
-    if len(title) > 50:
-        sys.stderr.write(f"[오류] 커밋 제목이 50자를 초과했습니다 ({len(title)}자).\n")
-        sys.exit(1)
-
-    if len(title) < 2:
-        sys.stderr.write("[경고] 커밋 제목이 지나치게 짧습니다.\n")
-
-    if not re.search(r"[가-힣]", title):
-        sys.stderr.write("[경고] 커밋 제목에 한글이 없습니다. 한글 사용을 권장합니다.\n")
-
-
-if __name__ == "__main__":
-    main()
+echo "--- Commit-msg hook finished ---"
+exit 0

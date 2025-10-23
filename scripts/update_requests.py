@@ -13,11 +13,15 @@ REQUEST_PENDING_CONTENT = "# [PENDING] 다음 요청사항\n\n- (여기에 다�
 def get_latest_commit_info():
     """최신 커밋의 제목과 날짜를 가져옵니다."""
     try:
-        result = subprocess.check_output(
+        result_bytes = subprocess.check_output(
             ["git", "log", "-1", "--pretty=format:%s|%ad", "--date=format:%Y-%m-%d"],
-            encoding='utf-8',
             stderr=subprocess.STDOUT
-        ).strip()
+        )
+        try:
+            result = result_bytes.decode('utf-8').strip()
+        except UnicodeDecodeError:
+            result = result_bytes.decode('cp949', errors='replace').strip()
+
         subject, date = result.split('|', 1)
         return subject, date
     except Exception as e:

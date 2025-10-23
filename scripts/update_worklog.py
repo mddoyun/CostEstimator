@@ -26,11 +26,15 @@ WORKLOG_PENDING_CONTENT = """# [PENDING] 현재 작업 로그
 def get_latest_commit_info():
     """최신 커밋의 해시와 제목을 가져옵니다."""
     try:
-        result = subprocess.check_output(
+        result_bytes = subprocess.check_output(
             ["git", "log", "-1", "--pretty=format:%H|%s"],
-            encoding='utf-8',
             stderr=subprocess.STDOUT
-        ).strip()
+        )
+        try:
+            result = result_bytes.decode('utf-8').strip()
+        except UnicodeDecodeError:
+            result = result_bytes.decode('cp949', errors='replace').strip()
+            
         commit_hash, subject = result.split('|', 1)
         return commit_hash, subject
     except subprocess.CalledProcessError as e:
