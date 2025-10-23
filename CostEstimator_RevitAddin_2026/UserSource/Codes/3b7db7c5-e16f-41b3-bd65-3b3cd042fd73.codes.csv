@@ -1,0 +1,2 @@
+﻿Code,WorkType,Name,Spec,Unit,RuleSetJson
+NEW-114435,철콘,레미콘,-,m3,"{""건축_골조_기초_매트기초"":[{""Id"":""b59d8a06-1d87-4115-87e9-e08b109e10f9"",""Condition"":""StructuralMark.Type = 'A' AND Description = '테스트설명'"",""Expression"":""${Volume}*${StructuralMark.Thk}""}]}"

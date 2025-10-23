@@ -1,0 +1,58 @@
+{
+  "Id": "f37cdbd2-93a0-4729-9289-cc759ee8e672",
+  "ProjectId": "28fb1205-f15c-4d08-8cb2-3e23958b46e8",
+  "Members": {
+    "f16fc901-e728-48ca-921c-5f41a0aaa1f3": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 62062.37817101408,
+      "Area": 10509.290321545574,
+      "Perimeter": 541.3689228501066,
+      "Thickness": 10.0,
+      "VolumeRef": "${체적}",
+      "AreaRef": "${면적}",
+      "PerimeterRef": "${둘레}",
+      "StructuralMark": "F1",
+      "Id": "f16fc901-e728-48ca-921c-5f41a0aaa1f3",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "f4992dac-c15a-4620-b278-31749a89883a-00292aa7",
+      "RawDataSnapshot": "{\"UniqueId\":\"f4992dac-c15a-4620-b278-31749a89883a-00292aa7\",\"ElementId\":2697895,\"Category\":\"구조 기초\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":2695400,\"Name\":\"지하2층\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"3qcIsimLf68B9uCNIQeAAT\",\"연관 있음\":1,\"보강 철근 피복 - 하단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":62062.378171014076,\"면적\":10509.290321545574,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":\"\",\"경사\":0.0,\"레벨\":{\"ElementId\":2695400,\"UniqueId\":\"680c816b-057a-425e-aa04-ea6185466658-002920e8\",\"Name\":\"지하2층\"},\"패밀리 및 유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"구조\":1,\"둘레\":541.3689228501066,\"레벨#-1001952\":{\"ElementId\":2695400,\"UniqueId\":\"680c816b-057a-425e-aa04-ea6185466658-002920e8\",\"Name\":\"지하2층\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":5.905511811023622,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-39.041994750656166,\"상단 기준 레벨 측량\":-33.13648293963254,\"코어 두께\":5.905511811023622,\"하단 코어의 입면도\":-39.041994750656166,\"상단 코어의 입면도\":-33.13648293963254,\"상단 기준 레벨\":-33.13648293963254,\"길이\":121.06287833466514,\"하단 기준 레벨\":-39.041994750656166,\"폭\":141.40419947506774,\"마크\":null}}",
+      "Name": "매트기초(f4992dac)",
+      "CreatedAt": "2025-09-18T05:17:07.2861692Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "2f07233e-eff6-44b3-9850-c7b9b5b90588": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 10143.43946403552,
+      "Area": 1717.6260331471651,
+      "Perimeter": 204.6199573810914,
+      "Thickness": 20.0,
+      "VolumeRef": "${체적}",
+      "AreaRef": "${면적}",
+      "PerimeterRef": "${둘레}",
+      "Id": "2f07233e-eff6-44b3-9850-c7b9b5b90588",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "f4992dac-c15a-4620-b278-31749a89883a-00292bcc",
+      "RawDataSnapshot": "{\"UniqueId\":\"f4992dac-c15a-4620-b278-31749a89883a-00292bcc\",\"ElementId\":2698188,\"Category\":\"구조 기초\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":228554,\"Name\":\"PIT\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"3qcIsimLf68B9uCNIQeAFs\",\"연관 있음\":1,\"보강 철근 피복 - 하단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":10143.439464035519,\"면적\":1717.6260331471651,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":\"\",\"경사\":0.0,\"레벨\":{\"ElementId\":228554,\"UniqueId\":\"66ae4a53-96cc-4349-a511-a89d3afceafe-00037cca\",\"Name\":\"PIT\"},\"패밀리 및 유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"구조\":1,\"둘레\":204.6199573810914,\"레벨#-1001952\":{\"ElementId\":228554,\"UniqueId\":\"66ae4a53-96cc-4349-a511-a89d3afceafe-00037cca\",\"Name\":\"PIT\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":5.905511811023622,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-44.94750656167978,\"상단 기준 레벨 측량\":-39.04199475065616,\"코어 두께\":5.905511811023622,\"하단 코어의 입면도\":-44.94750656167978,\"상단 코어의 입면도\":-39.04199475065616,\"상단 기준 레벨\":-39.04199475065616,\"길이\":62.335958005249324,\"하단 기준 레벨\":-44.94750656167978,\"폭\":47.2440944881903,\"마크\":null}}",
+      "Name": "매트기초(f4992dac)",
+      "CreatedAt": "2025-09-18T05:17:07.2883788Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "8da90eac-5047-4829-97d6-f327e61a5686": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 30456.09559029117,
+      "Area": 5157.2321866226375,
+      "Perimeter": 301.2188716377689,
+      "Thickness": 30.0,
+      "VolumeRef": "${체적}",
+      "AreaRef": "${면적}",
+      "PerimeterRef": "${둘레}",
+      "Id": "8da90eac-5047-4829-97d6-f327e61a5686",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "9fe90ca2-3376-4f3e-833a-b668ae101baf-002f39f0",
+      "RawDataSnapshot": "{\"UniqueId\":\"9fe90ca2-3376-4f3e-833a-b668ae101baf-002f39f0\",\"ElementId\":3095024,\"Category\":\"구조 기초\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":228554,\"Name\":\"PIT\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"2VwGoYCtPFFeCwjcYkFo9V\",\"연관 있음\":1,\"보강 철근 피복 - 하단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":138402,\"UniqueId\":\"a4638026-9a0c-4a46-a15f-931eb961ee40-00021ca2\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":30456.09559029117,\"면적\":5157.2321866226375,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":\"\",\"경사\":0.0,\"레벨\":{\"ElementId\":228554,\"UniqueId\":\"66ae4a53-96cc-4349-a511-a89d3afceafe-00037cca\",\"Name\":\"PIT\"},\"패밀리 및 유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"유형\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":6572322,\"UniqueId\":\"f549375c-7cfc-4ca5-9875-ccbcfc9aac61-00644922\",\"Name\":\"FT113-매트기초(기초슬래브)_MF1_1800mm\"},\"구조\":1,\"둘레\":301.2188716377689,\"레벨#-1001952\":{\"ElementId\":228554,\"UniqueId\":\"66ae4a53-96cc-4349-a511-a89d3afceafe-00037cca\",\"Name\":\"PIT\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":5.905511811023622,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-44.94750656167978,\"상단 기준 레벨 측량\":-39.04199475065616,\"코어 두께\":5.905511811023622,\"하단 코어의 입면도\":-44.94750656167978,\"상단 코어의 입면도\":-39.04199475065616,\"상단 기준 레벨\":-39.04199475065616,\"길이\":70.87896771954634,\"하단 기준 레벨\":-44.94750656167978,\"폭\":79.73046809933817,\"마크\":null}}",
+      "Name": "매트기초(9fe90ca2)",
+      "CreatedAt": "2025-09-18T05:17:07.2883901Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

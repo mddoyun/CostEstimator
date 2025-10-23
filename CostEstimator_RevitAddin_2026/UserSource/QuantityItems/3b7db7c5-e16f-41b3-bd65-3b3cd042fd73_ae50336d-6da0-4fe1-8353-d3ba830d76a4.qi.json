@@ -1,0 +1,16 @@
+{
+  "Id": "ae50336d-6da0-4fe1-8353-d3ba830d76a4",
+  "ProjectId": "3b7db7c5-e16f-41b3-bd65-3b3cd042fd73",
+  "Items": [
+    {
+      "Id": "b3b4c1db-c4a7-46c1-b6c4-f9bdca271923",
+      "Code": "NEW-114435",
+      "WorkType": "철콘",
+      "Name": "레미콘",
+      "Spec": "-",
+      "Unit": "m3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    }
+  ]
+}

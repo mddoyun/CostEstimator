@@ -1,0 +1,2 @@
+﻿Id,Name,TargetTag,Condition,MappingsJson,Priority,IsActive,Description
+1a2966f7-deb2-4754-aa91-774b4235b618,"새 속성 규칙","건축_골조_기초_매트기초","Category = '구조 기초'","{""VolumeRef"":""${체적}*1.03"",""AreaRef"":""${면적}*1.03""}",100,True,""

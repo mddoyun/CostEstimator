@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+	<AddIn Type="Application">
+		<Assembly>.\CostEstimator_RevitAddin_2026\Debug\net8.0-windows\AiBimCost.dll</Assembly>
+		<AddInId>B52857E4-5C8D-42AA-9E83-B0211EC27EFE</AddInId>
+		<FullClassName>AiBimCost.StartTools.CreateRibbon</FullClassName>
+		<Name>AiBimCost</Name>
+		<VendorId>AiBimCost</VendorId>
+		<VendorDescription></VendorDescription>
+	</AddIn>
+
+</RevitAddIns>

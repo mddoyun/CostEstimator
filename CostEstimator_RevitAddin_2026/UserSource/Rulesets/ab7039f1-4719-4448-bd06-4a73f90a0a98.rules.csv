@@ -1,0 +1,7 @@
+﻿Id,Name,Condition,TagToApply,Priority,IsActive,Description
+352070d7-a56a-4728-831a-74810cfc5d1a,"매트기초1","[TypeParameters.유형 이름] CONTAINS ""매트기초""","건축_골조_기초_매트기초",100,True,""
+abf77d5a-157c-4955-816f-44639241c024,"바닥마감1","[Category] = ""바닥"" AND [TypeParameters.유형 이름] CONTAINS ""A1-""","건축_마감_바닥",100,True,""
+39c5bb24-83de-4296-a616-3f8f8276f8e8,"바닥마감2","[Category] = ""바닥"" AND [TypeParameters.유형 이름] CONTAINS ""A2-""","건축_마감_바닥",100,True,""
+4325b349-0554-448e-a46b-e69ed246aadb,"구조벽1","[TypeParameters.유형 이름] CONTAINS ""WA111""","건축_골조_옹벽",100,True,""
+94c4635c-48a0-4037-8faf-ea084bd9f9c9,"구조기둥rc각형1","[TypeParameters.유형 이름] CONTAINS ""CL111""","건축_골조_기둥_RC_직사각형",100,True,""
+29d00d27-801f-4a1d-ad1e-14b4f69f8ed8,"구조보rc","[TypeParameters.유형 이름] CONTAINS ""BM110""","건축_골조_보_RC",100,True,""

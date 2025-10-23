@@ -1,0 +1,16 @@
+{
+  "Id": "8ff01cab-3a5c-4526-8e00-a9af41bffb02",
+  "ProjectId": "ec7a4a6c-e271-447e-9277-7b8f8dfb0f2c",
+  "Items": [
+    {
+      "Id": "f245a5a6-626f-4552-829e-31538982c2bb",
+      "Code": "3CCAA350",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-180-18",
+      "Unit": "M3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    }
+  ]
+}

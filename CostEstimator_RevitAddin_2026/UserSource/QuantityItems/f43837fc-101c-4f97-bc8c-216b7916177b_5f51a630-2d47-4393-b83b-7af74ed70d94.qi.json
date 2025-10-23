@@ -1,0 +1,21 @@
+{
+  "Id": "5f51a630-2d47-4393-b83b-7af74ed70d94",
+  "ProjectId": "f43837fc-101c-4f97-bc8c-216b7916177b",
+  "Items": [
+    {
+      "Id": "dfcd49a6-a603-42db-b788-6b5f30b94ad5",
+      "Code": "3CCAA350",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-180-18",
+      "Unit": "M3",
+      "Qty": 105772.67062210098,
+      "ContributingMemberIds": [
+        "517402d5-74ae-42f2-a17e-529392b3497d",
+        "04a8e7b1-361f-4fd2-942e-aa0e48d6f2a0",
+        "d5336143-dd07-4c57-aab1-172324aba268",
+        "f9c4efd4-bbbb-4173-9ff7-3e71d9e0ad0e"
+      ]
+    }
+  ]
+}

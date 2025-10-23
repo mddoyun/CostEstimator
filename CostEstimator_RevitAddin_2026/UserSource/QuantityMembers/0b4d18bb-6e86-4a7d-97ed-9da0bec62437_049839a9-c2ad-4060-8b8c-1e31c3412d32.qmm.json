@@ -1,0 +1,49 @@
+{
+  "Id": "049839a9-c2ad-4060-8b8c-1e31c3412d32",
+  "ProjectId": "0b4d18bb-6e86-4a7d-97ed-9da0bec62437",
+  "Members": {
+    "4333c18e-df35-42e6-9f35-e9391a72590a": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 111.0,
+      "Area": 222.0,
+      "Perimeter": 333.0,
+      "Thickness": 444.0,
+      "VolumeRef": "a",
+      "AreaRef": "b",
+      "PerimeterRef": "c",
+      "ThicknessRef": "d",
+      "Id": "4333c18e-df35-42e6-9f35-e9391a72590a",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "eee",
+      "Description": "ddd",
+      "CreatedAt": "2025-09-16T08:45:57.7551543Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "e17b8f6d-fb8e-4845-84dd-393d96760ecb": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 1.0,
+      "Area": 2.0,
+      "Perimeter": 3.0,
+      "Thickness": 4.0,
+      "Id": "e17b8f6d-fb8e-4845-84dd-393d96760ecb",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "sss",
+      "Description": "fff",
+      "CreatedAt": "2025-09-16T08:46:33.3755851Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "30bff0f0-9f83-45e8-a135-a74ea4064957": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 1.0,
+      "Area": 2.0,
+      "Perimeter": 3.0,
+      "Thickness": 4.0,
+      "Id": "30bff0f0-9f83-45e8-a135-a74ea4064957",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "ff",
+      "Description": "ff",
+      "CreatedAt": "2025-09-16T09:26:22.903654Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

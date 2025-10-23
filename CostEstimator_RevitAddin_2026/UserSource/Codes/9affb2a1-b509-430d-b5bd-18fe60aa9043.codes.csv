@@ -1,0 +1,2 @@
+﻿Code,WorkType,Name,Spec,Unit,RuleSetJson
+NEW-094701,철근콘크리트공사,레미콘,25-18-120,m3,"{""건축_골조_기초_매트기초"":""(${Area}+2)*${Thickness}""}"

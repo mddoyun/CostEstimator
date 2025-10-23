@@ -1,0 +1,24 @@
+{
+  "Id": "14e5d1f9-b5fe-4e47-9775-ea73a65c185b",
+  "ProjectId": "9affb2a1-b509-430d-b5bd-18fe60aa9043",
+  "Items": [
+    {
+      "Id": "a125bd4b-f180-4a11-b185-cf596c5f7153",
+      "Code": "",
+      "WorkType": "철근콘크리트공사",
+      "Name": "거푸집",
+      "Spec": "유로폼",
+      "Unit": "m2",
+      "Qty": 0.0
+    },
+    {
+      "Id": "7f515f63-464f-4016-bd93-d55d6c1318d5",
+      "Code": "NEW-094701",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-18-120",
+      "Unit": "m3",
+      "Qty": 246.0
+    }
+  ]
+}

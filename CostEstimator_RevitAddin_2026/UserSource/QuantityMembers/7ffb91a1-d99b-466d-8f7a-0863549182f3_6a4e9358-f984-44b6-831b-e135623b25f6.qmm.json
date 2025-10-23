@@ -1,0 +1,123 @@
+{
+  "Id": "6a4e9358-f984-44b6-831b-e135623b25f6",
+  "ProjectId": "7ffb91a1-d99b-466d-8f7a-0863549182f3",
+  "Members": {
+    "1b29f4c6-7bee-4f01-9bc8-1d5702a67534": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberIsolatedFooting, AiBimCost",
+      "Id": "1b29f4c6-7bee-4f01-9bc8-1d5702a67534",
+      "Tag": "건축_골조_기초_독립기초",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:21.5057175Z",
+      "MemberType": "QuantityMemberIsolatedFooting"
+    },
+    "2813813e-332f-4fea-93f3-063567f192b4": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberStripFooting, AiBimCost",
+      "Id": "2813813e-332f-4fea-93f3-063567f192b4",
+      "Tag": "건축_골조_기초_줄기초",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:23.8709408Z",
+      "MemberType": "QuantityMemberStripFooting"
+    },
+    "d1dedbb2-1df3-4d32-bfbc-06f0f24b5940": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Id": "d1dedbb2-1df3-4d32-bfbc-06f0f24b5940",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:25.9971344Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "fcf487b3-5d3b-4027-8b84-afd951fd575f": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberColumnRCRec, AiBimCost",
+      "Id": "fcf487b3-5d3b-4027-8b84-afd951fd575f",
+      "Tag": "건축_골조_기둥_RC_직사각형",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:29.1166887Z",
+      "MemberType": "QuantityMemberColumnRCRec"
+    },
+    "3b3f70ac-1f80-4ffe-b634-170e3eec66bd": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberRetainingWall, AiBimCost",
+      "Id": "3b3f70ac-1f80-4ffe-b634-170e3eec66bd",
+      "Tag": "건축_골조_옹벽",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:32.3893451Z",
+      "MemberType": "QuantityMemberRetainingWall"
+    },
+    "b1c4e24a-c824-4a4a-8ce2-66bfb7abe2e3": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberBeamRC, AiBimCost",
+      "Id": "b1c4e24a-c824-4a4a-8ce2-66bfb7abe2e3",
+      "Tag": "건축_골조_보_RC",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:35.455386Z",
+      "MemberType": "QuantityMemberBeamRC"
+    },
+    "91ae5f92-5982-43b3-99e4-a449394373b5": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberSlabRC, AiBimCost",
+      "Id": "91ae5f92-5982-43b3-99e4-a449394373b5",
+      "Tag": "건축_골조_슬래브_RC",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:37.6662221Z",
+      "MemberType": "QuantityMemberSlabRC"
+    },
+    "7d28acda-858a-491d-a035-eb1524089867": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberStairRC, AiBimCost",
+      "Id": "7d28acda-858a-491d-a035-eb1524089867",
+      "Tag": "건축_골조_계단_RC",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:39.7841385Z",
+      "MemberType": "QuantityMemberStairRC"
+    },
+    "4e77590e-eb5f-4c89-8453-e5d48e3559c2": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFramingOther, AiBimCost",
+      "Id": "4e77590e-eb5f-4c89-8453-e5d48e3559c2",
+      "Tag": "건축_골조_기타",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:41.8279648Z",
+      "MemberType": "QuantityMemberFramingOther"
+    },
+    "de9d8807-a5b0-49f5-94c9-74fb7996f6bf": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberArchOther, AiBimCost",
+      "Id": "de9d8807-a5b0-49f5-94c9-74fb7996f6bf",
+      "Tag": "건축_기타",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:44.2526817Z",
+      "MemberType": "QuantityMemberArchOther"
+    },
+    "06c3f7a1-68c9-4b61-8d36-f7eb11eb6dae": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberArchWallOther, AiBimCost",
+      "Id": "06c3f7a1-68c9-4b61-8d36-f7eb11eb6dae",
+      "Tag": "건축_건축벽_기타",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:48.3480681Z",
+      "MemberType": "QuantityMemberArchWallOther"
+    },
+    "808043de-a263-4b2e-9192-690d692bf6cc": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberOpeningOther, AiBimCost",
+      "Id": "808043de-a263-4b2e-9192-690d692bf6cc",
+      "Tag": "건축_창호_기타",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:50.6021047Z",
+      "MemberType": "QuantityMemberOpeningOther"
+    },
+    "96d102a3-3076-4509-9748-1a0c5b5359f2": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFloorFinish, AiBimCost",
+      "Id": "96d102a3-3076-4509-9748-1a0c5b5359f2",
+      "Tag": "건축_마감_바닥",
+      "Name": "",
+      "Description": "",
+      "CreatedAt": "2025-09-18T10:43:53.3409608Z",
+      "MemberType": "QuantityMemberFloorFinish"
+    }
+  }
+}

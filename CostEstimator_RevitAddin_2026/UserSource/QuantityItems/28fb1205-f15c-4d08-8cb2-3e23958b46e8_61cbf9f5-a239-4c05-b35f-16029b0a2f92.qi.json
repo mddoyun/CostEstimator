@@ -1,0 +1,34 @@
+{
+  "Id": "61cbf9f5-a239-4c05-b35f-16029b0a2f92",
+  "ProjectId": "28fb1205-f15c-4d08-8cb2-3e23958b46e8",
+  "Items": [
+    {
+      "Id": "ec26f646-4f4a-4147-b10b-25995eaa9fd2",
+      "Code": "NEW-142106",
+      "WorkType": "ㅁ",
+      "Name": "ㄹ",
+      "Spec": "ㄴ",
+      "Unit": "ㅇ",
+      "Qty": 60.0,
+      "ContributingMemberIds": [
+        "f16fc901-e728-48ca-921c-5f41a0aaa1f3",
+        "2f07233e-eff6-44b3-9850-c7b9b5b90588",
+        "8da90eac-5047-4829-97d6-f327e61a5686"
+      ]
+    },
+    {
+      "Id": "0d479f31-389c-4766-9dca-46f32c52be72",
+      "Code": "NEW-142106",
+      "WorkType": "ㅁ",
+      "Name": "ㄹ",
+      "Spec": "ㄴ",
+      "Unit": "ㅇ",
+      "Qty": 60.0,
+      "ContributingMemberIds": [
+        "f16fc901-e728-48ca-921c-5f41a0aaa1f3",
+        "2f07233e-eff6-44b3-9850-c7b9b5b90588",
+        "8da90eac-5047-4829-97d6-f327e61a5686"
+      ]
+    }
+  ]
+}

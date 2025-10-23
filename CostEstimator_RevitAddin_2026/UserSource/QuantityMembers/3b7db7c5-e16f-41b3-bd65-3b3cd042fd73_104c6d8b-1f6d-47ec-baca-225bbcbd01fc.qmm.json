@@ -1,0 +1,17 @@
+{
+  "Id": "104c6d8b-1f6d-47ec-baca-225bbcbd01fc",
+  "ProjectId": "3b7db7c5-e16f-41b3-bd65-3b3cd042fd73",
+  "Members": {
+    "4578acc1-96e8-4cb8-a85e-b897ce423541": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 10.0,
+      "StructuralMark": "F1",
+      "Id": "4578acc1-96e8-4cb8-a85e-b897ce423541",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "테스트",
+      "Description": "테스트설명",
+      "CreatedAt": "2025-09-18T02:43:28.3141484Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

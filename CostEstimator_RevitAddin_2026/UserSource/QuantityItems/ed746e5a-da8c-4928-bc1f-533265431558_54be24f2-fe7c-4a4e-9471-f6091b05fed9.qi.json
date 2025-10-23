@@ -1,0 +1,22 @@
+{
+  "Id": "54be24f2-fe7c-4a4e-9471-f6091b05fed9",
+  "ProjectId": "ed746e5a-da8c-4928-bc1f-533265431558",
+  "Items": [
+    {
+      "Id": "926fcf81-c98a-455c-9899-ab2b9acc8c9a",
+      "Code": "NEW-172225",
+      "WorkType": "ㅇ",
+      "Name": "ㅇ",
+      "Spec": "ㅇ",
+      "Unit": "ㅇ",
+      "Qty": 2902.0180525050464,
+      "ContributingMemberIds": [
+        "5c2855c0-b617-4d6c-9f52-d98c0089c6c2",
+        "9e848065-e249-44d1-8281-b81a3c284bbc",
+        "ae398bbd-3cf4-47b5-b5fc-202d5f5f6687",
+        "ba14facf-3d4a-4fea-84ce-93ddb1d86ca5",
+        "e739c982-3020-49bb-9716-29f6ee1b0e56"
+      ]
+    }
+  ]
+}

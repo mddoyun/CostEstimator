@@ -1,0 +1,40 @@
+{
+  "Id": "2c96194c-1662-4e11-8ed6-1a6051e0f381",
+  "ProjectId": "e84f7b99-d867-44b1-b434-638c05819ecf",
+  "Items": [
+    {
+      "Id": "a6ccb778-7d5a-4fa8-8778-8735561779b8",
+      "Code": "",
+      "WorkType": "",
+      "Name": "",
+      "Spec": "",
+      "Unit": "",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "2672fa3d-6375-43d5-bce8-9187584c28f2",
+      "Code": "3JEAD650",
+      "WorkType": "철근콘크리트공사",
+      "Name": "압출스치로폴(자재)",
+      "Spec": "압출특호,30T,바닥",
+      "Unit": "M2",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "c1fef3aa-c65a-4113-943b-fce9cf508133",
+      "Code": "3AAAA100",
+      "WorkType": "가설공사",
+      "Name": "시스템비계설치",
+      "Spec": "발판,계단포함,골조",
+      "Unit": "M2",
+      "Qty": 276.43012492447406,
+      "ContributingMemberIds": [
+        "3d5fe2ec-5576-41a0-a74b-f90fdaa2734a",
+        "96818051-d9b6-4685-86e6-bb02ada307f2",
+        "1b7b53ad-851a-4c71-bd10-05121941225d"
+      ]
+    }
+  ]
+}

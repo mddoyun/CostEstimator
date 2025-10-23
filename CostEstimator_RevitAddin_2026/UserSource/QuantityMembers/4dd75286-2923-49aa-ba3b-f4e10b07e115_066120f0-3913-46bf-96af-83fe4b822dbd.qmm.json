@@ -1,0 +1,53 @@
+{
+  "Id": "066120f0-3913-46bf-96af-83fe4b822dbd",
+  "ProjectId": "4dd75286-2923-49aa-ba3b-f4e10b07e115",
+  "Members": {
+    "bbb25362-bc00-4bb0-9a94-214e070fb355": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 747.2696485200494,
+      "Area": 759.2259628963703,
+      "VolumeRef": "${체적}*1.03",
+      "AreaRef": "${면적}*1.03",
+      "Id": "bbb25362-bc00-4bb0-9a94-214e070fb355",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "b0f1fa83-96e7-47df-ae6b-aee3b9222377-00021088",
+      "RawDataSnapshot": "{\"UniqueId\":\"b0f1fa83-96e7-47df-ae6b-aee3b9222377-00021088\",\"ElementId\":135304,\"Category\":\"구조 기초\",\"Name\":\"기초 슬래브 1\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":355,\"Name\":\"레벨 1\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"2myVg3bkT7twvhhkEv83F$\",\"연관 있음\":0,\"보강 철근 피복 - 하단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":725.5045131262615,\"면적\":737.1125853362819,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":null,\"경사\":0.0,\"레벨\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"패밀리 및 유형\":{\"ElementId\":62505,\"UniqueId\":\"ee0c1964-7e36-4d07-812e-c1dcd51dc3ba-0000f429\",\"Name\":\"기초 슬래브 1\"},\"패밀리\":{\"ElementId\":62505,\"UniqueId\":\"ee0c1964-7e36-4d07-812e-c1dcd51dc3ba-0000f429\",\"Name\":\"기초 슬래브 1\"},\"유형\":{\"ElementId\":62505,\"UniqueId\":\"ee0c1964-7e36-4d07-812e-c1dcd51dc3ba-0000f429\",\"Name\":\"기초 슬래브 1\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":62505,\"UniqueId\":\"ee0c1964-7e36-4d07-812e-c1dcd51dc3ba-0000f429\",\"Name\":\"기초 슬래브 1\"},\"구조\":1,\"둘레\":112.20472440944883,\"레벨#-1001952\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":0.9842519685039368,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-0.9842519685039368,\"상단 기준 레벨 측량\":0.0,\"코어 두께\":0.9842519685039368,\"하단 코어의 입면도\":-0.9842519685039368,\"상단 코어의 입면도\":0.0,\"상단 기준 레벨\":0.0,\"길이\":20.99737532808399,\"하단 기준 레벨\":-0.9842519685039368,\"폭\":35.104986876640424,\"마크\":null}}",
+      "Name": "매트기초(b0f1fa83)",
+      "CreatedAt": "2025-09-17T10:04:55.1816465Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "66379bb7-e515-4acf-b433-bf65e6c30d74": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 747.2696485200494,
+      "Area": 759.2259628963704,
+      "VolumeRef": "${체적}*1.03",
+      "AreaRef": "${면적}*1.03",
+      "Id": "66379bb7-e515-4acf-b433-bf65e6c30d74",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "9a2a4e2c-540d-46db-9408-a87728692f1e-000210dc",
+      "RawDataSnapshot": "{\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-000210dc\",\"ElementId\":135388,\"Category\":\"구조 기초\",\"Name\":\"보\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":355,\"Name\":\"레벨 1\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"2QAauiL0r6svG8g7SeQp$2\",\"연관 있음\":0,\"보강 철근 피복 - 하단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":725.5045131262616,\"면적\":737.112585336282,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":null,\"경사\":0.0,\"레벨\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"패밀리 및 유형\":{\"ElementId\":135401,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-000210e9\",\"Name\":\"보\"},\"패밀리\":{\"ElementId\":135401,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-000210e9\",\"Name\":\"보\"},\"유형\":{\"ElementId\":135401,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-000210e9\",\"Name\":\"보\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":135401,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-000210e9\",\"Name\":\"보\"},\"구조\":1,\"둘레\":112.20472440944883,\"레벨#-1001952\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":0.9842519685039368,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-0.9842519685039368,\"상단 기준 레벨 측량\":0.0,\"코어 두께\":0.9842519685039368,\"하단 코어의 입면도\":-0.9842519685039368,\"상단 코어의 입면도\":0.0,\"상단 기준 레벨\":0.0,\"길이\":20.997375328083994,\"하단 기준 레벨\":-0.9842519685039368,\"폭\":35.104986876640424,\"마크\":null}}",
+      "Name": "매트기초(9a2a4e2c)",
+      "CreatedAt": "2025-09-17T10:04:55.1819875Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "591903a9-c198-4eae-b706-b911f8697fe4": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Id": "591903a9-c198-4eae-b706-b911f8697fe4",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "aa",
+      "Description": "",
+      "CreatedAt": "2025-09-17T12:04:30.5042265Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "7dd332e4-df3a-4bff-b409-0eadf3fb9316": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Id": "7dd332e4-df3a-4bff-b409-0eadf3fb9316",
+      "Tag": "건축_골조_기초_매트기초",
+      "RawElementId": "9a2a4e2c-540d-46db-9408-a87728692f1e-00021105",
+      "RawDataSnapshot": "{\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-00021105\",\"ElementId\":135429,\"Category\":\"구조 기초\",\"Name\":\"구조_보\",\"Class\":\"Floor\",\"Level\":{\"ElementId\":355,\"Name\":\"레벨 1\"},\"Parameters\":{\"이미지\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"카테고리\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"카테고리#-1140362\":{\"ElementId\":-2001300,\"UniqueId\":null,\"Name\":null},\"IFC 미리 정의된 유형\":null,\"다음으로 IFC로 내보내기\":null,\"IFC로 내보내기\":0,\"IfcGUID\":\"2QAauiL0r6svG8g7SeQpuR\",\"연관 있음\":0,\"보강 철근 피복 - 하단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 상단 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"보강 철근 피복 - 다른 면\":{\"ElementId\":62616,\"UniqueId\":\"bfad7829-2976-41bf-b550-1a34566a729d-0000f498\",\"Name\":\"보강 철근 피복 1\"},\"설계 옵션\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"체적\":725.5045131262616,\"면적\":737.112585336282,\"철거 공정\":{\"ElementId\":-1,\"UniqueId\":null,\"Name\":null},\"생성 공정\":{\"ElementId\":0,\"UniqueId\":null,\"Name\":null},\"설명\":null,\"경사\":0.0,\"레벨\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"패밀리 및 유형\":{\"ElementId\":135450,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-0002111a\",\"Name\":\"구조_보\"},\"패밀리\":{\"ElementId\":135450,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-0002111a\",\"Name\":\"구조_보\"},\"유형\":{\"ElementId\":135450,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-0002111a\",\"Name\":\"구조_보\"},\"패밀리 이름\":null,\"유형 이름\":null,\"유형 ID\":{\"ElementId\":135450,\"UniqueId\":\"9a2a4e2c-540d-46db-9408-a87728692f1e-0002111a\",\"Name\":\"구조_보\"},\"구조\":1,\"둘레\":112.20472440944883,\"레벨#-1001952\":{\"ElementId\":355,\"UniqueId\":\"caebf3df-1569-4ae2-93b2-149ceec97be9-00000163\",\"Name\":\"레벨 1\"},\"레벨로부터 높이 간격띄우기\":0.0,\"두께\":0.9842519685039368,\"매스와 관련됨\":0,\"하단 기준 레벨 측량\":-0.9842519685039368,\"상단 기준 레벨 측량\":0.0,\"코어 두께\":0.9842519685039368,\"하단 코어의 입면도\":-0.9842519685039368,\"상단 코어의 입면도\":0.0,\"상단 기준 레벨\":0.0,\"길이\":20.997375328083994,\"하단 기준 레벨\":-0.9842519685039368,\"폭\":35.104986876640424,\"마크\":null}}",
+      "Name": "매트기초(9a2a4e2c)",
+      "CreatedAt": "2025-09-17T12:27:31.559681Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

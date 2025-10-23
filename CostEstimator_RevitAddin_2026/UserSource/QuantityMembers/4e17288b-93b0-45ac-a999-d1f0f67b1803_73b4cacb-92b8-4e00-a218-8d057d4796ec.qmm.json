@@ -1,0 +1,15 @@
+{
+  "Id": "73b4cacb-92b8-4e00-a218-8d057d4796ec",
+  "ProjectId": "4e17288b-93b0-45ac-a999-d1f0f67b1803",
+  "Members": {
+    "433f457d-d8af-4752-be08-c6450a5906ea": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFloorFinish, AiBimCost",
+      "Id": "433f457d-d8af-4752-be08-c6450a5906ea",
+      "Tag": "건축_마감_바닥",
+      "Name": "asdf",
+      "Description": "sdaf",
+      "CreatedAt": "2025-09-18T09:52:12.5037386Z",
+      "MemberType": "QuantityMemberFloorFinish"
+    }
+  }
+}

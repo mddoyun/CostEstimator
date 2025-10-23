@@ -1,0 +1,2 @@
+﻿Code,WorkType,Name,Spec,Unit,RuleSetJson
+NEW-185242,fg,dfg,dfg,,"{""건축_마감_걸레받이"":[{""Id"":""f941779a-010f-4986-9766-cd32227b200c"",""Condition"":"""",""Expression"":""${Length}""}]}"

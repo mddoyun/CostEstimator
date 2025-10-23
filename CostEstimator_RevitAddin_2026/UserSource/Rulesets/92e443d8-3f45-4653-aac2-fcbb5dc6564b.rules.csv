@@ -1,0 +1,2 @@
+﻿Id,Name,Condition,TagToApply,Priority,IsActive,Description
+80561c79-0119-48b5-a6a7-459a14c683df,"매트기초1","[Category] = '구조 기초' AND [Name] CONTAINS '매트기초'","건축_골조_기초_매트기초",100,True,""

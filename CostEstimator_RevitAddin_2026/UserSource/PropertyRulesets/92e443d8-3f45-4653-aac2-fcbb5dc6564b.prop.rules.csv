@@ -1,0 +1,2 @@
+﻿Id,Name,TargetTag,Condition,MappingsJson,Priority,IsActive,Description
+3507af17-adfa-4bc6-b84f-4cdc735f2cca,"매트기초(구조기초)","건축_골조_기초_매트기초","[Category] = '구조 기초'","{""VolumeRef"":""${체적}"",""AreaRef"":""${면적}"",""PerimeterRef"":""${둘레}"",""ThicknessRef"":""${두께}""}",100,True,""

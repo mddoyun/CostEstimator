@@ -1,0 +1,150 @@
+{
+  "Id": "e33e6c22-436a-4444-95db-d03ea7c4f2f4",
+  "Projects": {
+    "a21f3ea9-b005-4566-9a45-a55cf178fc06": {
+      "Id": "a21f3ea9-b005-4566-9a45-a55cf178fc06",
+      "Name": "_템플릿_근린생활시설_일반",
+      "CreatedAt": "2025-09-18T13:56:05.4241318Z"
+    },
+    "1e210ba1-2484-4c59-9a6b-0cde1d226857": {
+      "Id": "1e210ba1-2484-4c59-9a6b-0cde1d226857",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T21:39:42.4416955Z"
+    },
+    "8e1c9da4-78ce-4385-986a-ebf749ec70c0": {
+      "Id": "8e1c9da4-78ce-4385-986a-ebf749ec70c0",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T21:46:31.0922177Z"
+    },
+    "4fb1fbd3-7c8f-4eac-8811-d3fc2d890a67": {
+      "Id": "4fb1fbd3-7c8f-4eac-8811-d3fc2d890a67",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T22:02:42.1245072Z"
+    },
+    "28276449-f605-436a-9e31-02b3998d4596": {
+      "Id": "28276449-f605-436a-9e31-02b3998d4596",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T22:35:05.9095536Z"
+    },
+    "02240612-4f97-47a7-91cd-e3ba8459f562": {
+      "Id": "02240612-4f97-47a7-91cd-e3ba8459f562",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T22:44:17.3181219Z"
+    },
+    "e1431b10-3168-4d43-9226-73c32f0c47ad": {
+      "Id": "e1431b10-3168-4d43-9226-73c32f0c47ad",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T23:20:28.4307456Z"
+    },
+    "062cd1d8-14c7-4196-92c4-70767644e72a": {
+      "Id": "062cd1d8-14c7-4196-92c4-70767644e72a",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-18T23:43:56.2065427Z"
+    },
+    "15376569-ddec-4bbd-9bf7-f69d19da1c87": {
+      "Id": "15376569-ddec-4bbd-9bf7-f69d19da1c87",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-19T01:25:09.1845413Z"
+    },
+    "4dc04a1e-be58-4781-b430-b66bcbbb972d": {
+      "Id": "4dc04a1e-be58-4781-b430-b66bcbbb972d",
+      "Name": "실증용템플릿",
+      "CreatedAt": "2025-09-19T01:25:30.4496973Z"
+    },
+    "aaadce1f-ca96-4669-8981-bda6f002e911": {
+      "Id": "aaadce1f-ca96-4669-8981-bda6f002e911",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T02:08:33.5786432Z"
+    },
+    "570ac19d-dc7e-4883-ad5b-11e3707e0a93": {
+      "Id": "570ac19d-dc7e-4883-ad5b-11e3707e0a93",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T02:18:27.2101526Z"
+    },
+    "be73f2c2-4a5b-4d65-bf6e-ced0a45bca9e": {
+      "Id": "be73f2c2-4a5b-4d65-bf6e-ced0a45bca9e",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T02:23:08.994854Z"
+    },
+    "d50d6b91-e189-4dc2-a724-5cf1a9b3274b": {
+      "Id": "d50d6b91-e189-4dc2-a724-5cf1a9b3274b",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T02:40:13.0545872Z"
+    },
+    "86ecd8a4-3cff-4f44-9c2b-1f91e6b56c33": {
+      "Id": "86ecd8a4-3cff-4f44-9c2b-1f91e6b56c33",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T02:44:38.177589Z"
+    },
+    "c58ba40c-7039-4649-be6a-8e470bc7e0e8": {
+      "Id": "c58ba40c-7039-4649-be6a-8e470bc7e0e8",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T04:57:00.6718734Z"
+    },
+    "c7b7d179-a92f-4283-99be-5bd662feed16": {
+      "Id": "c7b7d179-a92f-4283-99be-5bd662feed16",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T05:03:29.2082607Z"
+    },
+    "c639995d-21c6-4e52-a850-29ba82579e84": {
+      "Id": "c639995d-21c6-4e52-a850-29ba82579e84",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T06:40:23.230272Z"
+    },
+    "8bacf1c1-2740-4d4c-a34f-3b9534d8e4ae": {
+      "Id": "8bacf1c1-2740-4d4c-a34f-3b9534d8e4ae",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-19T06:48:13.6677319Z"
+    },
+    "e84f7b99-d867-44b1-b434-638c05819ecf": {
+      "Id": "e84f7b99-d867-44b1-b434-638c05819ecf",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-19T07:19:00.1719117Z"
+    },
+    "6ddbae9a-4e62-4121-b837-5ddce2b8b976": {
+      "Id": "6ddbae9a-4e62-4121-b837-5ddce2b8b976",
+      "Name": "실증용템플릿_복사본",
+      "CreatedAt": "2025-09-20T02:38:52.33725Z"
+    },
+    "db2c210d-14db-45f3-b605-7fc355ee5a10": {
+      "Id": "db2c210d-14db-45f3-b605-7fc355ee5a10",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-20T02:39:36.850265Z"
+    },
+    "dc382c17-c374-4bec-81a7-901667edde53": {
+      "Id": "dc382c17-c374-4bec-81a7-901667edde53",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-20T03:46:08.7812491Z"
+    },
+    "83e2971a-68d7-4686-88f5-d78696a230c7": {
+      "Id": "83e2971a-68d7-4686-88f5-d78696a230c7",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-20T03:54:34.6764209Z"
+    },
+    "ec7a4a6c-e271-447e-9277-7b8f8dfb0f2c": {
+      "Id": "ec7a4a6c-e271-447e-9277-7b8f8dfb0f2c",
+      "Name": "New Project",
+      "CreatedAt": "2025-09-20T04:02:35.9607785Z"
+    },
+    "b10e78f0-56cc-4f99-8f6e-fa2707a084cc": {
+      "Id": "b10e78f0-56cc-4f99-8f6e-fa2707a084cc",
+      "Name": "기본템플릿",
+      "CreatedAt": "2025-09-20T04:03:29.1333723Z"
+    },
+    "ab7039f1-4719-4448-bd06-4a73f90a0a98": {
+      "Id": "ab7039f1-4719-4448-bd06-4a73f90a0a98",
+      "Name": "00프로젝트v01",
+      "CreatedAt": "2025-09-20T04:03:52.3897445Z"
+    },
+    "a4abd9eb-fb93-45af-bdff-0d31c6aa8c3d": {
+      "Id": "a4abd9eb-fb93-45af-bdff-0d31c6aa8c3d",
+      "Name": "Project_v01",
+      "CreatedAt": "2025-09-20T04:07:41.0111004Z"
+    }
+  },
+  "CurrentProject": {
+    "Id": "a4abd9eb-fb93-45af-bdff-0d31c6aa8c3d",
+    "Name": "Project_v01",
+    "CreatedAt": "2025-09-20T04:07:41.0111004Z"
+  }
+}

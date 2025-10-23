@@ -1,0 +1,16 @@
+{
+  "Id": "d60ba317-79ce-402c-b440-f964d3dd20ba",
+  "ProjectId": "adeb19de-d288-4252-a3eb-89d6368cfdb9",
+  "Members": {
+    "6ed0c07c-aec0-415f-b711-435c720163b9": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberBaseboard, AiBimCost",
+      "FinishMark": "HB1",
+      "Id": "6ed0c07c-aec0-415f-b711-435c720163b9",
+      "Tag": "건축_마감_걸레받이",
+      "Name": "sdf",
+      "Description": "asdf",
+      "CreatedAt": "2025-09-18T09:53:23.703921Z",
+      "MemberType": "QuantityMemberBaseboard"
+    }
+  }
+}

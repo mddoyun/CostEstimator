@@ -1,0 +1,3 @@
+﻿Id,Name,Condition,TagToApply,Priority,IsActive,Description
+352070d7-a56a-4728-831a-74810cfc5d1a,"매트기초1","[TypeParameters.유형 이름] CONTAINS ""매트기초""","건축_골조_기초_매트기초",100,True,""
+abf77d5a-157c-4955-816f-44639241c024,"바닥마감1","[Category] = '바닥' AND ([Name] CONTAINS ""A2-"" OR [Name] CONTAINS ""A1-"")","건축_마감_바닥",100,True,""

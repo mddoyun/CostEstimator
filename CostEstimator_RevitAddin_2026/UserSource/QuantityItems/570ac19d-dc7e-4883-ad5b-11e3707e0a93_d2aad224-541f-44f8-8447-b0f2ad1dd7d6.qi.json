@@ -1,0 +1,36 @@
+{
+  "Id": "d2aad224-541f-44f8-8447-b0f2ad1dd7d6",
+  "ProjectId": "570ac19d-dc7e-4883-ad5b-11e3707e0a93",
+  "Items": [
+    {
+      "Id": "6467cf63-a61b-45b8-ab10-475b4b5b9b38",
+      "Code": "3CCAA350",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-180-18",
+      "Unit": "M3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "be6b0125-5093-4c41-951f-6dfd5f6050eb",
+      "Code": "Z0000032",
+      "WorkType": "철근콘크리트공사",
+      "Name": "콘크리트타설",
+      "Spec": "",
+      "Unit": "M3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "7bbdafcc-64d5-468b-919d-8766a6a5a3b3",
+      "Code": "3CAAI070",
+      "WorkType": "철근콘크리트공사",
+      "Name": "콘크리트보양",
+      "Spec": "",
+      "Unit": "M2",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    }
+  ]
+}

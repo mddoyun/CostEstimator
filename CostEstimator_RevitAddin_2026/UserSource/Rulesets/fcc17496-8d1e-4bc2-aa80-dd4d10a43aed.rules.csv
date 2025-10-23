@@ -1,0 +1,2 @@
+﻿Id,Name,Condition,TagToApply,Priority,IsActive,Description
+6d57531f-bae8-4c99-8d80-183e71cb2d6f,"새 규칙","(Name CONTAINS ""구조"" AND Name CONTAINS ""보"") OR (Name = ""바닥"" AND Category = ""구조 기초"")","기타",100,True,""

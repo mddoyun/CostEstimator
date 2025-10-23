@@ -1,0 +1,2 @@
+﻿Code,WorkType,Name,Spec,Unit,RuleSetJson
+NEW-160815,철근콘크리트공사,거푸집,유로폼,m2,"{""건축_골조_기초_매트기초"":""$({Perimeter}-3)*${Thickness}""}"

@@ -1,0 +1,4 @@
+﻿Name,Type,Thk,X1RebarType,X1RebarSpacing,X1RebarUnitWeight,Y1RebarType,Y1RebarSpacing,Y1RebarUnitWeight,X2RebarType,X2RebarSpacing,X2RebarUnitWeight,Y2RebarType,Y2RebarSpacing,Y2RebarUnitWeight,X3RebarType,X3RebarSpacing,X3RebarUnitWeight,Y3RebarType,Y3RebarSpacing,Y3RebarUnitWeight,X4RebarType,X4RebarSpacing,X4RebarUnitWeight,Y4RebarType,Y4RebarSpacing,Y4RebarUnitWeight,X5RebarType,X5RebarSpacing,X5RebarUnitWeight,Y5RebarType,Y5RebarSpacing,Y5RebarUnitWeight
+F1,A,200,D13,300,0.995,D13,300,0.995,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0
+F2,A,200,D13,300,0.995,D13,300,0.995,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0
+F3,A,200,D13,300,0.995,D13,300,0.995,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0,,0,0

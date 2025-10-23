@@ -1,0 +1,36 @@
+{
+  "Id": "5ebd018f-a5f0-45a6-8326-eb4456c90591",
+  "ProjectId": "9affb2a1-b509-430d-b5bd-18fe60aa9043",
+  "Members": {
+    "02d2281d-0d67-48ce-85c9-a024aad32afd": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 2.0,
+      "Area": 1.0,
+      "Perimeter": 5.0,
+      "Thickness": 2.0,
+      "VolumeRef": "${체적}",
+      "AreaRef": "${면적}",
+      "PerimeterRef": "${둘레}",
+      "ThicknessRef": "${두께}*0.001",
+      "Id": "02d2281d-0d67-48ce-85c9-a024aad32afd",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "MAT2",
+      "Description": "지하1층 매트기초",
+      "CreatedAt": "2025-09-17T00:29:57.2639534Z",
+      "MemberType": "QuantityMemberFootingMat"
+    },
+    "e0cdd5ea-0f4b-44eb-99ca-827174a18a5a": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Volume": 20.0,
+      "Area": 10.0,
+      "Perimeter": 50.0,
+      "Thickness": 20.0,
+      "Id": "e0cdd5ea-0f4b-44eb-99ca-827174a18a5a",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "MAT3",
+      "Description": "지하2층 매트기초",
+      "CreatedAt": "2025-09-17T00:38:48.3600283Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

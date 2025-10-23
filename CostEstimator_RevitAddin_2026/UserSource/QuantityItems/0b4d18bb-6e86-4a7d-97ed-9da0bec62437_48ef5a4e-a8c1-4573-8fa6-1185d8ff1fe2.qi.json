@@ -1,0 +1,24 @@
+{
+  "Id": "48ef5a4e-a8c1-4573-8fa6-1185d8ff1fe2",
+  "ProjectId": "0b4d18bb-6e86-4a7d-97ed-9da0bec62437",
+  "Items": [
+    {
+      "Id": "098b27ff-3f2d-427f-a9e9-d183b7de85d0",
+      "Code": "",
+      "WorkType": "bbb",
+      "Name": "",
+      "Spec": "",
+      "Unit": "",
+      "Qty": 0.0
+    },
+    {
+      "Id": "69e062d9-f8f0-4fa3-955d-078e418f9385",
+      "Code": "NEW-174823",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "24-25-18",
+      "Unit": "m3",
+      "Qty": 50196.0
+    }
+  ]
+}

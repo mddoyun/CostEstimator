@@ -1,0 +1,18 @@
+{
+  "Id": "aaa06b8c-e7eb-4bad-8a02-87fd9a5ec40f",
+  "ProjectId": "adeb19de-d288-4252-a3eb-89d6368cfdb9",
+  "Items": [
+    {
+      "Id": "54428791-edeb-4cea-b146-671fadc21bfa",
+      "Code": "NEW-185242",
+      "WorkType": "fg",
+      "Name": "dfg",
+      "Spec": "dfg",
+      "Unit": "",
+      "Qty": 100.0,
+      "ContributingMemberIds": [
+        "6ed0c07c-aec0-415f-b711-435c720163b9"
+      ]
+    }
+  ]
+}

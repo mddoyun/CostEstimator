@@ -1,0 +1,2 @@
+﻿Id,Name,Condition,TagToApply,Priority,IsActive,Description
+feb487a0-59bc-48ca-ab67-c68738f73a04,"새 규칙","Category = ""구조 기초""","건축_골조_기초_매트기초",100,True,""

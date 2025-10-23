@@ -1,0 +1,15 @@
+{
+  "Id": "6e0130d2-b5ad-4073-a02a-cbcd10d0958a",
+  "ProjectId": "450f043d-314e-4a31-a18d-f8fe76e32fd4",
+  "Members": {
+    "221ef3bf-df38-40f7-b712-fb69b2887bb4": {
+      "$type": "AiBimCost.MainTools.CostEstimator_DD_quantity.QuantityMember.QuantityMemberFootingMat, AiBimCost",
+      "Id": "221ef3bf-df38-40f7-b712-fb69b2887bb4",
+      "Tag": "건축_골조_기초_매트기초",
+      "Name": "aa",
+      "Description": "aa",
+      "CreatedAt": "2025-09-18T01:36:31.8464078Z",
+      "MemberType": "QuantityMemberFootingMat"
+    }
+  }
+}

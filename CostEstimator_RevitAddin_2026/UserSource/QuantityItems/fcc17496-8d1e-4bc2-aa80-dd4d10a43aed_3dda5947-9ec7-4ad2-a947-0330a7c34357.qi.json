@@ -1,0 +1,24 @@
+{
+  "Id": "3dda5947-9ec7-4ad2-a947-0330a7c34357",
+  "ProjectId": "fcc17496-8d1e-4bc2-aa80-dd4d10a43aed",
+  "Items": [
+    {
+      "Id": "18e25a5f-61dd-4f93-bc47-4f65f4073a63",
+      "Code": "NEW-094701",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-18-120",
+      "Unit": "m3",
+      "Qty": 0.0
+    },
+    {
+      "Id": "2236f84c-bc2d-40a1-bf5a-db5c05a83140",
+      "Code": "NEW-102631",
+      "WorkType": "철근콘크리트공사",
+      "Name": "이형봉강",
+      "Spec": "-",
+      "Unit": "ton",
+      "Qty": 1451.0090262525232
+    }
+  ]
+}

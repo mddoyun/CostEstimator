@@ -1,0 +1,46 @@
+{
+  "Id": "99ed766d-9fb6-45f9-8416-5470343a33ca",
+  "ProjectId": "c58ba40c-7039-4649-be6a-8e470bc7e0e8",
+  "Items": [
+    {
+      "Id": "6467cf63-a61b-45b8-ab10-475b4b5b9b38",
+      "Code": "3CCAA350",
+      "WorkType": "철근콘크리트공사",
+      "Name": "레미콘",
+      "Spec": "25-180-18",
+      "Unit": "M3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "be6b0125-5093-4c41-951f-6dfd5f6050eb",
+      "Code": "Z0000032",
+      "WorkType": "철근콘크리트공사",
+      "Name": "콘크리트타설",
+      "Spec": "",
+      "Unit": "M3",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "7bbdafcc-64d5-468b-919d-8766a6a5a3b3",
+      "Code": "3CAAI070",
+      "WorkType": "철근콘크리트공사",
+      "Name": "콘크리트보양",
+      "Spec": "",
+      "Unit": "M2",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    },
+    {
+      "Id": "47fcb402-0a5b-4817-99ba-c619933f3682",
+      "Code": "3CBAA260",
+      "WorkType": "철근콘크리트공사",
+      "Name": "이형철근 SD19",
+      "Spec": "19MM",
+      "Unit": "TN",
+      "Qty": 0.0,
+      "ContributingMemberIds": []
+    }
+  ]
+}
